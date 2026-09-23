@@ -208,6 +208,7 @@ export class Game {
   }
   onLockChange() {
     this.locked = document.pointerLockElement === document.getElementById('c');
+    document.body.classList.toggle('lk', this.locked);
     if (this.locked) {
       if (this.paused) this.resume(true);
     } else if (this.playing && !this.ended && !this.inLoadout && !this.qs.has('nolock')) {

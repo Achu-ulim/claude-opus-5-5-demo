@@ -992,7 +992,7 @@ const KEYMAP = {
   ArrowRight: 'right',
 };
 addEventListener('keydown', (e) => {
-  if (e.target instanceof HTMLInputElement) return;
+  if (e.target instanceof HTMLInputElement || e.target instanceof HTMLAnchorElement) return;
   if (e.metaKey || e.ctrlKey || e.altKey) return;
   const k = KEYMAP[e.code];
   if (k) {

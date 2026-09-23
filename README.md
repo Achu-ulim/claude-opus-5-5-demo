@@ -61,39 +61,29 @@
 
 ## 提示词原文
 
-每个游戏的完整输入就下面这一句话（`/bytedcli` 是触发「上传到字节内网 CDN」的技能指令，属于同一句输入），一字未改：
+每个游戏的完整输入就下面这一句话，一字未改：
 
 ### 🚲 鹈鹕骑自行车
 
-> 生成一个鹈鹕骑自行车的 3D 页面，尽可能把你所有的能力全部都用上. /bytedcli 然后上传到 CDN 上, 把访问链接给我
+> 生成一个鹈鹕骑自行车的 3D 页面，尽可能把你所有的能力全部都用上. 然后上传到 CDN 上, 把访问链接给我
 
 ### 🔫 穿越火线·运输船
 
 > 尽可能真实的还原穿越火线中的运输船地图，我需要一个真实的枪战游戏，生成一个3d页面，尽可能发挥你的所有能力
-> /bytedcli 做完之后上传到 CDN 上 把链接发给我
+> 做完之后上传到 CDN 上 把链接发给我
 
 ### 🏎️ QQ 飞车
 
 > 尽可能真实地还原 QQ 飞车中的游戏地图。我需要一个真实的 QQ 飞车游戏，包括游戏的各种键位以及漂移玩法,生成一个3D 页面，尽可能发挥你的所有能力。
-> /bytedcli 做完之后上传到 CDN 上 把链接发给我
+> 做完之后上传到 CDN 上 把链接发给我
 
 ## 在线体验
-
-主地址（Cloudflare Pages）：
 
 | 游戏 | 地址 |
 | --- | --- |
 | 鹈鹕骑自行车 | <https://claude-opus-5-5.riba2534.cn/> |
 | 穿越火线·运输船 | <https://claude-opus-5-5-cf-transport-ship.pages.dev> |
 | QQ 飞车 | <https://claude-opus-5-5-qqfeiche3d.pages.dev/> |
-
-备用地址（字节内网 CDN，需内网环境）：
-
-| 游戏 | 地址 |
-| --- | --- |
-| 鹈鹕骑自行车 | <https://lf3-static.bytednsdoc.com/obj/eden-cn/nulojnulwlo/pelican-bike/index.html> |
-| 穿越火线·运输船 | <https://lf3-static.bytednsdoc.com/obj/eden-cn/nulojnulwlo/cf-transport-ship/transport-ship.html> |
-| QQ 飞车 | <https://lf3-static.bytednsdoc.com/obj/eden-cn/nulojnulwlo/qqfeiche3d/index.html> |
 
 ## 本地构建
 
