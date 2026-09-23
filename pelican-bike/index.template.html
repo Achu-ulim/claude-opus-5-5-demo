@@ -71,7 +71,7 @@ body.hide-ui .hud, body.hide-ui .hud * { opacity: 0 !important; visibility: hidd
 .brand b { font-size: 15px; letter-spacing: 0.03em; }
 .brand small { display: block; font-size: 11px; color: var(--muted); margin-top: 2px; }
 .brand .logo { font-size: 24px; }
-.tools { position: absolute; top: max(14px, env(safe-area-inset-top)); right: 16px; display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 6px; padding: 6px; max-width: min(320px, calc(100vw - 32px)); }
+.tools { position: absolute; top: max(14px, env(safe-area-inset-top)); right: 16px; display: flex; gap: 6px; padding: 6px; }
 .icon-btn { pointer-events: auto; width: 38px; height: 38px; border-radius: 11px; border: 0; background: transparent; cursor: pointer; display: grid; place-items: center; font-size: 17px; transition: background 0.15s; position: relative; color: inherit; text-decoration: none; }
 .icon-btn svg { width: 18px; height: 18px; fill: currentColor; display: block; }
 .icon-btn:hover { background: rgba(255,255,255,0.12); }
@@ -168,7 +168,9 @@ body.cinematic.started .dash, body.cinematic.started .score, body.cinematic.star
   .brand > div { display: none; }
   .dash { padding: 8px 10px 8px 8px; gap: 8px; }
   .stats { display: none; }
-  .tools .icon-btn { width: 34px; height: 34px; font-size: 15px; }
+  .tools { gap: 4px; padding: 5px; }
+  .tools .icon-btn { width: 32px; height: 32px; font-size: 14px; }
+  .tools .icon-btn svg { width: 16px; height: 16px; }
   .brand { padding: 8px 10px; }
   .brand b { font-size: 13px; }
 }
