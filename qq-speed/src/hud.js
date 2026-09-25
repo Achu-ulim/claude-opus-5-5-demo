@@ -1,13 +1,14 @@
 import { formatTime } from './util.js';
+import { PIT, pitLat } from './pitlane.js';
 
 const $ = (id) => document.getElementById(id);
 
 export const ITEM_INFO = {
-  nitro: { icon: '🔥', name: '氮气' },
-  missile: { icon: '🚀', name: '导弹' },
-  banana: { icon: '🍌', name: '香蕉皮' },
-  shield: { icon: '😇', name: '天使' },
-  magnet: { icon: '🧲', name: '磁铁' },
+  nitro: { icon: '🔥', name: 'Nitro' },
+  missile: { icon: '🚀', name: 'Missile' },
+  banana: { icon: '🍌', name: 'Banana' },
+  shield: { icon: '😇', name: 'Angel' },
+  magnet: { icon: '🧲', name: 'Magnet' },
 };
 
 export class HUD {
@@ -51,6 +52,61 @@ export class HUD {
     this.fx.height = Math.floor(window.innerHeight * r);
   }
 
+  setSim(on) { $('carstat').classList.toggle('hidden', !on); if (!on) this.pitGuide(null); }
+
+  // screen arrow toward the pit entry: angle in radians (0 = straight ahead, + = to the left), distance in meters
+  pitGuide(g) {
+    const el = $('pitguide');
+    this.guideLevel = g ? g.level : 0;
+    if (!g) { this.set('pgVis', el, 'glass hidden', 'className'); return; }
+    this.set('pgVis', el, 'glass' + (g.level >= 1 ? ' on' : ''), 'className');
+    this.set('pgRot', $('pg-arrow').style, `rotate(${(-g.angle * 180 / Math.PI).toFixed(0)}deg)`, 'transform');
+    this.set('pgDist', $('pg-dist'), g.dist < 1000 ? `${Math.round(g.dist / 10) * 10} m` : `${(g.dist / 1000).toFixed(1)} km`);
+    this.set('pgTitle', $('pg-title'), g.level >= 1 ? 'PIT ENTRY' : 'PIT NEEDED');
+    // keep it just under the top bar / charge bar, whichever is lower
+    const topc = $('topc').getBoundingClientRect(), gauge = $('gaugebox').getBoundingClientRect();
+    const top = Math.max(topc.bottom, gauge.top < innerHeight / 2 ? gauge.bottom : 0) + 8;
+    this.set('pgTop', el.style, Math.round(top) + 'px', 'top');
+    // narrow screens: slide right of the car status panel rather than cover it
+    const cs = $('carstat').getBoundingClientRect(), w = el.offsetWidth, h = el.offsetHeight;
+    const cx = innerWidth / 2;
+    const hits = cs.width && cx - w / 2 < cs.right && cx + w / 2 > cs.left && top < cs.bottom && top + h > cs.top;
+    this.set('pgLeft', el.style, hits ? Math.round(cs.right + 8 + w / 2) + 'px' : '50%', 'left');
+  }
+
+  // fuel, tyres, part health, and what the team is doing in the pits
+  carStatus(c, box, pit, toEntry = null) {
+    // sit just below the standings (which grow with the grid), and below the charge bar if they would collide
+    const cs = $('carstat');
+    const rank = this.rank.getBoundingClientRect(), gauge = $('gaugebox').getBoundingClientRect();
+    let top = rank.bottom + 8;
+    const left = rank.left, right = left + cs.offsetWidth;
+    if (gauge.width && left < gauge.right && right > gauge.left && top < gauge.bottom && top + cs.offsetHeight > gauge.top) top = gauge.bottom + 8;
+    this.set('csTop', cs.style, Math.round(top) + 'px', 'top');
+    const pct = (v) => Math.round(v * 100) + '%';
+    const health = (v) => (v < 0.3 ? 'ok' : v < 0.65 ? 'warn' : 'bad');
+    this.set('csFuel', $('cs-fuel').style, pct(c.fuel), 'width');
+    this.set('csFuelV', $('cs-fuelv'), pct(c.fuel));
+    this.set('csFuelC', $('cs-fuel'), 'fill ' + (c.fuel > 0.3 ? 'ok' : c.fuel > 0.12 ? 'warn' : 'bad'), 'className');
+    this.set('csTyre', $('cs-tyre').style, pct(1 - c.tyre), 'width');
+    this.set('csTyreV', $('cs-tyrev'), pct(1 - c.tyre));
+    this.set('csTyreC', $('cs-tyre'), 'fill ' + health(c.tyre), 'className');
+    for (const k of ['wing', 'engine', 'susp']) this.set('cs' + k, $('cs-' + k), 'part ' + health(c[k]), 'className');
+    this.set('csBox', $('cs-box'), box && !pit ? 'cs-box' : 'cs-box hidden', 'className');
+    this.set('csBoxT', $('cs-box'), toEntry != null ? `BOX · ${Math.round(toEntry / 10) * 10} m` : 'BOX THIS LAP');
+    let msg = '';
+    if (pit) {
+      if (pit.phase === 'stop') {
+        const w = pit.work;
+        const jobs = [w.tyres && 'tyres', w.fuelTo - w.fuelFrom > 0.02 && 'fuel', w.from.wing + w.from.engine + w.from.susp > 0.05 && 'repairs'].filter(Boolean);
+        msg = `${jobs.join(' · ') || 'check-up'} ${Math.max(0, w.time - pit.timer).toFixed(1)}s`;
+      } else msg = pit.phase === 'out' ? 'PIT EXIT' : 'PIT LIMITER 80';
+    }
+    this.set('csPit', $('cs-pit'), msg ? 'cs-pit' : 'cs-pit hidden', 'className');
+    this.set('csPitMsg', $('cs-pitmsg'), msg.toUpperCase());
+    this.set('csPitBar', $('cs-pitbar').style, pit?.phase === 'stop' ? pct(Math.min(1, pit.timer / pit.work.time)) : '0%', 'width');
+  }
+
   show(v) { this.el.classList.toggle('hidden', !v); if (!v) this.clearFx(); }
 
   set(key, el, val, prop = 'textContent') {
@@ -65,7 +121,7 @@ export class HUD {
     this.cache = {};
   }
 
-  setupMinimap(track) {
+  setupMinimap(track, pit = null) {
     const W = this.mm.width, pad = 26;
     const b = track.bounds;
     const sc = (W - pad * 2) / Math.max(b.maxX - b.minX, b.maxZ - b.minZ);
@@ -92,7 +148,7 @@ export class HUD {
     g.lineWidth = 9;
     path();
     g.stroke();
-    // 高架段着色
+    // Color elevated sections
     g.strokeStyle = 'rgba(39,199,255,.9)';
     g.lineWidth = 5;
     for (let i = 0; i < track.N; i++) {
@@ -105,6 +161,30 @@ export class HUD {
       g.lineTo(x2, y2);
       g.stroke();
     }
+    // the pit lane, in orange beside the straight, with a "P" badge
+    if (pit) {
+      const q = {};
+      g.strokeStyle = 'rgba(255,177,59,.95)';
+      g.lineWidth = 4;
+      g.beginPath();
+      for (let u = 0; u <= PIT.exit; u += 6) {
+        track.sample(pit.d(u), q);
+        const lat = pitLat(pit, track.halfW, u) + 6;
+        const [x, y] = this.mmT(q.x + q.rx * lat, q.z + q.rz * lat);
+        if (u === 0) g.moveTo(x, y); else g.lineTo(x, y);
+      }
+      g.stroke();
+      track.sample(pit.d(pit.boxU(5)), q);
+      const [px, py] = this.mmT(q.x + q.rx * 30, q.z + q.rz * 30);
+      g.fillStyle = '#ffb13b';
+      g.beginPath(); g.arc(px, py, 13, 0, 7); g.fill();
+      g.fillStyle = '#04122c';
+      g.font = '900 17px Arial';
+      g.textAlign = 'center'; g.textBaseline = 'middle';
+      g.fillText('P', px, py + 1);
+      track.sample(pit.d(0), q);
+      this.mmPitEntry = this.mmT(q.x + q.rx * (track.halfW + 2), q.z + q.rz * (track.halfW + 2));
+    } else this.mmPitEntry = null;
     const s = track.sample(0, {});
     const [sx, sy] = this.mmT(s.x, s.z);
     g.save();
@@ -122,10 +202,20 @@ export class HUD {
     const g = this.mmx, W = this.mm.width;
     g.clearRect(0, 0, W, W);
     if (this.mmBase) g.drawImage(this.mmBase, 0, 0);
+    // pulsing ring on the pit entry while a stop is called or needed
+    if (this.mmPitEntry && this.guideLevel > 0) {
+      const t = performance.now() / 1000, k = (t * 1.4) % 1;
+      const [x, y] = this.mmPitEntry;
+      g.strokeStyle = `rgba(255,177,59,${1 - k})`;
+      g.lineWidth = 5;
+      g.beginPath(); g.arc(x, y, 10 + k * 26, 0, 7); g.stroke();
+      g.fillStyle = '#ffb13b';
+      g.beginPath(); g.arc(x, y, 8, 0, 7); g.fill();
+    }
     for (const r of racers) {
       if (r === player) continue;
       const [x, y] = this.mmT(r.x, r.z);
-      g.fillStyle = '#' + r.model.userData.skin.body.toString(16).padStart(6, '0');
+      g.fillStyle = '#' + (r.model.userData.skin.dot ?? r.model.userData.skin.body).toString(16).padStart(6, '0');
       g.strokeStyle = '#fff';
       g.lineWidth = 3;
       g.beginPath();
@@ -193,15 +283,29 @@ export class HUD {
   update(st) {
     this.set('lap', this.lap, st.lap);
     this.set('time', this.time, formatTime(st.time));
-    this.set('best', this.best, '最佳单圈 ' + formatTime(st.best));
+    this.set('best', this.best, 'Best Lap ' + formatTime(st.best));
     this.set('spd', this.spd, String(Math.round(st.kmh)));
+    this.set('brk', $('brakeind'), st.braking ? 'on' : '', 'className');
+    this.set('brkSp', $('speedo'), st.braking ? 'brake' : '', 'className');
+    if (st.throttle != null) this.set('thr', $('thrfill').style, Math.round(st.throttle * 100) + '%', 'width');
     this.set('rk', this.rk, String(st.rank));
     this.set('rkof', this.rkof, '/' + st.total);
     const gw = Math.round(st.gauge * 100);
     this.set('gauge', this.gaugeFill.style, gw + '%', 'width');
     this.gauge.classList.toggle('full', st.gauge >= 0.999);
     for (let k = 0; k < 2; k++) this.n2o[k].classList.toggle('on', st.nitro > k);
-    const rows = st.standings.map((r, i) => `<div class="row${r.me ? ' me' : ''}${r.fin ? ' fin' : ''}"><span class="p">${i + 1}</span><span class="dot" style="background:${r.color}"></span><span class="n">${r.name}</span></div>`).join('');
+    // big grids: top three, a gap, then the cars around the player
+    const me = st.standings.findIndex((r) => r.me);
+    const show = st.standings.length <= 8 ? null : new Set([0, 1, 2, me - 1, me, me + 1, me + 2].filter((i) => i >= 0 && i < st.standings.length));
+    // a gap of a single row is not worth a "⋯": show that row instead
+    if (show) for (let i = 1; i < st.standings.length - 1; i++) if (!show.has(i) && show.has(i - 1) && show.has(i + 1)) show.add(i);
+    let prev = -1;
+    const rows = st.standings.map((r, i) => {
+      if (show && !show.has(i)) return '';
+      const gap = show && i > prev + 1 ? '<div class="row gap">⋯</div>' : '';
+      prev = i;
+      return `${gap}<div class="row${r.me ? ' me' : ''}${r.fin ? ' fin' : ''}"><span class="p">${i + 1}</span><span class="dot" style="background:${r.color}"></span><span class="n">${r.name}</span>${r.tag ? `<span class="tg ${r.tag}">${r.tag}</span>` : ''}</div>`;
+    }).join('');
     this.set('rows', this.rank, rows, 'innerHTML');
     if (st.items) {
       for (let k = 0; k < 2; k++) {
@@ -262,7 +366,7 @@ export class HUD {
 
   clearFx() { this.fxx.clearRect(0, 0, this.fx.width, this.fx.height); this.lines.length = 0; }
 
-  // 速度线
+  // Speed lines
   speedLines(dt, k, color) {
     const g = this.fxx, W = this.fx.width, H = this.fx.height;
     g.clearRect(0, 0, W, H);

@@ -1,10 +1,18 @@
 <!doctype html>
-<html lang="zh-CN">
+<html lang="en">
 <head>
 <meta charset="utf-8" />
-<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no" />
-<title>飞车 3D · QQ飞车同人还原</title>
-<meta name="description" content="浏览器里的 3D 竞速：还原 QQ飞车的 11城、情迷爱琴海、法老金字塔、雪地大冒险，支持漂移集气、小喷、双喷、氮气、道具赛。" />
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<meta name="apple-mobile-web-app-title" content="Speed 3D" />
+<meta name="theme-color" content="#0a1430" />
+<link rel="manifest" href="manifest.webmanifest" />
+<link rel="icon" type="image/png" href="icons/favicon-64.png" />
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png" />
+<meta name="mobile-web-app-capable" content="yes" />
+<title>Speed 3D · A QQ Speed Fan Remake</title>
+<meta name="description" content="3D racing in the browser: recreates QQ Speed's City 11, Aegean Romance, Pharaoh's Pyramid and Snow Adventure, with drift charging, mini boosts, double boosts, nitro and item races." />
 <style>
 :root{
   --blue:#1d6ff2; --cyan:#27c7ff; --orange:#ff8a00; --yellow:#ffd23a; --pink:#ff5fa8;
@@ -18,6 +26,7 @@ html,body{width:100%;height:100%;overflow:hidden;background:#0a1430;color:var(--
 canvas#gl{position:fixed;inset:0;width:100%;height:100%;display:block}
 .hidden{display:none!important}
 #fx{position:fixed;inset:0;pointer-events:none;width:100%;height:100%}
+#confetti{position:fixed;inset:0;pointer-events:none;width:100%;height:100%;z-index:40}
 #vignette{position:fixed;inset:0;pointer-events:none;opacity:0;transition:opacity .25s;
   background:radial-gradient(ellipse at center,rgba(0,0,0,0) 55%,rgba(30,140,255,.35) 85%,rgba(60,190,255,.65) 100%)}
 #vignette.small{background:radial-gradient(ellipse at center,rgba(0,0,0,0) 60%,rgba(255,150,40,.3) 90%,rgba(255,190,60,.55) 100%)}
@@ -74,38 +83,151 @@ canvas#gl{position:fixed;inset:0;width:100%;height:100%;display:block}
 #warn{position:absolute;left:50%;top:22%;transform:translateX(-50%);font-size:30px;font-weight:900;color:#ff4b4b;text-shadow:0 0 12px #f00;animation:blink .5s infinite alternate}
 @keyframes blink{to{opacity:.35}}
 #finalcount{position:absolute;left:50%;top:120px;transform:translateX(-50%);font-size:22px;font-weight:700;color:#ffd23a;text-shadow:0 2px 6px #000}
-#keys{position:absolute;left:16px;bottom:16px;padding:10px 12px;font-size:12px;line-height:1.75;color:#dfe9ff;max-width:300px}
+#keys{position:absolute;left:16px;bottom:16px;padding:10px 12px;font-size:12px;line-height:1.75;color:#dfe9ff;max-width:420px}
 #keys b{display:inline-block;min-width:22px;padding:0 5px;margin-right:4px;border-radius:4px;background:rgba(255,255,255,.16);border:1px solid rgba(255,255,255,.25);text-align:center;font-weight:700;color:#fff}
 #keys .close{color:var(--muted);font-size:11px}
 #songtip{position:absolute;right:250px;bottom:30px;font-size:13px;color:#fff;padding:6px 12px;opacity:0;transition:opacity .4s}
 #songtip.show{opacity:1}
 
-/* ---------- 触屏 ---------- */
-#touch{position:fixed;inset:0;pointer-events:none}
-#touch .tb{pointer-events:auto;position:absolute;width:74px;height:74px;border-radius:50%;background:rgba(255,255,255,.14);border:2px solid rgba(255,255,255,.35);
-  display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:800;color:#fff;backdrop-filter:blur(4px)}
-#touch .tb.on{background:rgba(39,199,255,.5)}
-#t-left{left:24px;bottom:34px}#t-right{left:112px;bottom:34px}
-#t-drift{right:28px;bottom:120px;width:86px;height:86px}#t-nitro{right:124px;bottom:40px}#t-boost{right:124px;bottom:132px}#t-brake{left:68px;bottom:122px;width:58px;height:58px}#t-swap{right:220px;bottom:40px;width:58px;height:58px}
-body.touch #speedo{bottom:auto;top:236px;width:150px;height:150px;right:12px}
+/* ---------- Touch ---------- */
+/* one button unit that scales from small phones to tablets; safe-area insets keep controls off the notch and home bar */
+:root{--tb:clamp(58px,12vmin,96px);--gap:calc(var(--tb)*.18);
+  --pb:max(14px,env(safe-area-inset-bottom));--pl:max(14px,env(safe-area-inset-left));--pr:max(14px,env(safe-area-inset-right));--pt:max(8px,env(safe-area-inset-top))}
+#touch{position:fixed;inset:0;pointer-events:none;z-index:2}
+#touch .tb{pointer-events:auto;position:absolute;width:var(--s,var(--tb));height:var(--s,var(--tb));border-radius:50%;background:rgba(255,255,255,.14);border:2px solid rgba(255,255,255,.38);
+  display:flex;align-items:center;justify-content:center;font-size:calc(var(--tb)*.2);font-weight:800;color:#fff;backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);
+  -webkit-touch-callout:none;-webkit-tap-highlight-color:transparent;transition:transform .08s,background .08s}
+#touch .tb.on{background:rgba(39,199,255,.5);transform:scale(.93)}
+/* right thumb: drift is the big one in the corner, nitro beside it, boost above; swap only in item races */
+#t-drift{--s:calc(var(--tb)*1.25);right:var(--pr);bottom:var(--pb)}
+#touch #t-drift{font-size:calc(var(--tb)*.24)}
+#t-nitro{right:calc(var(--pr) + var(--tb)*1.25 + var(--gap));bottom:var(--pb)}
+#t-boost{right:calc(var(--pr) + var(--tb)*.125);bottom:calc(var(--pb) + var(--tb)*1.25 + var(--gap))}
+#t-swap{--s:calc(var(--tb)*.8);right:calc(var(--pr) + var(--tb)*1.35 + var(--gap));bottom:calc(var(--pb) + var(--tb) + var(--gap)*1.5)}
+body:not(.items) #t-swap{display:none}
+/* left thumb: arrows + brake above them, or just brake in the corner when steering by tilt/swipe */
+#t-left{left:var(--pl);bottom:var(--pb)}
+#t-right{left:calc(var(--pl) + var(--tb) + var(--gap));bottom:var(--pb)}
+#t-brake{--s:calc(var(--tb)*.8);left:calc(var(--pl) + var(--tb)*.6);bottom:calc(var(--pb) + var(--tb) + var(--gap))}
+body.steer-tilt #t-brake,body.steer-swipe #t-brake{left:var(--pl);bottom:var(--pb)}
+body.steer-tilt #t-left,body.steer-tilt #t-right,body.steer-swipe #t-left,body.steer-swipe #t-right{display:none}
+#t-swipe{display:none;pointer-events:auto;position:absolute;left:0;bottom:0;width:48%;height:58%;-webkit-tap-highlight-color:transparent}
+#t-swipe i{position:absolute;width:var(--tb);height:var(--tb);border-radius:50%;border:2px solid rgba(255,255,255,.55);background:rgba(39,199,255,.25);opacity:0;transition:opacity .15s}
+#t-swipe.on i{opacity:1}
+#t-swipe span{position:absolute;left:calc(var(--pl) + var(--tb) + var(--gap)*2);bottom:calc(var(--pb) + var(--tb)*.3);font-size:12px;font-weight:700;color:rgba(255,255,255,.55);letter-spacing:1px;white-space:nowrap}
+#t-swipe.on span{opacity:0}
+#t-center{display:none;pointer-events:auto;position:absolute;left:var(--pl);bottom:calc(var(--pb) + var(--tb)*.8 + var(--gap)*2);padding:7px 12px;border-radius:14px;font-size:12px;font-weight:700;color:#fff;background:rgba(255,255,255,.14);border:1px solid rgba(255,255,255,.35);-webkit-tap-highlight-color:transparent}
+#t-center.on{background:rgba(39,199,255,.5)}
+body.steer-swipe #t-swipe,body.steer-tilt #t-center{display:block}
+#pausebtn{display:flex;pointer-events:auto;cursor:pointer;width:44px;align-items:center;justify-content:center;gap:5px;-webkit-tap-highlight-color:transparent}
+#pausebtn i{width:5px;height:16px;border-radius:2px;background:#fff}
+#cambtn{display:none;pointer-events:auto;cursor:pointer;width:44px;align-items:center;justify-content:center;font-size:18px;-webkit-tap-highlight-color:transparent}
+body.touch #cambtn,body.sim #cambtn{display:flex}
+#celebrate{position:fixed;left:0;right:0;margin:0 auto;bottom:max(24px,env(safe-area-inset-bottom));z-index:12;padding:14px 16px;text-align:center;pointer-events:auto;width:min(620px,calc(100% - 24px));animation:celebIn .35s ease-out}
+@keyframes celebIn{from{opacity:0;transform:translateY(20px)}to{opacity:1;transform:none}}
+#celebrate.hidden{display:none}
+#celebrate .ct{font-size:17px;font-weight:900;margin-bottom:10px}
+.celebs{display:grid;grid-template-columns:repeat(auto-fit,minmax(118px,1fr));gap:8px}
+.celeb{cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:4px;padding:10px 6px;border-radius:12px;border:2px solid rgba(255,255,255,.2);background:linear-gradient(180deg,rgba(255,255,255,.12),rgba(255,255,255,.04));color:#fff;font:800 13px var(--ui);transition:transform .12s,border-color .12s}
+.celeb:hover{transform:translateY(-2px);border-color:#ffd23a}
+.celeb .ci{font-size:28px}
+.celeb small{font-size:10px;color:var(--muted);font-weight:400}
+#celebSkip{margin-top:10px;cursor:pointer;background:none;border:none;color:var(--muted);font:600 12px var(--ui);text-decoration:underline}
+#pausebtn:hover{border-color:#ffd23a}
+/* touch HUD: charge bar moves to the top, out from under the thumbs */
+body.touch #gaugebox{top:calc(var(--pt) + 84px);bottom:auto;padding:6px 12px;gap:10px}
+body.touch #gauge{width:clamp(90px,26vw,220px);height:14px}
+body.touch #speedo{bottom:auto;top:236px;width:150px;height:150px;right:var(--pr)}
 body.touch #speedo .v{top:56px;font-size:34px}body.touch #speedo .u{top:96px}
-body.touch #keys,body.touch #bigrank{display:none}
-body.touch #gauge{width:180px}
+body.touch #items .hint,body.touch #keys,body.touch #bigrank,body.touch #songtip,body.touch #clinks,body.touch .keycard{display:none}
+.touchcard{display:none}
+body.touch .touchcard{display:block}
+/* phones (portrait, or landscape with little height): compact panels and a digital speed readout */
+@media (max-width:600px),(max-height:500px){
+  body.touch #topc{top:var(--pt);gap:6px}
+  body.touch #timebox{min-width:0;padding:4px 10px}
+  body.touch #timebox .t,body.touch #lapbox .l{font-size:19px}
+  body.touch #timebox .s,body.touch #lapbox .s{font-size:10px;white-space:nowrap}
+  body.touch #lapbox{padding:4px 10px}
+  body.touch #pausebtn,body.touch #cambtn{width:38px}
+  body.touch #rank{left:var(--pl);top:var(--pt);width:128px;padding:4px 0;font-size:11px}
+  body.touch #rank .row{padding:2px 8px;gap:6px}
+  body.touch #rank .row .p{width:14px}
+  body.touch #rank .row .dot{width:8px;height:8px}
+  body.touch #minimap{top:var(--pt);right:var(--pr);width:96px;height:96px}
+  body.touch #speedo{top:calc(var(--pt) + 104px);width:auto;height:auto;text-align:right}
+  body.touch #speedo canvas{display:none}
+  body.touch #speedo .v,body.touch #speedo .u{position:static;text-align:right}
+  body.touch #speedo .v{font-size:28px;line-height:1}
+  body.touch #speedo .u{font-size:9px;letter-spacing:1px}
+  body.touch #brakeind{display:none}
+  body.touch #speedo.brake .v{color:#ff4b4b;text-shadow:0 0 12px #ff2d20}
+  body.touch #thr{position:static;margin:3px 0 0 auto;width:60px;height:4px}
+  body.touch #gaugebox{top:calc(var(--pt) + 54px);padding:4px 10px;gap:8px}
+  body.touch #gaugebox .lbl{font-size:10px}
+  body.touch .n2o{width:28px;height:28px;font-size:9px}
+  body.touch #items{padding:4px 6px;gap:6px}
+  body.touch #items .slot{width:38px;height:38px;font-size:20px}
+  body.touch #items .hint{display:none}
+  body.touch .msg{font-size:24px}body.touch .msg.sm{font-size:18px}
+  body.touch #countdown{font-size:96px}
+  body.touch #warn{font-size:20px;top:30%}
+  body.touch #finalcount{top:calc(var(--pt) + 96px);font-size:14px}
+  body.touch #carstat{left:var(--pl);top:calc(var(--pt) + 146px);width:128px;padding:5px 7px;font-size:9px}
+  body.touch .cs-row span{width:30px}
+  body.touch .cs-row b{width:26px}
+  body.touch .cs-parts .part{font-size:7px}
+}
+/* short landscape screens: part health shrinks to colored bars so the panel clears the brake button */
+@media (max-height:420px){
+  body.touch #carstat{padding:4px 6px}
+  body.touch .cs-row{margin-bottom:2px}
+  body.touch .cs-parts .part{font-size:0;height:5px;padding:0}
+  body.touch .cs-box,body.touch .cs-pit{margin-top:3px;padding:2px;font-size:8px}
+}
+/* portrait tablets: standings and minimap drop below the top bar; the charge bar sits between them */
+@media (min-width:601px) and (orientation:portrait){
+  body.touch #rank,body.touch #minimap,body.touch #gaugebox{top:calc(var(--pt) + 84px)}
+  body.touch #speedo{top:calc(var(--pt) + 304px)}
+}
+/* portrait phones: standings and minimap drop below the lap/time row, charge bar below them */
+@media (max-width:600px) and (orientation:portrait){
+  body.touch #rank,body.touch #minimap{top:calc(var(--pt) + 54px)}
+  body.touch #speedo{top:calc(var(--pt) + 158px)}
+  body.touch #gaugebox{top:calc(var(--pt) + 222px)}
+  body.touch #finalcount{top:calc(var(--pt) + 266px)}
+  body.touch #carstat{top:calc(var(--pt) + 250px)}
+}
+/* very narrow phones (iPhone SE and similar): squeeze the top bar so item slots still fit */
+@media (max-width:380px){
+  body.touch #topc{gap:4px}
+  body.touch #timebox,body.touch #lapbox{padding:3px 6px}
+  body.touch #timebox .t,body.touch #lapbox .l{font-size:15px}
+  body.touch #timebox .s,body.touch #lapbox .s{font-size:9px}
+  body.touch #pausebtn,body.touch #cambtn{width:32px}
+  body.touch #items{padding:3px 4px;gap:4px}
+  body.touch #items .slot{width:32px;height:32px;font-size:17px}
+}
 
 #clinks{position:fixed;top:236px;right:16px;z-index:30;display:flex;gap:8px}
-body.touch #clinks{top:16px;right:238px}
 #clinks a{pointer-events:auto;width:38px;height:38px;border-radius:10px;display:flex;align-items:center;justify-content:center;color:#fff;opacity:.55;background:rgba(10,16,34,.45);border:1px solid rgba(255,255,255,.25);backdrop-filter:blur(6px);transition:opacity .15s}
 #clinks a:hover{opacity:1}
 #clinks svg{width:18px;height:18px;fill:currentColor}
-@media (max-width:860px){#clinks{top:150px}body.touch #clinks{top:16px;right:158px}}
+/* the lobby already has these links at the bottom; the floating copy only fits on wide screens */
+@media (max-width:900px){#clinks{display:none}}
 
-/* ---------- 菜单 ---------- */
-.screen{position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:safe center;overflow:auto;padding:18px 16px}
+/* ---------- Menu ---------- */
+.screen{position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:safe center;overflow:auto;-webkit-overflow-scrolling:touch;touch-action:pan-y;padding:max(18px,env(safe-area-inset-top)) max(16px,env(safe-area-inset-right)) max(18px,env(safe-area-inset-bottom)) max(16px,env(safe-area-inset-left))}
 #menu{background:linear-gradient(180deg,rgba(8,20,55,.35),rgba(8,20,55,.78) 70%,rgba(8,20,55,.92))}
 .mlinks{display:flex;gap:18px;justify-content:center;margin-top:10px}
 .mlinks a{color:var(--muted);text-decoration:none;font-size:13px;display:inline-flex;align-items:center;gap:6px;transition:color .15s}
 .mlinks a:hover{color:#fff}
 .mlinks svg{width:14px;height:14px;fill:currentColor}
+#installbtn{cursor:pointer;font:700 13px var(--ui);color:#fff;background:linear-gradient(180deg,#4a8cff,#1d5fe0);border:none;border-radius:14px;padding:5px 12px}
+#iosinstall{font-size:12px;color:var(--muted)}
+#toast{position:fixed;left:50%;bottom:max(16px,env(safe-area-inset-bottom));transform:translateX(-50%);z-index:60;display:flex;gap:12px;align-items:center;padding:10px 14px;font-size:13px;pointer-events:auto}
+#toast.hidden{display:none}
+#toast button{cursor:pointer;font:800 13px var(--ui);color:#fff;background:linear-gradient(180deg,#ffb13b,#ff7a00);border:none;border-radius:12px;padding:6px 12px}
 .logo{font-family:var(--num);font-style:italic;font-size:64px;line-height:1;letter-spacing:4px;
   background:linear-gradient(180deg,#fff 10%,#ffe36b 45%,#ff8a00 80%);-webkit-background-clip:text;background-clip:text;color:transparent;
   filter:drop-shadow(0 4px 0 #0b3fb0) drop-shadow(0 0 18px rgba(39,199,255,.6));transform:skewX(-8deg)}
@@ -118,22 +240,38 @@ body.touch #clinks{top:16px;right:238px}
 .opt:hover{background:rgba(255,255,255,.16)}
 .opt.sel{background:linear-gradient(135deg,var(--orange),#ffb13b);border-color:#ffd48a;color:#fff;font-weight:800;box-shadow:0 0 14px rgba(255,138,0,.5)}
 .opt small{display:block;font-size:11px;opacity:.8;font-weight:400}
-.maps{display:grid;grid-template-columns:repeat(2,1fr);gap:10px}
-.map{cursor:pointer;border-radius:12px;padding:10px 12px;min-height:80px;position:relative;overflow:hidden;border:2px solid transparent;transition:transform .15s}
+.maps{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px}
+.map{cursor:pointer;border-radius:12px;padding:8px 10px;min-height:66px;position:relative;overflow:hidden;border:2px solid transparent;transition:transform .15s}
 .map:hover{transform:translateY(-2px)}
 .map.sel{border-color:#ffd23a;box-shadow:0 0 18px rgba(255,210,58,.55)}
-.map .nm{font-size:20px;font-weight:900;text-shadow:0 2px 4px rgba(0,0,0,.4)}
-.map .en{font-family:var(--num);font-style:italic;font-size:11px;opacity:.85;letter-spacing:2px}
-.map .tg{font-size:12px;margin-top:6px;opacity:.95}
+.map .nm{font-size:17px;font-weight:900;text-shadow:0 2px 4px rgba(0,0,0,.4)}
+.map .tg{font-size:11px;margin-top:4px;opacity:.95}
 .map[data-id=city]{background:linear-gradient(135deg,#2f7fe0,#6fc3ff 60%,#a6e1ff)}
 .map[data-id=aegean]{background:linear-gradient(135deg,#1d63c9,#5ab0ff 55%,#f4f1ea)}
 .map[data-id=egypt]{background:linear-gradient(135deg,#5b3f9e,#d99b3f 55%,#f3d58f)}
 .map[data-id=snow]{background:linear-gradient(135deg,#3f86d6,#bfe1ff 55%,#ffffff);color:#0b2750}
 .map[data-id=snow] .nm{text-shadow:none}
-.skins{display:flex;flex-wrap:wrap;gap:8px}
-.skin{cursor:pointer;width:44px;height:44px;border-radius:10px;border:2px solid rgba(255,255,255,.25);position:relative}
-.skin.sel{border-color:#ffd23a;box-shadow:0 0 12px rgba(255,210,58,.7);transform:scale(1.08)}
-#skinname{font-size:13px;color:#ffd23a;margin-top:8px;height:18px}
+.map[data-id=neon]{background:linear-gradient(135deg,#1a1240,#7b1fa2 55%,#ff2d95)}
+.map[data-id=bay]{background:linear-gradient(135deg,#1f6fb5,#c0362c 60%,#ffb38a)}
+.map[data-id=dune]{background:linear-gradient(135deg,#8e24aa,#e0861f 55%,#ffd54a)}
+.optrow{display:flex;flex-wrap:wrap;gap:4px 22px;margin-top:14px}
+.optrow .opt{padding:6px 11px;font-size:13px}
+.cars{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.carcard{cursor:pointer;border-radius:10px;border:2px solid rgba(255,255,255,.16);background:radial-gradient(ellipse at 50% 70%,rgba(120,180,255,.22),rgba(255,255,255,.03) 70%);padding:2px 4px 6px;text-align:center;transition:transform .15s,border-color .15s}
+.carcard:hover{transform:translateY(-2px);border-color:rgba(255,255,255,.4)}
+.carcard.sel{border-color:#ffd23a;box-shadow:0 0 14px rgba(255,210,58,.55);background:radial-gradient(ellipse at 50% 70%,rgba(255,190,70,.3),rgba(255,255,255,.04) 70%)}
+.carcard img{display:block;width:100%;aspect-ratio:9/5;object-fit:contain;pointer-events:none}
+.carcard .swatch{width:60%;aspect-ratio:9/5;margin:6px auto;border-radius:8px}
+.carcard .cn{font-size:13px;font-weight:800;line-height:1.2}
+.carcard .cc{font-size:10px;color:var(--muted);letter-spacing:1px;text-transform:uppercase}
+#carinfo{margin-top:10px}
+#carinfo .cdesc{font-size:12px;color:var(--muted);line-height:1.45;margin-bottom:8px;min-height:35px}
+#carinfo .cdesc b{color:#ffd23a}
+.spec{display:flex;align-items:center;gap:10px;font-size:12px;margin-top:5px}
+.spec .sk{width:82px;color:#dce8ff}
+.spec .sb{flex:1;height:8px;border-radius:4px;background:rgba(255,255,255,.12);overflow:hidden}
+.spec .sb i{display:block;height:100%;border-radius:4px;background:linear-gradient(90deg,#27c7ff,#7af0ff 70%,#fff);transition:width .3s}
+.spec .sv{width:66px;text-align:right;font-family:var(--num);font-style:italic;font-size:11px;color:#fff}
 .go{pointer-events:auto;cursor:pointer;margin-top:12px;padding:12px 64px;border:none;border-radius:40px;font-family:var(--ui);font-size:24px;font-weight:900;letter-spacing:6px;color:#fff;
   background:linear-gradient(180deg,#ffb13b,#ff7a00);box-shadow:0 6px 0 #b34a00,0 0 30px rgba(255,138,0,.55);transition:transform .1s}
 .go:hover{transform:translateY(-2px)}
@@ -143,11 +281,136 @@ body.touch #clinks{top:16px;right:238px}
 .keylist b{display:inline-block;min-width:26px;padding:0 6px;margin-right:6px;border-radius:5px;background:rgba(255,255,255,.14);border:1px solid rgba(255,255,255,.3);text-align:center;color:#fff}
 .tip{font-size:12px;color:var(--muted);line-height:1.6;margin-top:6px}
 .foot{margin-top:14px;font-size:11px;color:rgba(200,220,255,.6)}
+.driver{display:flex;align-items:center;gap:8px;padding:6px 8px 6px 14px;margin-bottom:12px;border-radius:24px}
+.driver label{font-size:12px;letter-spacing:2px;color:var(--cyan);font-weight:800;text-transform:uppercase}
+.driver input{pointer-events:auto;user-select:text;-webkit-user-select:text;width:170px;padding:6px 10px;border-radius:14px;border:1px solid rgba(255,255,255,.25);background:rgba(255,255,255,.08);color:#fff;font:700 15px var(--ui);outline:none}
+.driver input:focus{border-color:#ffd23a;box-shadow:0 0 10px rgba(255,210,58,.4)}
+.driver button{cursor:pointer;width:32px;height:32px;border-radius:50%;border:1px solid rgba(255,255,255,.25);background:rgba(255,255,255,.08);font-size:16px}
+.menubtns{display:flex;gap:14px;justify-content:center;flex-wrap:wrap}
+.menubtns .go{padding:12px 34px;font-size:20px;letter-spacing:3px}
+.go.cup{background:linear-gradient(180deg,#b06bff,#7b3df0);box-shadow:0 6px 0 #4b1fa0,0 0 30px rgba(160,90,255,.45)}
+.go.f1{background:linear-gradient(180deg,#ff4b3a,#c40d00);box-shadow:0 6px 0 #7a0800,0 0 30px rgba(225,6,0,.45)}
+.f1box{width:min(980px,100%);text-align:left}
+.f1box h2{text-align:center}
+.f1box h3{font-size:14px;color:var(--cyan);letter-spacing:2px;margin:8px 0}
+.f1box .btns{justify-content:center}
+.f1box .note{text-align:center}
+.teams{grid-template-columns:repeat(auto-fill,minmax(120px,1fr))}
+.gps{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:6px;max-height:min(40vh,360px);overflow:auto;touch-action:pan-y}
+.gp{cursor:pointer;display:flex;gap:8px;align-items:center;padding:7px 10px;border-radius:10px;border:1px solid rgba(255,255,255,.16);background:rgba(255,255,255,.05);transition:background .15s,border-color .15s}
+.gp:hover{background:rgba(225,6,0,.25);border-color:#ff5a3a}
+.gp .fl{font-size:22px}
+.gp .gn{font-size:13px;font-weight:800}
+.gp .gc{font-size:10px;color:var(--muted)}
+.season{display:grid;grid-template-columns:1.4fr 1fr;gap:12px;align-items:start}
+.tdot{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:6px;vertical-align:middle}
+#rank .row .tg{font-size:9px;font-weight:900;padding:1px 4px;border-radius:4px;background:#27c7ff;color:#04122c}
+#rank .row .tg.OUT{background:#ff4b4b;color:#fff}
+#pitguide{position:absolute;left:50%;top:96px;transform:translateX(-50%);display:flex;align-items:center;gap:10px;padding:6px 14px 6px 10px;border-color:rgba(255,177,59,.6)}
+#pitguide #pg-arrow{width:26px;height:26px;fill:#ffb13b;filter:drop-shadow(0 0 6px #ff8a00);transition:transform .12s linear}
+#pitguide b{display:block;font-size:11px;letter-spacing:2px;color:#ffb13b}
+#pitguide #pg-dist{font-family:var(--num);font-style:italic;font-size:18px}
+#pitguide.on{box-shadow:0 0 18px rgba(255,160,40,.7);animation:pgPulse 1s infinite alternate}
+@keyframes pgPulse{to{box-shadow:0 0 30px rgba(255,160,40,1)}}
+#carstat{position:absolute;left:16px;top:250px;width:210px;padding:8px 10px;font-size:11px}
+.cs-row{display:flex;align-items:center;gap:6px;margin-bottom:5px}
+.cs-row span{width:40px;color:var(--muted);letter-spacing:1px;font-weight:700}
+.cs-row b{width:34px;text-align:right;font-family:var(--num);font-style:italic}
+.cs-bar{flex:1;height:8px;border-radius:4px;background:rgba(255,255,255,.12);overflow:hidden}
+.cs-bar i{display:block;height:100%;width:0;border-radius:4px;background:#27c7ff;transition:width .3s}
+.cs-bar i.ok{background:#3ddc84}.cs-bar i.warn{background:#ffc107}.cs-bar i.bad{background:#ff4b4b}
+.cs-parts{display:flex;gap:4px;margin-top:2px}
+.cs-parts .part{flex:1;text-align:center;font-size:9px;font-weight:900;letter-spacing:.5px;padding:3px 0;border-radius:5px;color:#04122c}
+.part.ok{background:#3ddc84}.part.warn{background:#ffc107}.part.bad{background:#ff4b4b;color:#fff;animation:blink .5s infinite alternate}
+.cs-box{margin-top:6px;text-align:center;font-weight:900;letter-spacing:2px;padding:4px;border-radius:6px;background:#27c7ff;color:#04122c;animation:blink .6s infinite alternate}
+.cs-pit{margin-top:6px;font-weight:800;letter-spacing:1px;color:#ffd23a}
+.cs-pit .cs-bar{margin-top:3px}
+.cs-pit .cs-bar i{background:#ffd23a}
+.cs-hint{margin-top:5px;color:var(--muted);font-size:10px}
+.cs-hint b{display:inline-block;padding:0 4px;border-radius:3px;background:rgba(255,255,255,.16);color:#fff}
+body.touch .cs-hint{display:none}
+#brakeind{position:absolute;left:0;right:0;margin:auto;top:178px;width:62px;text-align:center;font:900 11px var(--ui);letter-spacing:2px;padding:2px 0;border-radius:6px;color:rgba(255,255,255,.35);background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.15);transition:all .08s}
+#brakeind.on{color:#fff;background:#e10600;border-color:#ff6a5a;box-shadow:0 0 14px #ff2d20}
+#thr{display:none;position:absolute;left:0;right:0;margin:auto;top:170px;width:110px;height:5px;border-radius:3px;background:rgba(255,255,255,.14);overflow:hidden}
+#thr i{display:block;height:100%;width:0;background:linear-gradient(90deg,#3ddc84,#ffd23a 70%,#ff5a3a)}
+body.f1 #thr{display:block}
+body.f1 #brakeind{top:182px}
+#t-gas{--s:calc(var(--tb)*.9);display:none;right:calc(var(--pr) + var(--tb)*1.3 + var(--gap));bottom:calc(var(--pb) + var(--tb) + var(--gap)*1.5);background:rgba(61,220,132,.28)!important}
+body.f1.touch #t-gas{display:flex}
+#t-box{--s:calc(var(--tb)*.72);display:none;right:calc(var(--pr) + var(--tb)*.25);bottom:calc(var(--pb) + var(--tb)*2.25 + var(--gap)*2);font-size:calc(var(--tb)*.18)!important;background:rgba(39,199,255,.3)!important}
+body.sim #t-box{display:flex}
+#rank .row.gap{justify-content:center;padding:0;line-height:1;color:var(--muted)}
+.go.danger{background:linear-gradient(180deg,#ff6b6b,#c62828);box-shadow:0 6px 0 #7f1414}
+.box.wide{width:min(860px,100%)}
+.cuplist{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px;margin:6px 0 12px}
+.cupcard{cursor:pointer;border-radius:14px;padding:14px 12px;border:2px solid rgba(255,255,255,.18);background:linear-gradient(180deg,rgba(255,255,255,.1),rgba(255,255,255,.03));transition:transform .15s,border-color .15s}
+.cupcard:hover{transform:translateY(-3px);border-color:#ffd23a}
+.cupcard.locked{opacity:.45;pointer-events:none}
+.cupcard .ci{font-size:40px}
+.cupcard .cn{font-size:18px;font-weight:900;margin:4px 0}
+.cupcard .cd{font-size:12px;color:#dce8ff;line-height:1.45;min-height:52px}
+.cupcard .cm{font-size:11px;color:var(--cyan);margin-top:6px;letter-spacing:1px}
+.cupcard .cw{font-size:11px;color:#ffd23a;margin-top:4px}
+.resume{padding:12px;border-radius:12px;background:rgba(255,210,58,.12);border:1px solid rgba(255,210,58,.45);margin-bottom:12px;font-size:14px}
+.resume .btns .go{padding:8px 26px;font-size:16px}
+.note{font-size:12px;color:var(--muted);margin-top:6px}
+.tabs{display:flex;gap:8px;justify-content:center;margin-bottom:10px}
+.tab{cursor:pointer;padding:6px 18px;border-radius:16px;border:1px solid rgba(255,255,255,.2);font-size:13px}
+.tab.sel{background:linear-gradient(135deg,var(--orange),#ffb13b);border-color:#ffd48a;font-weight:800}
+#boardBody{touch-action:pan-y;position:relative;max-height:min(56vh,520px);overflow:auto;text-align:left}
+.myrank{position:sticky;top:0;z-index:1;padding:6px 10px;border-radius:8px;background:rgba(255,138,0,.25);font-size:13px;text-align:center}
+.myrank b{color:#ffd23a}
+#boardBody h3{font-size:14px;color:var(--cyan);margin:10px 0 2px;letter-spacing:1px}
+#boardBody .empty{font-size:12px;color:var(--muted);padding:4px 6px 8px}
+table.board td{padding:6px}
+table.res td small{color:var(--muted);font-weight:400}
+table.res td.pts,table.res .gain{color:#6dff9e;font-size:12px}
+#cupBox h3{font-size:14px;color:var(--cyan);letter-spacing:1px;margin:10px 0 2px}
+/* small screens: tighter lobby, pinned start buttons, and tables that fit */
+@media (max-width:900px),(max-height:700px){
+  .menubtns{position:sticky;bottom:calc(-1 * max(18px,env(safe-area-inset-bottom)));z-index:3;width:calc(100% + 32px);margin:0 -16px;padding:12px 16px max(12px,env(safe-area-inset-bottom));
+    background:linear-gradient(180deg,rgba(8,20,55,0),rgba(8,20,55,.92) 40%)}
+  .menubtns .go{margin-top:0}
+}
+@media (max-width:600px),(max-height:500px){
+  .logo{font-size:40px;letter-spacing:2px}
+  .sub{font-size:11px;letter-spacing:1px;margin:4px 0 8px;text-align:center}
+  .driver input{width:140px}
+  .menubtns{gap:8px;flex-wrap:nowrap}
+  .season{grid-template-columns:1fr}
+  .menubtns .go{flex:1 1 0;min-width:0;max-width:200px;white-space:nowrap;padding:10px 6px;font-size:14px;letter-spacing:0;box-shadow:0 4px 0 #b34a00}
+  .menubtns .go.cup{box-shadow:0 4px 0 #4b1fa0}.menubtns .go.sec{box-shadow:0 4px 0 #0b3a9a}
+  .card{padding:10px 12px}
+  .box{padding:14px 12px}
+  .box h2{font-size:22px;margin-bottom:8px;letter-spacing:1px}
+  .stats{gap:6px}
+  .stat{padding:4px 8px;font-size:10px}
+  .stat b{font-size:14px}
+  table.res{font-size:12px}
+  table.res td{padding:6px 4px}
+  table.res td.pos{font-size:16px}
+  table.race th:nth-child(4),table.race td:nth-child(4){display:none}
+  table.drivers th:nth-child(4),table.drivers td:nth-child(4),table.drivers th:nth-child(6),table.drivers td:nth-child(6){display:none}
+  .btns{gap:8px}
+  .btns .go{padding:8px 16px;font-size:14px;letter-spacing:1px;margin-top:6px}
+  .cupcard{padding:10px}
+  .cupcard .ci{font-size:30px}
+  .cupcard .cd{min-height:0}
+}
+/* four lobby buttons: a 2×2 block on narrow phones */
+@media (max-width:520px){
+  .menubtns{display:grid;grid-template-columns:1fr 1fr}
+  .menubtns .go{max-width:none}
+}
+@media (max-height:500px){
+  .logo{font-size:32px}
+  .sub{display:none}
+}
 #loading{background:rgba(6,14,36,.85);z-index:20}
 #loading .bar{width:260px;height:6px;border-radius:3px;background:rgba(255,255,255,.15);overflow:hidden;margin-top:14px}
 #loading .bar i{display:block;height:100%;width:30%;background:linear-gradient(90deg,#27c7ff,#fff);animation:load 1s infinite}
 @keyframes load{0%{transform:translateX(-100%)}100%{transform:translateX(350%)}}
-#pause,#result{background:rgba(6,14,36,.72);z-index:10}
+#pause,#result,#cups,#board,#f1s{background:rgba(6,14,36,.72);z-index:10}
 .box{padding:22px 26px;min-width:min(520px,100%);text-align:center}
 .box h2{font-size:30px;font-weight:900;margin-bottom:14px;letter-spacing:3px}
 .btns{display:flex;gap:14px;justify-content:center;flex-wrap:wrap}
@@ -175,24 +438,27 @@ table.res td.pos{font-family:var(--num);font-style:italic;color:var(--yellow);fo
 <body>
 <canvas id="gl"></canvas>
 <canvas id="fx"></canvas>
+<canvas id="confetti"></canvas>
 <div id="vignette"></div>
 <div id="hitflash"></div>
 
 <div id="hud" class="hidden">
   <div id="rank" class="glass"></div>
   <div id="topc">
-    <div id="lapbox" class="glass"><div class="l" id="lap">1/3</div><div class="s">圈数 LAP</div></div>
-    <div id="timebox" class="glass"><div class="t" id="time">00:00.00</div><div class="s" id="best">最佳单圈 --:--.--</div></div>
+    <div id="lapbox" class="glass"><div class="l" id="lap">1/3</div><div class="s">LAP</div></div>
+    <div id="pausebtn" class="glass" role="button" aria-label="Pause" title="Pause (Esc)"><i></i><i></i></div>
+    <div id="cambtn" class="glass" role="button" aria-label="Camera" title="Camera (C)">🎥</div>
+    <div id="timebox" class="glass"><div class="t" id="time">00:00.00</div><div class="s" id="best">Best Lap --:--.--</div></div>
     <div id="items" class="glass hidden">
       <div class="slot first" id="slot0"></div><div class="slot" id="slot1"></div>
-      <div class="hint">Ctrl 使用<br>Alt 换位</div>
+      <div class="hint">Ctrl use<br>Alt swap</div>
     </div>
   </div>
   <div id="minimap" class="glass"><canvas id="mm" width="420" height="420"></canvas></div>
   <div id="bigrank"><span class="r" id="rk">1</span><span class="of" id="rkof">/6</span></div>
-  <div id="speedo"><canvas id="sp" width="460" height="460"></canvas><div class="v" id="spd">0</div><div class="u">KM/H</div></div>
+  <div id="speedo"><canvas id="sp" width="460" height="460"></canvas><div class="v" id="spd">0</div><div class="u">KM/H</div><div id="thr"><i id="thrfill"></i></div><div id="brakeind">BRAKE</div></div>
   <div id="gaugebox" class="glass">
-    <span class="lbl" id="gaugelbl">集气</span>
+    <span class="lbl" id="gaugelbl">CHARGE</span>
     <div id="gauge"><i id="gaugefill"></i></div>
     <div class="n2o" id="n2o0">N₂O</div><div class="n2o" id="n2o1">N₂O</div>
   </div>
@@ -201,80 +467,156 @@ table.res td.pos{font-family:var(--num);font-style:italic;color:var(--yellow);fo
   <div id="warn" class="hidden"></div>
   <div id="finalcount" class="hidden"></div>
   <div id="songtip" class="glass"></div>
+  <div id="pitguide" class="glass hidden"><svg id="pg-arrow" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2 L21 20 L12 15 L3 20 Z"/></svg><div><b id="pg-title">PIT ENTRY</b><span id="pg-dist"></span></div></div>
+  <div id="carstat" class="glass hidden">
+    <div class="cs-row"><span>FUEL</span><div class="cs-bar"><i id="cs-fuel" class="fill ok"></i></div><b id="cs-fuelv">100%</b></div>
+    <div class="cs-row"><span>TYRES</span><div class="cs-bar"><i id="cs-tyre" class="fill ok"></i></div><b id="cs-tyrev">100%</b></div>
+    <div class="cs-parts"><div id="cs-wing" class="part ok">WING</div><div id="cs-engine" class="part ok">ENGINE</div><div id="cs-susp" class="part ok">SUSP</div></div>
+    <div id="cs-box" class="cs-box hidden">BOX THIS LAP</div>
+    <div id="cs-pit" class="cs-pit hidden"><span id="cs-pitmsg"></span><div class="cs-bar"><i id="cs-pitbar"></i></div></div>
+    <div class="cs-hint"><b>B</b> box / cancel</div>
+  </div>
   <div id="keys" class="glass">
-    <div><b>↑</b>油门 <b>↓</b>刹车/倒车 <b>←→</b>转向</div>
-    <div><b>Shift</b>+方向 漂移（按住越久角度越大）</div>
-    <div>出弯车身回正瞬间点按 <b>↑</b> 或 <b>W</b> = 小喷</div>
-    <div><b>Ctrl</b> 氮气 / 道具（<b>空格</b>同效）<b>Alt</b> 道具换位</div>
-    <div>小喷 + 氮气 = 双喷 · 落地瞬间点 <b>↑</b> = 落地喷</div>
-    <div><b>R</b>复位 <b>C</b>视角 <b>M</b>音乐 <b>PgUp/PgDn</b>切歌 <b>Esc</b>暂停</div>
-    <div class="close"><b>H</b> 隐藏/显示此面板</div>
+    <div><b>↑</b>Throttle <b>↓</b>Brake/Reverse <b>←→</b>Steer</div>
+    <div><b>Shift</b>+Direction Drift (hold longer for a wider angle)</div>
+    <div>Tap <b>↑</b> or <b>W</b> as the car straightens out of a drift = Mini Boost</div>
+    <div><b>Ctrl</b> Nitro / Item (<b>Space</b> also works) <b>Alt</b> Swap items</div>
+    <div>Mini Boost + Nitro = Double Boost · Tap <b>↑</b> on landing = Landing Boost</div>
+    <div><b>R</b>Reset <b>C</b>Camera <b>M</b>Music <b>PgUp/PgDn</b>Song <b>Esc</b>Pause</div>
+    <div class="close"><b>H</b> Hide/show this panel</div>
   </div>
 </div>
 
-<div id="clinks"><a href="https://github.com/riba2534/claude-opus-5-5-demo" target="_blank" rel="noopener noreferrer" title="GitHub 源码" aria-label="GitHub 源码"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 .297c-6.63 0-12 5.373-12 12 0 5.303 3.438 9.8 8.205 11.385.6.113.82-.258.82-.577 0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61C4.422 18.07 3.633 17.7 3.633 17.7c-1.087-.744.084-.729.084-.729 1.205.084 1.838 1.236 1.838 1.236 1.07 1.835 2.809 1.305 3.495.998.108-.776.417-1.305.76-1.605-2.665-.3-5.466-1.332-5.466-5.93 0-1.31.465-2.38 1.235-3.22-.135-.303-.54-1.523.105-3.176 0 0 1.005-.322 3.3 1.23.96-.267 1.98-.399 3-.405 1.02.006 2.04.138 3 .405 2.28-1.552 3.285-1.23 3.285-1.23.645 1.653.24 2.873.12 3.176.765.84 1.23 1.91 1.23 3.22 0 4.61-2.805 5.625-5.475 5.92.42.36.81 1.096.81 2.22 0 1.606-.015 2.896-.015 3.286 0 .315.21.69.825.57C20.565 22.092 24 17.592 24 12.297c0-6.627-5.373-12-12-12"/></svg></a><a href="https://x.com/riba2534" target="_blank" rel="noopener noreferrer" title="X @riba2534" aria-label="X @riba2534"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18.901 1.153h3.68l-8.04 9.19L24 22.846h-7.406l-5.8-7.584-6.638 7.584H.474l8.6-9.83L0 1.154h7.594l5.243 6.932ZM17.61 20.644h2.039L6.486 3.24H4.298Z"/></svg></a></div>
+<div id="clinks"><a href="https://github.com/riba2534/claude-opus-5-5-demo" target="_blank" rel="noopener noreferrer" title="GitHub source" aria-label="GitHub source"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 .297c-6.63 0-12 5.373-12 12 0 5.303 3.438 9.8 8.205 11.385.6.113.82-.258.82-.577 0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61C4.422 18.07 3.633 17.7 3.633 17.7c-1.087-.744.084-.729.084-.729 1.205.084 1.838 1.236 1.838 1.236 1.07 1.835 2.809 1.305 3.495.998.108-.776.417-1.305.76-1.605-2.665-.3-5.466-1.332-5.466-5.93 0-1.31.465-2.38 1.235-3.22-.135-.303-.54-1.523.105-3.176 0 0 1.005-.322 3.3 1.23.96-.267 1.98-.399 3-.405 1.02.006 2.04.138 3 .405 2.28-1.552 3.285-1.23 3.285-1.23.645 1.653.24 2.873.12 3.176.765.84 1.23 1.91 1.23 3.22 0 4.61-2.805 5.625-5.475 5.92.42.36.81 1.096.81 2.22 0 1.606-.015 2.896-.015 3.286 0 .315.21.69.825.57C20.565 22.092 24 17.592 24 12.297c0-6.627-5.373-12-12-12"/></svg></a><a href="https://x.com/riba2534" target="_blank" rel="noopener noreferrer" title="X @riba2534" aria-label="X @riba2534"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18.901 1.153h3.68l-8.04 9.19L24 22.846h-7.406l-5.8-7.584-6.638 7.584H.474l8.6-9.83L0 1.154h7.594l5.243 6.932ZM17.61 20.644h2.039L6.486 3.24H4.298Z"/></svg></a></div>
 
 <div id="touch" class="hidden">
-  <div class="tb" id="t-left">◀</div><div class="tb" id="t-right">▶</div><div class="tb" id="t-brake">刹</div>
-  <div class="tb" id="t-drift">漂移</div><div class="tb" id="t-nitro">氮气</div><div class="tb" id="t-boost">小喷</div><div class="tb" id="t-swap">换位</div>
+  <div id="t-swipe"><i></i><span>◀ drag to steer ▶</span></div>
+  <div id="t-center">⟳ Center tilt</div>
+  <div class="tb" id="t-left">◀</div><div class="tb" id="t-right">▶</div><div class="tb" id="t-brake">Brake</div>
+  <div class="tb" id="t-box">BOX</div>
+  <div class="tb" id="t-gas">GAS</div>
+  <div class="tb" id="t-drift">Drift</div><div class="tb" id="t-nitro">Nitro</div><div class="tb" id="t-boost">Boost</div><div class="tb" id="t-swap">Swap</div>
 </div>
 
 <div id="menu" class="screen">
-  <div class="logo">飞车 3D</div>
-  <div class="sub">QQ飞车 同人还原 · 漂移 · 集气 · 小喷 · 双喷 · 氮气</div>
+  <div class="logo">SPEED 3D</div>
+  <div class="sub">QQ Speed Fan Remake · Drift · Charge · Mini Boost · Double Boost · Nitro</div>
+  <div class="driver glass"><label for="pname">Driver</label><input id="pname" maxlength="16" autocomplete="off" spellcheck="false"><button id="pdice" title="Random name" aria-label="Random name">🎲</button></div>
   <div class="menu-grid">
     <div class="glass card">
-      <h3>选择赛道</h3>
+      <h3>Select Track</h3>
       <div class="maps" id="maps"></div>
-      <h3 style="margin-top:14px">比赛模式</h3>
+      <h3 style="margin-top:14px">Race Mode</h3>
       <div class="opts" id="modes"></div>
+      <div class="optrow">
+        <div><h3>Laps</h3><div class="opts" id="laps"></div></div>
+        <div><h3>Opponents</h3><div class="opts" id="diff"></div></div>
+        <div><h3>Graphics</h3><div class="opts" id="quality"></div></div>
+        <div id="steerGroup" class="hidden"><h3>Steering</h3><div class="opts" id="steer"></div><div class="note" id="steerNote"></div></div>
+      </div>
     </div>
     <div class="glass card">
-      <h3>选择赛车</h3>
-      <div class="skins" id="skins"></div>
-      <div id="skinname"></div>
-      <h3 style="margin-top:12px">圈数</h3>
-      <div class="opts" id="laps"></div>
-      <h3 style="margin-top:12px">对手水平</h3>
-      <div class="opts" id="diff"></div>
-      <h3 style="margin-top:12px">画质</h3>
-      <div class="opts" id="quality"></div>
+      <h3>Select Car</h3>
+      <div class="cars" id="skins"></div>
+      <div id="carinfo"></div>
     </div>
-    <div class="glass card" style="grid-column:1/-1">
-      <h3>键位（还原端游默认）</h3>
+    <div class="glass card touchcard" style="grid-column:1/-1">
+      <h3>Touch Controls</h3>
+      <div class="tip">Steer with <b>Tilt</b> (lean the device), <b>Swipe</b> (drag on the left half of the screen) or on-screen <b>Buttons</b>. The car accelerates by itself.
+        Hold <b>Drift</b> while steering to slide and fill the charge bar, tap <b>Nitro</b> to spend it, and tap <b>Boost</b> the moment the car straightens after a drift.
+        Tap the <b>pause</b> button at the top to pause or reset your car.</div>
+    </div>
+    <div class="glass card keycard" style="grid-column:1/-1">
+      <h3>Controls (PC client defaults)</h3>
       <div class="keylist">
-        <b>↑</b>加速　<b>↓</b>刹车/倒车　<b>←</b><b>→</b>转向　<b>Shift</b>+方向 漂移　<b>Ctrl</b> 氮气/道具　<b>Alt</b> 道具换位　<b>W</b> 小喷　<b>R</b> 复位　<b>C</b> 切换视角　<b>M</b> 音乐　<b>PgUp/PgDn</b> 切歌　<b>Esc</b> 暂停
+        <b>↑</b>Accelerate&emsp;<b>↓</b>Brake/Reverse&emsp;<b>←</b><b>→</b>Steer&emsp;<b>Shift</b>+Direction Drift&emsp;<b>Ctrl</b> Nitro/Item&emsp;<b>Alt</b> Swap items&emsp;<b>W</b> Mini Boost&emsp;<b>R</b> Reset&emsp;<b>C</b> Camera&emsp;<b>M</b> Music&emsp;<b>PgUp/PgDn</b> Song&emsp;<b>Esc</b> Pause
       </div>
-      <div class="tip">技巧：漂移时集气条增长，集满获得 1 个氮气（最多 2 个）。松开 Shift 后车身回正的瞬间点一下 ↑ 触发小喷（越早越好，出现“完美”）；
-        小喷与氮气叠加即“双喷”。倒计时“GO”出现瞬间按 ↑ 可以起步加速；跳台落地瞬间点 ↑ 触发落地喷。蓝色箭头是加速带。</div>
+      <div class="tip">Tips: drifting fills the charge bar, and a full bar gives you 1 nitro (up to 2). After releasing Shift, tap ↑ the moment the car straightens to trigger a Mini Boost (the sooner the better; nail it for a “Perfect”).
+        Stack a Mini Boost with Nitro for a “Double Boost”. Press ↑ the instant “GO” appears for a rocket start, and tap ↑ as you land from a jump for a Landing Boost. Blue arrows are boost pads.</div>
     </div>
   </div>
-  <button class="go" id="start">开始比赛</button>
-  <div class="mlinks"><a href="https://github.com/riba2534/claude-opus-5-5-demo" target="_blank" rel="noopener noreferrer"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 .297c-6.63 0-12 5.373-12 12 0 5.303 3.438 9.8 8.205 11.385.6.113.82-.258.82-.577 0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61C4.422 18.07 3.633 17.7 3.633 17.7c-1.087-.744.084-.729.084-.729 1.205.084 1.838 1.236 1.838 1.236 1.07 1.835 2.809 1.305 3.495.998.108-.776.417-1.305.76-1.605-2.665-.3-5.466-1.332-5.466-5.93 0-1.31.465-2.38 1.235-3.22-.135-.303-.54-1.523.105-3.176 0 0 1.005-.322 3.3 1.23.96-.267 1.98-.399 3-.405 1.02.006 2.04.138 3 .405 2.28-1.552 3.285-1.23 3.285-1.23.645 1.653.24 2.873.12 3.176.765.84 1.23 1.91 1.23 3.22 0 4.61-2.805 5.625-5.475 5.92.42.36.81 1.096.81 2.22 0 1.606-.015 2.896-.015 3.286 0 .315.21.69.825.57C20.565 22.092 24 17.592 24 12.297c0-6.627-5.373-12-12-12"/></svg>GitHub 开源仓库</a><a href="https://x.com/riba2534" target="_blank" rel="noopener noreferrer"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18.901 1.153h3.68l-8.04 9.19L24 22.846h-7.406l-5.8-7.584-6.638 7.584H.474l8.6-9.83L0 1.154h7.594l5.243 6.932ZM17.61 20.644h2.039L6.486 3.24H4.298Z"/></svg>关注作者 X</a></div>
-  <div class="foot">非官方同人作品，致敬 QQ飞车。所有模型、贴图、音乐均为程序实时生成。</div>
+  <div class="menubtns">
+    <button class="go" id="start">Quick Race</button>
+    <button class="go cup" id="cupbtn">🏆 Tournament</button>
+    <button class="go f1" id="f1btn">🏁 Formula 1</button>
+    <button class="go sec" id="boardbtn">Leaderboard</button>
+  </div>
+  <div class="mlinks"><button id="installbtn" class="hidden" type="button">📲 Install app</button><span id="iosinstall" class="hidden">📲 Install: tap Share, then “Add to Home Screen”</span><a href="https://github.com/riba2534/claude-opus-5-5-demo" target="_blank" rel="noopener noreferrer"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 .297c-6.63 0-12 5.373-12 12 0 5.303 3.438 9.8 8.205 11.385.6.113.82-.258.82-.577 0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61C4.422 18.07 3.633 17.7 3.633 17.7c-1.087-.744.084-.729.084-.729 1.205.084 1.838 1.236 1.838 1.236 1.07 1.835 2.809 1.305 3.495.998.108-.776.417-1.305.76-1.605-2.665-.3-5.466-1.332-5.466-5.93 0-1.31.465-2.38 1.235-3.22-.135-.303-.54-1.523.105-3.176 0 0 1.005-.322 3.3 1.23.96-.267 1.98-.399 3-.405 1.02.006 2.04.138 3 .405 2.28-1.552 3.285-1.23 3.285-1.23.645 1.653.24 2.873.12 3.176.765.84 1.23 1.91 1.23 3.22 0 4.61-2.805 5.625-5.475 5.92.42.36.81 1.096.81 2.22 0 1.606-.015 2.896-.015 3.286 0 .315.21.69.825.57C20.565 22.092 24 17.592 24 12.297c0-6.627-5.373-12-12-12"/></svg>GitHub repository</a><a href="https://x.com/riba2534" target="_blank" rel="noopener noreferrer"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18.901 1.153h3.68l-8.04 9.19L24 22.846h-7.406l-5.8-7.584-6.638 7.584H.474l8.6-9.83L0 1.154h7.594l5.243 6.932ZM17.61 20.644h2.039L6.486 3.24H4.298Z"/></svg>Follow the author on X</a></div>
+  <div class="foot">Unofficial fan project and a tribute to QQ Speed. All models, textures and music are generated procedurally in real time.</div>
 </div>
 
-<div id="loading" class="screen hidden"><div style="font-size:20px;font-weight:800;letter-spacing:3px" id="loadtxt">正在生成赛道…</div><div class="bar"><i></i></div></div>
+<div id="celebrate" class="glass hidden">
+  <div class="ct">🏆 You won! How do you want to celebrate?</div>
+  <div class="celebs" id="celebs"></div>
+  <button id="celebSkip" type="button">Skip to results</button>
+</div>
+
+<div id="toast" class="glass hidden"><span id="toastmsg"></span><button id="toastbtn" type="button"></button></div>
+
+<div id="loading" class="screen hidden"><div style="font-size:20px;font-weight:800;letter-spacing:3px" id="loadtxt">Generating track…</div><div class="bar"><i></i></div></div>
 
 <div id="pause" class="screen hidden">
   <div class="glass box">
-    <h2>暂停</h2>
+    <h2>Paused</h2>
     <div class="btns">
-      <button class="go" id="resume">继续比赛</button>
-      <button class="go sec" id="restart">重新开始</button>
-      <button class="go sec" id="quit">返回大厅</button>
+      <button class="go" id="resume">Resume</button>
+      <button class="go sec" id="resetcar">Reset Car</button>
+      <button class="go sec" id="restart">Restart</button>
+      <button class="go sec" id="quit">Back to Lobby</button>
     </div>
+  </div>
+</div>
+
+<div id="cups" class="screen hidden">
+  <div class="glass box wide">
+    <h2>🏆 Tournament</h2>
+    <div id="cupResume"></div>
+    <div class="cuplist" id="cupList"></div>
+    <div class="note" id="cupCar"></div>
+    <div class="note">Points per race: 10 · 7 · 5 · 3 · 2 · 1. The most points after the last race wins the cup.</div>
+    <div class="btns"><button class="go sec" id="cupsBack">Back to Lobby</button></div>
+  </div>
+</div>
+
+<div id="f1s" class="screen hidden">
+  <div class="glass box wide f1box">
+    <h2>🏁 Formula 1</h2>
+    <div id="f1Resume"></div>
+    <h3>Your Team</h3>
+    <div class="cars teams" id="f1Teams"></div>
+    <div class="optrow">
+      <div><h3>Laps</h3><div class="opts" id="f1Laps"></div></div>
+      <div><h3>Opponents</h3><div class="opts" id="f1Diff"></div></div>
+      <div><h3>Championship</h3><div class="opts" id="f1Len"></div></div>
+    </div>
+    <div class="btns"><button class="go" id="f1Season">Start Championship</button></div>
+    <div class="note">Points: 25 · 18 · 15 · 12 · 10 · 8 · 6 · 4 · 2 · 1 for the top ten. Eleven cars, one per team.</div>
+    <h3 style="margin-top:14px">Or race a single Grand Prix</h3>
+    <div class="gps" id="f1Gps"></div>
+    <div class="btns"><button class="go sec" id="f1Back">Back to Lobby</button></div>
+  </div>
+</div>
+
+<div id="board" class="screen hidden">
+  <div class="glass box wide">
+    <h2>Leaderboard</h2>
+    <div class="tabs"><div class="tab" data-tab="drivers">Drivers</div><div class="tab" data-tab="records">Track Records</div></div>
+    <div id="boardBody"></div>
+    <div class="btns"><button class="go sec" id="boardBack">Back to Lobby</button><button class="go sec danger" id="newBank">New Rival Bank</button></div>
   </div>
 </div>
 
 <div id="result" class="screen hidden">
   <div class="glass box">
-    <h2 id="resTitle">比赛结束</h2>
+    <h2 id="resTitle">Race Over</h2>
     <div class="stats" id="resStats"></div>
-    <table class="res"><thead><tr><th>名次</th><th>车手</th><th>总时间</th><th>最佳单圈</th></tr></thead><tbody id="resBody"></tbody></table>
+    <table class="res race"><thead><tr><th>Pos</th><th>Racer</th><th>Total Time</th><th>Best Lap</th><th>Pts</th></tr></thead><tbody id="resBody"></tbody></table>
+    <div id="cupBox"></div>
     <div class="btns">
-      <button class="go" id="again">再来一局</button>
-      <button class="go sec" id="back">返回大厅</button>
+      <button class="go" id="nextRace">Next Race</button>
+      <button class="go" id="again">Race Again</button>
+      <button class="go sec" id="resBoard">Leaderboard</button>
+      <button class="go sec" id="back">Back to Lobby</button>
     </div>
   </div>
 </div>

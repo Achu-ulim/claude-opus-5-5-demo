@@ -26,7 +26,7 @@ export function mulberry32(seed) {
   };
 }
 
-// 简单 2D value noise，用于地形与纹理
+// Simple 2D value noise, used for terrain and textures
 export function makeNoise2D(seed = 1) {
   const rnd = mulberry32(seed);
   const perm = new Uint8Array(512);

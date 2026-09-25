@@ -3,7 +3,7 @@ import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { clamp, lerp, smoothstep, makeNoise2D } from './util.js';
 import { groundTexture, cloudTexture } from './textures.js';
 
-// ---------- 合批：同材质 + 同地块的静态物件合并成一个网格 ----------
+// ---------- Batching: merge static props with the same material + tile into one mesh ----------
 const prepCache = new WeakMap();
 function prep(geo) {
   let g = prepCache.get(geo);
@@ -55,7 +55,7 @@ export function M(x, y, z, ry = 0, sx = 1, sy = sx, sz = sx, rx = 0, rz = 0) {
   return new THREE.Matrix4().compose(_p.set(x, y, z), _q, _s.set(sx, sy, sz));
 }
 
-// ---------- 天空 ----------
+// ---------- Sky ----------
 export function buildSky(cfg) {
   const sunDir = new THREE.Vector3(...cfg.sun).normalize();
   const mat = new THREE.ShaderMaterial({
@@ -103,7 +103,7 @@ export function buildClouds(rnd, center, count = 26) {
   return grp;
 }
 
-// ---------- 地形：基础地形 + 按赛道削填 ----------
+// ---------- Terrain: base terrain + cut/fill along the track ----------
 export function buildGround(track, cfg) {
   const { base, size = 3200, seg = 320, flatR, texture, colorAt, repeat = 26 } = cfg;
   const cx = track.bounds.cx, cz = track.bounds.cz;
@@ -173,7 +173,7 @@ export function buildGround(track, cfg) {
   return { mesh, heightAt };
 }
 
-// ---------- 水面 ----------
+// ---------- Water ----------
 export function buildWater(cfg, sunDir, skyCol, center, size = 6000) {
   const mat = new THREE.ShaderMaterial({
     uniforms: THREE.UniformsUtils.merge([
@@ -228,7 +228,7 @@ export function buildWater(cfg, sunDir, skyCol, center, size = 6000) {
   return mesh;
 }
 
-// ---------- 远景山脉：两圈连续的天际线山环 ----------
+// ---------- Distant mountains: two continuous rings of skyline peaks ----------
 export function buildMountains(rnd, center, cfg) {
   const grp = new THREE.Group();
   const mat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 1 });

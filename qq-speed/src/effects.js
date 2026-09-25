@@ -27,7 +27,7 @@ void main() {
   #include <fog_fragment>
 }`;
 
-// 通用粒子池
+// Generic particle pool
 export class Particles {
   constructor(max, additive) {
     this.max = max;
@@ -72,7 +72,7 @@ export class Particles {
     this.vel[i * 3] = vx; this.vel[i * 3 + 1] = vy; this.vel[i * 3 + 2] = vz;
     this.life[i] = life; this.maxLife[i] = life;
     this.s0[i] = s0; this.s1[i] = s1; this.a0[i] = a;
-    this.rgb[i * 3] = r * r; this.rgb[i * 3 + 1] = g * g; this.rgb[i * 3 + 2] = b * b; // 近似 sRGB→线性
+    this.rgb[i * 3] = r * r; this.rgb[i * 3 + 1] = g * g; this.rgb[i * 3 + 2] = b * b; // approx. sRGB→linear
     this.grav[i] = grav; this.drag[i] = drag;
   }
 
@@ -104,7 +104,7 @@ export class Particles {
   }
 }
 
-// 轮胎印：环形缓冲的带状网格
+// Skid marks: ring-buffered ribbon mesh
 export class SkidMarks {
   constructor(maxQuads = 2400) {
     this.max = maxQuads;
@@ -147,7 +147,7 @@ export class SkidMarks {
     this.last = new Map();
   }
 
-  // key 标识一条轮胎印（如 player-left）
+  // key identifies one skid-mark trail (e.g. player-left)
   add(key, x, y, z, rx, rz, w, strength) {
     const prev = this.last.get(key);
     const cur = { x, y: y + 0.06, z, rx, rz };

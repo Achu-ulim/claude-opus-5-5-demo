@@ -3,8 +3,9 @@ import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { Batch, M } from './world.js';
 import * as TX from './textures.js';
 import { clamp } from './util.js';
+import { TEAMS } from './f1.js';
 
-// ---------- 缓存 ----------
+// ---------- Cache ----------
 const MATS = new Map();
 function mat(key, fn) {
   if (!MATS.has(key)) MATS.set(key, fn());
@@ -21,7 +22,7 @@ function geo(key, fn) {
   return GEOS.get(key);
 }
 
-// 距赛道中心线是否足够远
+// Whether a point is far enough from the track centerline
 export function isFree(track, x, z, r) { return !track.nearest(x, z, track.halfW + r); }
 
 function crowdTexture() {
@@ -52,7 +53,7 @@ function crowdTexture() {
   });
 }
 
-// ---------- 常用几何 ----------
+// ---------- Shared geometry ----------
 function treeGeos() {
   return geo('tree', () => {
     const trunk = new THREE.CylinderGeometry(0.22, 0.34, 3.2, 6);
@@ -134,7 +135,7 @@ function addLamp(b, x, y, z, faceRot) {
   b.add(head, glow(0xfff3c4, 3), M(x, y, z, faceRot), false);
 }
 
-// 广告牌（面向赛道）
+// Billboards (facing the track)
 function addBillboard(parent, b, x, y, z, rot, tex, w = 12, h = 6, lift = 6) {
   const post = geo('bbPost', () => { const g = new THREE.BoxGeometry(0.5, 1, 0.5); g.translate(0, 0.5, 0); return g; });
   for (const sx of [-w * 0.32, w * 0.32]) {
@@ -154,10 +155,10 @@ function addBillboard(parent, b, x, y, z, rot, tex, w = 12, h = 6, lift = 6) {
   parent.add(back);
 }
 
-// 看台
+// Grandstand
 function addGrandstand(parent, b, s, side, len, hw, groundAt, color = 0x2e6fd6, track = null) {
   if (track) {
-    // 看台占地内不能有别的赛道段
+    // No other track section may run through the grandstand footprint
     const tmp = {};
     let blocked = false;
     for (let k = -len / 2; k <= len / 2 && !blocked; k += 8) {
@@ -200,9 +201,113 @@ function addGrandstand(parent, b, s, side, len, hw, groundAt, color = 0x2e6fd6, 
   grp.rotation.y = s.hd + (side > 0 ? -Math.PI / 2 : Math.PI / 2);
   grp.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
   parent.add(grp);
+  // fans on every step, facing the track
+  grp.updateMatrixWorld(true);
+  const v = new THREE.Vector3();
+  for (let k = 0; k < steps; k++)
+    for (let px = -len / 2 + 1; px <= len / 2 - 1; px += 0.95) {
+      if (Math.random() < 0.18) continue;
+      v.set(px + (Math.random() - 0.5) * 0.3, 0.7 + k * 0.75, k * 1.5 + 0.35).applyMatrix4(grp.matrixWorld);
+      CROWD.push({ x: v.x, y: v.y, z: v.z, ry: grp.rotation.y + Math.PI });
+    }
+  SPOTS.push([x, z]);
 }
 
-// 起点门楼（含倒计时灯）
+// ---------- Spectators ----------
+const CROWD = [];
+const SPOTS = [];
+
+// a standing crowd behind a catch fence on the outside of a corner
+function standingCrowd(ctx, s, side, len) {
+  const { track, batch, groundAt } = ctx;
+  const hw = track.halfW;
+  const q = {};
+  let placed = 0;
+  for (let k = -len / 2; k <= len / 2; k += 0.9) {
+    track.sample(s.d + k, q);
+    for (let row = 0; row < 4; row++) {
+      if (Math.random() < 0.2) continue;
+      const lat = side * (hw + 7 + row * 1.1 + Math.random() * 0.3);
+      const x = q.x + q.rx * lat, z = q.z + q.rz * lat;
+      if (!isFree(track, x, z, 5)) continue;
+      CROWD.push({ x, y: groundAt(x, z) + row * 0.25, z, ry: q.hd + (side > 0 ? Math.PI / 2 : -Math.PI / 2) });
+      placed++;
+    }
+  }
+  // catch fence in front of them
+  const post = geo('fencePost', () => { const g = new THREE.BoxGeometry(0.1, 3, 0.1); g.translate(0, 1.5, 0); return g; });
+  const mesh = geo('fenceMesh', () => { const g = new THREE.BoxGeometry(0.02, 2.6, 4); g.translate(0, 1.6, 0); return g; });
+  for (let k = -len / 2; k <= len / 2; k += 4) {
+    track.sample(s.d + k, q);
+    const lat = side * (hw + 5.6);
+    const x = q.x + q.rx * lat, z = q.z + q.rz * lat;
+    if (!isFree(track, x, z, 3)) continue;
+    const y = groundAt(x, z);
+    batch.add(post, std(0x8a93a3, { metalness: 0.5 }), M(x, y, z, q.hd));
+    batch.add(mesh, std(0x9aa3b0, { transparent: true, opacity: 0.35, metalness: 0.4 }), M(x, y, z, q.hd), false);
+  }
+  if (placed) SPOTS.push([s.x + s.rx * side * (hw + 9), s.z + s.rz * side * (hw + 9)]);
+}
+
+// One instanced mesh per body part for every fan on the map. They bounce and throw their arms up in the
+// vertex shader, harder when the crowd is excited (uExcite) or a car passes close by (uCar).
+function buildCrowd(ctx) {
+  const n = CROWD.length;
+  if (!n) return null;
+  const U = { uTime: { value: 0 }, uExcite: { value: 0.2 }, uCar: { value: new THREE.Vector3(1e6, 0, 0) } };
+  const shader = (flags) => (sh) => {
+    Object.assign(sh.uniforms, U);
+    sh.vertexShader = 'uniform float uTime; uniform float uExcite; uniform vec3 uCar;\n' + flags + sh.vertexShader.replace('#include <begin_vertex>', `#include <begin_vertex>
+      vec3 ip = vec3(instanceMatrix[3][0], instanceMatrix[3][1], instanceMatrix[3][2]);
+      float ph = fract(sin(dot(ip.xz, vec2(12.9898, 78.233))) * 43758.5453);
+      float ex = clamp(uExcite + smoothstep(90.0, 12.0, distance(ip, uCar)), 0.0, 1.2);
+      float hop = max(0.0, sin(uTime * (6.0 + ph * 4.0) + ph * 20.0)) * ex * 0.3;
+      #ifdef CROWD_ARMS
+        float a = mix(0.2, 2.9, clamp(ex * (0.55 + 0.45 * sin(uTime * 9.0 + ph * 13.0)), 0.0, 1.0));
+        transformed = vec3(transformed.x, transformed.y * cos(a) - transformed.z * sin(a), transformed.y * sin(a) + transformed.z * cos(a));
+      #endif
+      #ifdef CROWD_FLAG
+        transformed.z += sin(uTime * 7.0 + transformed.x * 4.0 + ph * 6.0) * 0.14 * transformed.x;
+      #endif
+      transformed.y += hop;`);
+  };
+  const mk = (geom, flags, color, count, place) => {
+    const m = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.85, side: flags.includes('FLAG') ? THREE.DoubleSide : THREE.FrontSide });
+    m.onBeforeCompile = shader(flags);
+    m.customProgramCacheKey = () => 'crowd' + flags;
+    const im = new THREE.InstancedMesh(geom, m, count);
+    const mat = new THREE.Matrix4(), q = new THREE.Quaternion(), e = new THREE.Euler(), sc = new THREE.Vector3(1, 1, 1), p = new THREE.Vector3();
+    const c = new THREE.Color();
+    let i = 0;
+    for (const f of CROWD) {
+      const r = place(f, p, c);
+      if (!r) continue;
+      q.setFromEuler(e.set(0, f.ry, 0));
+      im.setMatrixAt(i, mat.compose(p, q, sc));
+      im.setColorAt(i, c.set(r === true ? color(f) : r));
+      i++;
+    }
+    im.count = i;
+    im.frustumCulled = false;
+    ctx.parent.add(im);
+    return im;
+  };
+  const f1 = !!ctx.map?.f1;
+  const shirts = f1 ? TEAMS.flatMap((t) => [t.body, t.body, t.trim]).concat([0xffffff, 0xdc0000, 0xff8000]) : [0xff5252, 0xffd740, 0x40c4ff, 0x69f0ae, 0xffffff, 0xff80ab, 0xb388ff, 0xffab40, 0x3949ab];
+  const skins = [0xf1c7a2, 0xe0ac7e, 0xc68642, 0x8d5524, 0xffdbac];
+  for (const f of CROWD) { f.shirt = shirts[(Math.random() * shirts.length) | 0]; f.skin = skins[(Math.random() * skins.length) | 0]; f.flag = Math.random() < 0.14; }
+  const body = new THREE.BoxGeometry(0.4, 1.3, 0.26).translate(0, 0.65, 0);
+  const head = new THREE.SphereGeometry(0.14, 8, 6).translate(0, 1.47, 0);
+  const arms = mergeGeometries([new THREE.BoxGeometry(0.1, 0.55, 0.1).translate(-0.26, -0.26, 0), new THREE.BoxGeometry(0.1, 0.55, 0.1).translate(0.26, -0.26, 0)]);
+  const flag = mergeGeometries([new THREE.BoxGeometry(0.03, 1.2, 0.03).translate(0, 0.6, 0), new THREE.PlaneGeometry(0.8, 0.5).translate(0.4, 1.0, 0)]);
+  mk(body, '', (f) => f.shirt, n, (f, p) => (p.set(f.x, f.y, f.z), true));
+  mk(head, '', (f) => f.skin, n, (f, p) => (p.set(f.x, f.y, f.z), true));
+  mk(arms, '#define CROWD_ARMS\n', (f) => f.shirt, n, (f, p) => (p.set(f.x, f.y + 1.25, f.z), true));
+  mk(flag, '#define CROWD_FLAG\n', (f) => f.shirt, n, (f, p, c) => (f.flag ? (p.set(f.x, f.y + 1.3, f.z), true) : null));
+  return U;
+}
+
+// Start gate (with countdown lights)
 function buildStartGate(parent, track, style) {
   const s = track.sample(0, {});
   const hw = track.halfW + 1.4;
@@ -230,7 +335,7 @@ function buildStartGate(parent, track, style) {
     if (zz < 0) bn.rotation.y = Math.PI;
     grp.add(bn);
   }
-  // 倒计时灯
+  // Countdown lights
   const lights = [];
   for (let k = 0; k < 4; k++) {
     const l = new THREE.Mesh(new THREE.SphereGeometry(0.5, 12, 8), new THREE.MeshStandardMaterial({ color: 0x331111, emissive: 0x000000, emissiveIntensity: 3 }));
@@ -259,7 +364,7 @@ function buildStartGate(parent, track, style) {
       w.position.set(sd * 2, H + 3.8, -0.15);
       grp.add(w);
     }
-    // 两侧神像柱头
+    // Statue capitals on both sides
     for (const sd of [-1, 1]) {
       const head = new THREE.Mesh(new THREE.ConeGeometry(1.4, 3, 4), std(0x3a62c9, { metalness: 0.3 }));
       head.position.set(sd * hw, H + 2.2, 0);
@@ -273,7 +378,7 @@ function buildStartGate(parent, track, style) {
   parent.add(grp);
   return {
     set(n) {
-      // n: 0 全灭, 1..3 红灯依次亮, 4 绿灯
+      // n: 0 all off, 1..3 red lights in turn, 4 green
       lights.forEach((l, k) => {
         const on = n === 4 || k < n;
         l.material.color.setHex(n === 4 ? 0x22ff66 : on ? 0xff2222 : 0x331111);
@@ -283,7 +388,7 @@ function buildStartGate(parent, track, style) {
   };
 }
 
-// 漂浮吉祥物气球（11城原画里的小橘子气球）
+// Floating mascot balloons (the little orange balloon from the City 11 concept art)
 function buildMascotBalloon(color = 0xff9a1f) {
   const g = new THREE.Group();
   const head = new THREE.Mesh(new THREE.SphereGeometry(3, 24, 18), std(color, { roughness: 0.35 }));
@@ -309,7 +414,7 @@ function buildMascotBalloon(color = 0xff9a1f) {
   mouth.rotation.z = Math.PI;
   mouth.position.set(0, -0.6, 3.0);
   g.add(mouth);
-  // 垂下的条纹旗
+  // Hanging striped banners
   const ribTex = geo('ribbonTex', () => {
     const c = document.createElement('canvas');
     c.width = 64; c.height = 512;
@@ -425,7 +530,7 @@ function buildWindmill() {
   return g;
 }
 
-// 白墙蓝顶小屋
+// White-walled, blue-roofed houses
 function addAegeanHouse(b, x, y, z, w, h, d, rot, rnd) {
   const wallTex = TX.facadeTexture('aegean');
   const m = texMat('aegeanWall', wallTex, { roughness: 0.9 });
@@ -444,13 +549,13 @@ function addAegeanHouse(b, x, y, z, w, h, d, rot, rnd) {
     const cross = geo('cross', () => { const g = new THREE.BoxGeometry(0.15, 1.2, 0.15); g.translate(0, 0.6, 0); return g; });
     b.add(cross, std(0xf2f2f2), M(x, y + h + 0.5 + ds, z, rot));
   } else if (r < 0.45) {
-    // 屋顶小阁楼
+    // Small rooftop loft
     const top = new THREE.BoxGeometry(w * 0.5, h * 0.45, d * 0.5);
     scaleBoxUV(top, w * 0.5, h * 0.45, d * 0.5, 9, 16);
     top.translate(w * 0.2, h + h * 0.225 + 0.5, -d * 0.15);
     b.add(top, m, M(x, y, z, rot));
   } else if (r < 0.6) {
-    // 蓝色栏杆露台 + 黄伞
+    // Terrace with blue railings + yellow umbrella
     const um = geo('umb', () => { const g = new THREE.ConeGeometry(1.6, 0.8, 10); g.translate(0, 2.6, 0); return g; });
     b.add(um, std(0xffc93a), M(x + w * 0.2, y + h + 0.5, z, rot));
     const pole = geo('umbPole', () => { const g = new THREE.CylinderGeometry(0.05, 0.05, 2.4, 4); g.translate(0, 1.2, 0); return g; });
@@ -460,7 +565,7 @@ function addAegeanHouse(b, x, y, z, w, h, d, rot, rnd) {
 
 function scaleBoxUV(box, w, h, d, tw, th) {
   const uv = box.attributes.uv;
-  // 面顺序: +x, -x, +y, -y, +z, -z
+  // Face order: +x, -x, +y, -y, +z, -z
   const dims = [[d, h], [d, h], [w, d], [w, d], [w, h], [w, h]];
   for (let f = 0; f < 6; f++) {
     for (let v = 0; v < 4; v++) {
@@ -476,16 +581,26 @@ function addBuilding(b, x, y, z, w, h, d, rot, kind, roofColor = 0x8f96a3) {
   scaleBoxUV(box, w, h + 3, d, 12, 24);
   box.translate(0, (h + 3) / 2 - 3, 0);
   const tex = TX.facadeTexture(kind);
-  b.add(box, texMat('facade' + kind, tex, { roughness: kind === 'glass' ? 0.25 : 0.8, metalness: kind === 'glass' ? 0.4 : 0 }), M(x, y, z, rot));
+  const shiny = kind === 'glass' || kind === 'gold';
+  // night towers light their own windows
+  const lit = kind === 'night' ? { emissiveMap: tex, emissive: 0xffffff, emissiveIntensity: 0.9 } : {};
+  b.add(box, texMat('facade' + kind, tex, { roughness: shiny ? 0.25 : 0.8, metalness: shiny ? 0.45 : 0, ...lit }), M(x, y, z, rot));
   const roof = new THREE.BoxGeometry(w + 0.6, 0.8, d + 0.6);
   roof.translate(0, h + 0.4, 0);
   b.add(roof, std(roofColor), M(x, y, z, rot));
 }
 
-// ---------- 各地图 ----------
+// pit lane (F1): nothing may be placed on the pit side between the entry and the exit
+const inPits = (ctx, s, side) => ctx.pit && side > 0 && ctx.pit.u(s.d) < 440;
+
+// ---------- Per-map ----------
 export function buildProps(mapId, ctx) {
-  const fn = { city: cityProps, aegean: aegeanProps, egypt: egyptProps, snow: snowProps }[mapId];
-  return fn(ctx);
+  CROWD.length = 0;
+  SPOTS.length = 0;
+  const gate = ctx.map?.f1 ? gpProps(ctx) : { city: cityProps, aegean: aegeanProps, egypt: egyptProps, snow: snowProps, neon: neonProps, bay: bayProps, dune: duneProps }[mapId](ctx);
+  ctx.crowd = buildCrowd(ctx);
+  ctx.crowdSpots = SPOTS.slice();
+  return gate;
 }
 
 function alongTrack(track, step, fn, offset = 0) {
@@ -500,6 +615,7 @@ function commonTrackside(ctx, opts) {
     alongTrack(track, opts.lampStep || 48, (s) => {
       if (track.bridge[s.i] || track.inTunnel(s.d)) return;
       for (const side of [-1, 1]) {
+        if (inPits(ctx, s, side)) continue;
         const lat = side * (hw + 2.2);
         const x = s.x + s.rx * lat, z = s.z + s.rz * lat;
         if (!isFree(track, x, z, 1.5)) continue;
@@ -510,6 +626,7 @@ function commonTrackside(ctx, opts) {
     let k = 0;
     alongTrack(track, opts.bbStep || 170, (s) => {
       const side = k++ % 2 ? 1 : -1;
+      if (inPits(ctx, s, side)) return;
       const lat = side * (hw + 12);
       const x = s.x + s.rx * lat, z = s.z + s.rz * lat;
       if (!isFree(track, x, z, 8) || track.inTunnel(s.d)) return;
@@ -517,7 +634,7 @@ function commonTrackside(ctx, opts) {
       addBillboard(parent, batch, x, groundAt(x, z), z, s.hd + (side > 0 ? Math.PI / 2 + 0.35 : -Math.PI / 2 - 0.35), t);
     }, 60);
   }
-  // 急弯外侧箭头牌
+  // Chevron signs on the outside of sharp corners
   if (opts.chevrons) {
     const tex = TX.chevronTexture(opts.chevronBg, opts.chevronFg);
     const mL = new THREE.MeshStandardMaterial({ map: tex, emissiveMap: tex, emissive: 0xffffff, emissiveIntensity: 0.25, side: THREE.DoubleSide });
@@ -526,8 +643,9 @@ function commonTrackside(ctx, opts) {
       const c = track.curv[i];
       if (Math.abs(c) < 0.02 || i - last < 9) continue;
       last = i;
-      const side = c > 0 ? 1 : -1; // 左弯外侧在右
+      const side = c > 0 ? 1 : -1; // outside of a left turn is on the right
       const s = track.sample(i * track.ds, {});
+      if (inPits(ctx, s, side)) continue;
       const lat = side * (hw + 0.9);
       const sign = new THREE.Mesh(new THREE.PlaneGeometry(3.2, 1.6), mL);
       sign.position.set(s.x + s.rx * lat, s.y + side * hw * Math.sin(s.bank) + 2.3, s.z + s.rz * lat);
@@ -540,17 +658,17 @@ function commonTrackside(ctx, opts) {
   }
 }
 
-// ======================= 11城 =======================
+// ======================= City 11 =======================
 function cityProps(ctx) {
   const { track, batch, rnd, groundAt, parent, updaters } = ctx;
   const hw = track.halfW;
   const B = track.bounds;
-  // 楼群
+  // Buildings
   const kinds = ['glass', 'office', 'modern', 'glass'];
   for (let x = B.minX - 520; x < B.maxX + 520; x += 44)
     for (let z = B.minZ - 480; z < B.maxZ + 560; z += 44) {
       const px = x + (rnd() - 0.5) * 16, pz = z + (rnd() - 0.5) * 16;
-      if (Math.abs(pz) < 70) continue; // 河道
+      if (Math.abs(pz) < 70) continue; // river
       const north = pz > 60;
       if (rnd() > (north ? 0.8 : 0.45)) continue;
       const w = 14 + rnd() * 16, d = 14 + rnd() * 16;
@@ -564,7 +682,7 @@ function cityProps(ctx) {
         batch.add(ant, std(0xd0d4dc, { metalness: 0.7 }), M(px, groundAt(px, pz) + h + 0.8, pz));
       }
     }
-  // 地标：球顶大楼（原画右侧）
+  // Landmark: domed tower (right side of the concept art)
   {
     const spot = findFree(track, rnd, 150, 470, 60, 40);
     if (spot) {
@@ -579,7 +697,7 @@ function cityProps(ctx) {
       parent.add(neck);
     }
   }
-  // 公园树木
+  // Park trees
   for (let i = 0; i < 700; i++) {
     const x = B.minX - 300 + rnd() * (B.maxX - B.minX + 600);
     const z = B.minZ - 300 + rnd() * (B.maxZ - B.minZ + 600);
@@ -588,7 +706,7 @@ function cityProps(ctx) {
     if (z > 60 && rnd() < 0.6) continue;
     addTree(batch, x, groundAt(x, z), z, 0.8 + rnd() * 0.7, rnd() * 6, rnd() < 0.3 ? 0x6fbf4a : 0x3f9e4a);
   }
-  // 路边行道树
+  // Roadside trees
   alongTrack(track, 26, (s) => {
     if (track.bridge[s.i]) return;
     for (const side of [-1, 1]) {
@@ -600,21 +718,21 @@ function cityProps(ctx) {
   commonTrackside(ctx, {
     lamps: true,
     billboards: [
-      TX.billboardTexture('SPEED', '极速飞车', '#ff6a00', '#ffc400'),
-      TX.billboardTexture('N2O', '氮气加速', '#1565c0', '#27c7ff'),
-      TX.billboardTexture('11城', 'CITY RACE', '#7b3df0', '#ff6fd8'),
-      TX.billboardTexture('DRIFT', '漂移集气', '#e53935', '#ff8a65'),
+      TX.billboardTexture('SPEED', 'TOP SPEED', '#ff6a00', '#ffc400'),
+      TX.billboardTexture('N2O', 'NITRO BOOST', '#1565c0', '#27c7ff'),
+      TX.billboardTexture('CITY 11', 'CITY RACE', '#7b3df0', '#ff6fd8'),
+      TX.billboardTexture('DRIFT', 'DRIFT CHARGE', '#e53935', '#ff8a65'),
     ],
   });
   addGrandstand(parent, batch, track.sample(track.length - 30, {}), -1, 60, hw, groundAt, 0x2e6fd6, track);
   addGrandstand(parent, batch, track.sample(40, {}), -1, 50, hw, groundAt, 0xe53935, track);
 
-  // 塔桥（东侧跨河）
+  // Tower bridge (east, across the river)
   buildTowerBridge(ctx, track.dAt(205, 0));
-  // 西侧拱桥
+  // Arch bridge (west)
   buildArchBridge(ctx, track.dAt(-262, 0), 0x2a8cff);
 
-  // 飞艇与吉祥物气球
+  // Airship and mascot balloons
   const blimp = buildBlimp();
   parent.add(blimp);
   const balloons = [];
@@ -630,7 +748,7 @@ function cityProps(ctx) {
     parent.add(b);
     balloons.push(b);
   }
-  // 帆船
+  // Sailboats
   const boats = [];
   for (let i = 0; i < 9; i++) {
     const bt = buildSailboat(i % 3 ? 0xffffff : 0xffd54a);
@@ -656,7 +774,7 @@ function cityProps(ctx) {
       bt.rotation.z = Math.sin(t * 0.9 + bt.userData.v) * 0.05;
     }
   });
-  return buildStartGate(parent, track, { pillar: 0xf2f4f8, beam: 0x1d4fb0, text: 'START · 11城', bannerBg: '#1d4fb0', band: 0xe53935, metal: 0.3 });
+  return buildStartGate(parent, track, { pillar: 0xf2f4f8, beam: 0x1d4fb0, text: 'START · CITY 11', bannerBg: '#1d4fb0', band: 0xe53935, metal: 0.3 });
 }
 
 function findFree(track, rnd, x, z, r, spread, tries = 60) {
@@ -688,13 +806,13 @@ function buildTowerBridge(ctx, d) {
       const pier = new THREE.Mesh(new THREE.BoxGeometry(7, 44 - baseY, 9), stone);
       pier.position.set(px, (44 + baseY) / 2, 0);
       tw.add(pier);
-      // 哥特窗
+      // Gothic windows
       for (let k = 0; k < 4; k++) {
         const win = new THREE.Mesh(new THREE.BoxGeometry(0.3, 3.2, 1.6), glass);
         win.position.set(px - side * 3.55, 16 + k * 6.5, 0);
         tw.add(win);
       }
-      // 角楼尖塔
+      // Corner turret spires
       for (const cz of [-3.8, 3.8])
         for (const cx of [-2.8, 2.8]) {
           const t = new THREE.Mesh(new THREE.CylinderGeometry(1.1, 1.1, 8, 10), stoneDark);
@@ -707,12 +825,12 @@ function buildTowerBridge(ctx, d) {
           fin.position.set(px + cx, 56.3, cz);
           tw.add(fin);
         }
-      // 圆顶
+      // Domes
       const dome = new THREE.Mesh(new THREE.SphereGeometry(3.4, 20, 12, 0, Math.PI * 2, 0, Math.PI / 2), roofM);
       dome.position.set(px, 44, 0);
       tw.add(dome);
     }
-    // 桥门上方连接体 + 尖拱
+    // Connector above the bridge gate + pointed arch
     const gate = new THREE.Mesh(new THREE.BoxGeometry(hw * 2 + 2, 9, 7), stone);
     gate.position.set(0, 17.5, 0);
     tw.add(gate);
@@ -732,7 +850,7 @@ function buildTowerBridge(ctx, d) {
     grp.add(tw);
     towers.push(tw);
   }
-  // 高空人行廊桥（两条）+ 桁架
+  // High-level walkways (two) + trusses
   const s0 = track.sample(d - 28, {}), s1 = track.sample(d + 28, {});
   const len = Math.hypot(s1.x - s0.x, s1.z - s0.z);
   const mid = track.sample(d, {});
@@ -743,7 +861,7 @@ function buildTowerBridge(ctx, d) {
     walk.castShadow = true;
     grp.add(walk);
   }
-  // 悬索（从塔顶垂向两岸）
+  // Suspension cables (from tower tops to both banks)
   const cableM = std(0x7f8fb8, { metalness: 0.6 });
   for (const side of [-1, 1]) {
     for (const [dd, dir] of [[d - 28, -1], [d + 28, 1]]) {
@@ -791,7 +909,7 @@ function buildArchBridge(ctx, d, color) {
     arch.castShadow = true;
     parent.add(arch);
   }
-  // 拱顶横梁
+  // Arch crossbeam
   for (const t of [0.35, 0.5, 0.65]) {
     const s = track.sample(d - 50 + t * 100, {});
     const beam = new THREE.Mesh(new THREE.BoxGeometry((hw + 1.2) * 2, 0.8, 0.8), m);
@@ -801,12 +919,12 @@ function buildArchBridge(ctx, d, color) {
   }
 }
 
-// ======================= 情迷爱琴海 =======================
+// ======================= Aegean Romance =======================
 function aegeanProps(ctx) {
   const { track, batch, rnd, groundAt, parent, updaters } = ctx;
   const hw = track.halfW;
   const B = track.bounds;
-  // 房屋
+  // Houses
   let n = 0;
   for (let i = 0; i < 2600 && n < 420; i++) {
     const x = B.minX - 260 + rnd() * (B.maxX - B.minX + 520);
@@ -819,7 +937,7 @@ function aegeanProps(ctx) {
     addAegeanHouse(batch, x, gy, z, w, h, d, rot, rnd);
     n++;
   }
-  // 教堂
+  // Church
   for (let k = 0; k < 4; k++) {
     const spot = findFree(track, rnd, -200 + k * 160, 60 + (k % 2) * 180, 16, 90);
     if (!spot) continue;
@@ -839,7 +957,7 @@ function aegeanProps(ctx) {
     parent.add(bdome);
     for (const o of [body, dome, bell, bdome]) { o.castShadow = true; o.receiveShadow = true; }
   }
-  // 风车（山脊）
+  // Windmills (on the ridge)
   const mills = [];
   for (let k = 0; k < 6; k++) {
     const spot = findFree(track, rnd, -150 + k * 90, 390 + rnd() * 30, 12, 30);
@@ -850,7 +968,7 @@ function aegeanProps(ctx) {
     parent.add(w);
     mills.push(w);
   }
-  // 柏树与橄榄树
+  // Cypress and olive trees
   const cyp = geo('cypress', () => { const g = new THREE.SphereGeometry(1, 8, 6); g.scale(1.1, 4.2, 1.1); g.translate(0, 4.6, 0); return g; });
   for (let i = 0; i < 520; i++) {
     const x = B.minX - 260 + rnd() * (B.maxX - B.minX + 520);
@@ -860,7 +978,7 @@ function aegeanProps(ctx) {
     if (rnd() < 0.55) batch.add(cyp, flat(0x2f5a2c), M(x, gy, z, 0, 0.7 + rnd() * 0.6));
     else addTree(batch, x, gy, z, 0.6 + rnd() * 0.4, rnd() * 6, 0x8a9a5b);
   }
-  // 三角梅花丛 + 花盆（贴着护栏外侧）
+  // Bougainvillea bushes + flower pots (hugging the outside of the walls)
   const bush = geo('bush', () => new THREE.IcosahedronGeometry(1.4, 1));
   const pot = geo('pot', () => { const g = new THREE.CylinderGeometry(0.55, 0.4, 0.9, 10); g.translate(0, 0.45, 0); return g; });
   const potPlant = geo('potPlant', () => { const g = new THREE.IcosahedronGeometry(0.6, 1); g.translate(0, 1.3, 0); return g; });
@@ -883,10 +1001,10 @@ function aegeanProps(ctx) {
   }, 5);
   commonTrackside(ctx, {
     chevrons: true, chevronBg: '#ffd000', chevronFg: '#1a1a1a',
-    billboards: [TX.billboardTexture('AEGEAN', '情迷爱琴海', '#1d63c9', '#5ab0ff'), TX.billboardTexture('SPEED', '极速飞车', '#ff8a00', '#ffd54a')],
+    billboards: [TX.billboardTexture('AEGEAN', 'AEGEAN ROMANCE', '#1d63c9', '#5ab0ff'), TX.billboardTexture('SPEED', 'TOP SPEED', '#ff8a00', '#ffd54a')],
     bbStep: 260,
   });
-  // 海滩遮阳伞
+  // Beach umbrellas
   const umb = geo('beachUmb', () => { const g = new THREE.ConeGeometry(2.2, 1.0, 12); g.translate(0, 3.2, 0); return g; });
   const umbPole = geo('beachPole', () => { const g = new THREE.CylinderGeometry(0.06, 0.06, 3, 5); g.translate(0, 1.5, 0); return g; });
   for (let x = -320; x < 260; x += 16 + rnd() * 10) {
@@ -897,7 +1015,7 @@ function aegeanProps(ctx) {
     batch.add(umb, std([0xffc93a, 0xff6a6a, 0x3aa0ff][(rnd() * 3) | 0]), M(x, gy, z));
     batch.add(umbPole, std(0xdddddd), M(x, gy, z));
   }
-  // 灯塔 + 礁石
+  // Lighthouse + rocks
   {
     const x = 360, z = -300;
     const rock = new THREE.Mesh(new THREE.IcosahedronGeometry(22, 1), flat(0x9a8f7c));
@@ -937,7 +1055,7 @@ function aegeanProps(ctx) {
   return buildStartGate(parent, track, { pillar: 0xf7f5f0, beam: 0xf7f5f0, text: 'START · AEGEAN', bannerBg: '#2a64c0', band: 0x2a64c0 });
 }
 
-// ======================= 法老金字塔 =======================
+// ======================= Pharaoh's Pyramid =======================
 function egyptProps(ctx) {
   const { track, batch, rnd, groundAt, parent } = ctx;
   const hw = track.halfW;
@@ -972,7 +1090,7 @@ function egyptProps(ctx) {
     cap.rotation.y = p.rotation.y;
     parent.add(cap);
   }
-  // 内场 SPEED 金字塔
+  // Infield SPEED pyramid
   {
     const spot = findFree(track, rnd, 150, 60, 60, 50) || [150, 60];
     const [x, z] = spot;
@@ -993,7 +1111,7 @@ function egyptProps(ctx) {
       parent.add(pl);
     }
   }
-  // 方尖碑沿直道
+  // Obelisks along the straight
   const obel = geo('obelisk', () => { const g = new THREE.CylinderGeometry(0.9, 1.5, 16, 4); g.rotateY(Math.PI / 4); g.translate(0, 8, 0); return g; });
   const obelTop = geo('obeliskTop', () => { const g = new THREE.ConeGeometry(1.25, 2, 4); g.rotateY(Math.PI / 4); g.translate(0, 17, 0); return g; });
   alongTrack(track, 36, (s) => {
@@ -1007,7 +1125,7 @@ function egyptProps(ctx) {
       batch.add(obelTop, std(0xf2c440, { metalness: 0.8, roughness: 0.3 }), M(x, gy, z, s.hd));
     }
   }, 8);
-  // 神殿柱廊
+  // Temple colonnade
   const colG = geo('col', () => { const g = new THREE.CylinderGeometry(1.4, 1.6, 12, 12); g.translate(0, 6, 0); return g; });
   const capG = geo('colCap', () => { const g = new THREE.CylinderGeometry(2.2, 1.4, 2, 12); g.translate(0, 13, 0); return g; });
   for (const dd of [track.dAt(0, -140), track.dAt(0, -262)]) {
@@ -1023,7 +1141,7 @@ function egyptProps(ctx) {
       }
     }
   }
-  // 有翼狮身像（起点两侧，参考原画）
+  // Winged sphinxes (either side of the start, per the concept art)
   const sgate = track.sample(22, {});
   for (const side of [-1, 1]) {
     const lat = side * (hw + 7);
@@ -1033,7 +1151,7 @@ function egyptProps(ctx) {
     sp.rotation.y = sgate.hd + Math.PI + side * 0.5;
     parent.add(sp);
   }
-  // 棕榈与绿洲
+  // Palms and oasis
   const oases = ctx.oases || [];
   for (const [ox, oz, r] of oases) {
     for (let k = 0; k < 26; k++) {
@@ -1057,7 +1175,7 @@ function egyptProps(ctx) {
       if (isFree(track, x, z, 4) && rnd() < 0.45) addPalm(batch, x, groundAt(x, z), z, 0.9 + rnd() * 0.4, rnd() * 6);
     }
   }, 15);
-  // 仙人掌/岩石
+  // Cacti / rocks
   const rock = geo('rockE', () => new THREE.IcosahedronGeometry(2, 0));
   for (let i = 0; i < 260; i++) {
     const x = B.minX - 400 + rnd() * (B.maxX - B.minX + 800);
@@ -1067,7 +1185,7 @@ function egyptProps(ctx) {
   }
   commonTrackside(ctx, {
     chevrons: true, chevronBg: '#5b3f9e', chevronFg: '#f3e3b5',
-    billboards: [TX.billboardTexture('PHARAOH', '法老金字塔', '#5b3f9e', '#e8c547'), TX.billboardTexture('SPEED', '沙漠飞跃', '#e0861f', '#ffd54a')],
+    billboards: [TX.billboardTexture('PHARAOH', 'PYRAMIDS', '#5b3f9e', '#e8c547'), TX.billboardTexture('SPEED', 'DESERT JUMP', '#e0861f', '#ffd54a')],
     bbStep: 240,
   });
   return buildStartGate(parent, track, { pillar: 0xe0c08a, beam: 0xe0c08a, text: 'START · PHARAOH', bannerBg: '#5b3f9e', band: 0x3a62c9, pylon: true, sunDisk: true, h: 12 });
@@ -1095,7 +1213,7 @@ function buildSphinx() {
   const head = new THREE.Mesh(new THREE.BoxGeometry(2.2, 2.6, 2.2), stone);
   head.position.set(0, 8.2, 2.4);
   g.add(head);
-  // 头巾（蓝金条纹）
+  // Headdress (blue and gold stripes)
   const nemes = new THREE.Mesh(new THREE.CylinderGeometry(1.4, 2.4, 3.6, 4, 1), gold);
   nemes.rotation.y = Math.PI / 4;
   nemes.position.set(0, 8.1, 2.0);
@@ -1109,7 +1227,7 @@ function buildSphinx() {
   const face = new THREE.Mesh(new THREE.BoxGeometry(1.7, 2, 0.4), stone);
   face.position.set(0, 8.0, 3.45);
   g.add(face);
-  // 翅膀
+  // Wings
   for (const sd of [-1, 1]) {
     const w = new THREE.Shape();
     w.moveTo(0, 0);
@@ -1128,7 +1246,7 @@ function buildSphinx() {
   return g;
 }
 
-// ======================= 雪地大冒险 =======================
+// ======================= Snow Adventure =======================
 function snowProps(ctx) {
   const { track, batch, rnd, groundAt, parent, updaters } = ctx;
   const hw = track.halfW;
@@ -1148,12 +1266,12 @@ function snowProps(ctx) {
   }, 9);
   commonTrackside(ctx, {
     lamps: true, lampStep: 60,
-    billboards: [TX.billboardTexture('SPEED', '雪地大冒险', '#1e4fb0', '#39c5ff'), TX.billboardTexture('Victory', '冲刺吧！', '#c62828', '#ff7a59')],
+    billboards: [TX.billboardTexture('SPEED', 'SNOW ADVENTURE', '#1e4fb0', '#39c5ff'), TX.billboardTexture('Victory', 'GO FOR IT!', '#c62828', '#ff7a59')],
     bbStep: 200,
   });
   addGrandstand(parent, batch, track.sample(track.length - 40, {}), 1, 70, hw, groundAt, 0xc62828, track);
   addGrandstand(parent, batch, track.sample(30, {}), -1, 60, hw, groundAt, 0x1e4fb0, track);
-  // 奖杯（原画中央）
+  // Trophy (center of the concept art)
   {
     const s = track.sample(70, {});
     const lat = hw + 22;
@@ -1191,7 +1309,7 @@ function snowProps(ctx) {
     parent.add(grp);
     updaters.push((dt, t) => { star.rotation.y = t * 1.2; });
   }
-  // 雪人
+  // Snowmen
   for (let k = 0; k < 12; k++) {
     const s = track.sample(rnd() * track.length, {});
     const side = rnd() < 0.5 ? -1 : 1;
@@ -1209,7 +1327,7 @@ function snowProps(ctx) {
     const hat = geo('hat', () => { const g = new THREE.CylinderGeometry(0.5, 0.5, 0.8, 10); g.translate(0, 5.6, 0); return g; });
     batch.add(hat, std(0xc62828), M(x, gy, z));
   }
-  // 小木屋
+  // Log cabins
   for (let k = 0; k < 16; k++) {
     const spot = findFree(track, rnd, B.cx + (rnd() - 0.5) * 700, B.cz + (rnd() - 0.5) * 700, 16, 20);
     if (!spot) continue;
@@ -1227,7 +1345,7 @@ function snowProps(ctx) {
     roof.translate(0, h + 1.6, 0);
     batch.add(roof, std(0xf4f8ff), M(x, gy, z, rot));
   }
-  // 热气球
+  // Hot-air balloons
   const balloons = [];
   const pal = [['#ff5252', '#ffd740'], ['#40c4ff', '#ffffff'], ['#69f0ae', '#ff80ab'], ['#b388ff', '#ffd740'], ['#ff9800', '#ffffff'], ['#e040fb', '#40c4ff']];
   for (let k = 0; k < 7; k++) {
@@ -1243,7 +1361,7 @@ function snowProps(ctx) {
   updaters.push((dt, t) => {
     for (const b of balloons) { b.position.y = b.userData.by + Math.sin(t * 0.5 + b.userData.p) * 3; b.rotation.y = t * 0.1 + b.userData.p; }
   });
-  // 雪花
+  // Snowflakes
   if (ctx.quality !== 'low') {
     const count = 3000;
     const pos = new Float32Array(count * 3);
@@ -1268,3 +1386,370 @@ function snowProps(ctx) {
 }
 
 export { clamp };
+
+// Grid of towers around the track; `pick` decides kind/height per lot, or returns null to leave it empty
+function skyline(ctx, pad, step, pick) {
+  const { track, batch, rnd, groundAt } = ctx;
+  const B = track.bounds;
+  const lots = [];
+  for (let x = B.minX - pad; x < B.maxX + pad; x += step)
+    for (let z = B.minZ - pad; z < B.maxZ + pad; z += step) {
+      const px = x + (rnd() - 0.5) * step * 0.35, pz = z + (rnd() - 0.5) * step * 0.35;
+      const w = step * (0.32 + rnd() * 0.36), d = step * (0.32 + rnd() * 0.36);
+      if (!isFree(track, px, pz, Math.max(w, d) * 0.75 + 12)) continue;
+      const lot = pick(px, pz, w, d);
+      if (!lot) continue;
+      const gy = groundAt(px, pz);
+      addBuilding(batch, px, gy, pz, w, lot.h, d, lot.rot ?? 0, lot.kind, lot.roof ?? 0x8f96a3);
+      lots.push({ x: px, z: pz, y: gy, w, d, h: lot.h });
+    }
+  return lots;
+}
+
+// Glowing arches spanning the road every `step` meters
+function neonArches(ctx, step, colors) {
+  const { track, batch } = ctx;
+  const hw = track.halfW;
+  const post = geo('archPost', () => { const g = new THREE.BoxGeometry(0.5, 9.5, 0.5); g.translate(0, 4.75, 0); return g; });
+  const beam = geo('archBeam' + hw, () => new THREE.BoxGeometry(hw * 2 + 3, 0.45, 0.45));
+  let k = 0;
+  alongTrack(track, step, (s) => {
+    if (track.bridge[s.i] || track.inTunnel(s.d)) return;
+    const m = glow(colors[k++ % colors.length], 3);
+    for (const side of [-1, 1]) {
+      const lat = side * (hw + 1.5);
+      batch.add(post, m, M(s.x + s.rx * lat, s.y + side * hw * Math.sin(s.bank), s.z + s.rz * lat, s.hd), false);
+    }
+    batch.add(beam, m, M(s.x, s.y + 9.5, s.z, s.hd), false);
+  }, 90);
+}
+
+// ======================= Neon Tokyo =======================
+function neonProps(ctx) {
+  const { track, batch, rnd, groundAt, parent, updaters } = ctx;
+  const hw = track.halfW;
+  const B = track.bounds;
+  const neonCols = [0xff2d95, 0x27c7ff, 0xb36bff, 0xffd23a, 0x3dffb0];
+  const lots = skyline(ctx, 420, 40, (x, z) => (rnd() > 0.82 ? null : { kind: 'night', h: 24 + rnd() * 60 + Math.max(0, 260 - Math.hypot(x - B.cx, z - B.cz) * 0.5) * rnd(), roof: 0x1a1d2b }));
+  // vertical neon signs and rooftop beacons
+  const sign = geo('neonSign', () => new THREE.BoxGeometry(0.6, 1, 2.4));
+  const beacon = geo('beacon', () => new THREE.SphereGeometry(0.6, 8, 6));
+  for (const L of lots) {
+    if (rnd() < 0.55) {
+      const h = Math.min(L.h * 0.6, 8 + rnd() * 22);
+      const side = rnd() < 0.5 ? -1 : 1;
+      batch.add(sign, glow(neonCols[(rnd() * neonCols.length) | 0], 2.6), M(L.x + side * (L.w / 2 + 0.35), L.y + 6 + h / 2, L.z, 0, 1, h, 1), false);
+    }
+    if (L.h > 70) batch.add(beacon, glow(0xff3030, 4), M(L.x, L.y + L.h + 1.2, L.z), false);
+  }
+  // Landmark: red-and-white lattice tower with a lit crown
+  const spot = findFree(track, rnd, B.cx, B.cz, 26, 80);
+  if (spot) {
+    const gy = groundAt(spot[0], spot[1]);
+    const red = std(0xe8401c, { metalness: 0.3, roughness: 0.5 }), white = std(0xf2f2f2);
+    const bands = 7;
+    for (let k = 0; k < bands; k++) {
+      const r0 = 16 * (1 - k / bands) + 2, r1 = 16 * (1 - (k + 1) / bands) + 2;
+      const seg = new THREE.Mesh(new THREE.CylinderGeometry(r1, r0, 22, 4, 1, true), k % 2 ? white : red);
+      seg.material.side = THREE.DoubleSide;
+      seg.position.set(spot[0], gy + 11 + k * 22, spot[1]);
+      seg.rotation.y = Math.PI / 4;
+      parent.add(seg);
+    }
+    const crown = new THREE.Mesh(new THREE.BoxGeometry(9, 5, 9), glow(0xffb13b, 2.5));
+    crown.position.set(spot[0], gy + 90, spot[1]);
+    parent.add(crown);
+    const mast = new THREE.Mesh(new THREE.CylinderGeometry(0.4, 1, 26, 6), glow(0xff5a3a, 2));
+    mast.position.set(spot[0], gy + bands * 22 + 13, spot[1]);
+    parent.add(mast);
+  }
+  neonArches(ctx, 140, [0xff2d95, 0x27c7ff, 0xb36bff]);
+  commonTrackside(ctx, {
+    lamps: true, lampStep: 36,
+    billboards: [
+      TX.billboardTexture('NEON', 'NIGHT RACE', '#ff2d95', '#7b3df0'),
+      TX.billboardTexture('TOKYO', 'DRIFT CITY', '#00b8f0', '#1a237e'),
+      TX.billboardTexture('N2O', 'NITRO BOOST', '#3dffb0', '#00796b'),
+      TX.billboardTexture('SPEED', 'AFTER DARK', '#ffd23a', '#ff2d95'),
+    ],
+    bbStep: 120,
+    chevrons: true, chevronBg: '#ff2d95', chevronFg: '#ffffff',
+  });
+  addGrandstand(parent, batch, track.sample(track.length - 30, {}), -1, 60, hw, groundAt, 0xb36bff, track);
+  addGrandstand(parent, batch, track.sample(40, {}), 1, 50, hw, groundAt, 0xff2d95, track);
+  // blinking ad screens: pulse the neon a little
+  const pulse = MATS.get('glow' + 0xff2d95 + 3);
+  updaters.push((dt, t) => { if (pulse) pulse.emissiveIntensity = 2.6 + Math.sin(t * 3) * 0.6; });
+  return buildStartGate(parent, track, { pillar: 0x1a1d2b, beam: 0xff2d95, text: 'START · NEON TOKYO', bannerBg: '#7b1fa2', band: 0x27c7ff, metal: 0.6 });
+}
+
+// ======================= Harbor Bay =======================
+function buildSuspensionBridge(ctx, d, color) {
+  const { track, parent } = ctx;
+  const hw = track.halfW;
+  const m = std(color, { metalness: 0.4, roughness: 0.45 });
+  const cable = std(color, { metalness: 0.5, roughness: 0.4 });
+  const span = 42, H = 34;
+  const at = (off) => track.sample(d + off, {});
+  // two portal towers
+  for (const off of [-span, span]) {
+    const s = at(off);
+    const tw = new THREE.Group();
+    tw.position.set(s.x, s.y, s.z);
+    tw.rotation.y = s.hd;
+    for (const side of [-1, 1]) {
+      const leg = new THREE.Mesh(new THREE.BoxGeometry(2.4, H + 14, 3.2), m);
+      leg.position.set(side * (hw + 2.4), (H + 14) / 2 - 12, 0);
+      leg.castShadow = true;
+      tw.add(leg);
+    }
+    for (const y of [H * 0.55, H * 0.8, H]) {
+      const beam = new THREE.Mesh(new THREE.BoxGeometry(hw * 2 + 7, 2, 2.4), m);
+      beam.position.y = y;
+      tw.add(beam);
+    }
+    parent.add(tw);
+  }
+  // main cables: anchored at the deck beyond the towers, sagging to near the deck at midspan
+  for (const side of [-1, 1]) {
+    const pts = [];
+    for (let k = 0; k <= 40; k++) {
+      const off = -span * 2 + (k / 40) * span * 4;
+      const s = at(off);
+      const lat = side * (hw + 2.4);
+      const u = Math.abs(off);
+      const y = u <= span ? 4 + (H - 4) * Math.pow(u / span, 2) : H * (1 - (u - span) / span) + 1;
+      pts.push(new THREE.Vector3(s.x + s.rx * lat, s.y + y, s.z + s.rz * lat));
+      if (k % 2 === 0 && y > 2.5) {
+        const hanger = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.1, y, 4), cable);
+        hanger.position.set(s.x + s.rx * lat, s.y + y / 2, s.z + s.rz * lat);
+        parent.add(hanger);
+      }
+    }
+    const main = new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 80, 0.55, 6), cable);
+    main.castShadow = true;
+    parent.add(main);
+  }
+}
+
+function bayProps(ctx) {
+  const { track, batch, rnd, groundAt, parent, updaters } = ctx;
+  const hw = track.halfW;
+  const B = track.bounds;
+  const roofs = [0xc0392b, 0x2e6fd6, 0x8d6e63, 0x546e7a, 0xf4b400];
+  // downtown towers in the south-east, painted houses climbing the hills elsewhere
+  skyline(ctx, 380, 30, (x, z) => {
+    if (Math.abs(x) < 72) return null; // the channel
+    const downtown = x > 60 && z < 80;
+    if (rnd() > (downtown ? 0.75 : 0.55)) return null;
+    if (downtown) return { kind: rnd() < 0.5 ? 'glass' : 'modern', h: 30 + rnd() * 80, roof: 0x9aa0aa };
+    return { kind: 'office', h: 6 + rnd() * 9, roof: roofs[(rnd() * roofs.length) | 0], rot: rnd() * 0.4 };
+  });
+  for (let i = 0; i < 500; i++) {
+    const x = B.minX - 300 + rnd() * (B.maxX - B.minX + 600);
+    const z = B.minZ - 300 + rnd() * (B.maxZ - B.minZ + 600);
+    if (Math.abs(x) < 64 || !isFree(track, x, z, 8)) continue;
+    addTree(batch, x, groundAt(x, z), z, 0.7 + rnd() * 0.6, rnd() * 6, rnd() < 0.4 ? 0x2e7d32 : 0x43a047);
+  }
+  // the two channel crossings get red suspension bridges
+  buildSuspensionBridge(ctx, track.dAt(0, -150), 0xc0362c);
+  buildSuspensionBridge(ctx, track.dAt(0, 250), 0xc0362c);
+  commonTrackside(ctx, {
+    lamps: true,
+    billboards: [
+      TX.billboardTexture('BAY', 'HARBOR RACE', '#c0362c', '#ff8a65'),
+      TX.billboardTexture('SPEED', 'TOP SPEED', '#1565c0', '#27c7ff'),
+      TX.billboardTexture('N2O', 'HILL CLIMB', '#2e7d32', '#9ccc65'),
+    ],
+    chevrons: true, chevronBg: '#ffd000', chevronFg: '#1a1a1a',
+  });
+  addGrandstand(parent, batch, track.sample(track.length - 30, {}), -1, 50, hw, groundAt, 0xc0362c, track);
+  // sailboats drifting along the channel
+  const boats = [];
+  for (let i = 0; i < 8; i++) {
+    const bt = buildSailboat(i % 3 ? 0xffffff : 0xff8a65);
+    bt.position.set((rnd() - 0.5) * 50, -1.5, B.minZ - 150 + rnd() * (B.maxZ - B.minZ + 300));
+    bt.rotation.y = rnd() < 0.5 ? 0 : Math.PI;
+    bt.userData.v = (2 + rnd() * 3) * (bt.rotation.y ? -1 : 1);
+    parent.add(bt);
+    boats.push(bt);
+  }
+  const zMin = B.minZ - 200, zMax = B.maxZ + 200;
+  updaters.push((dt, t) => {
+    for (const bt of boats) {
+      bt.position.z += bt.userData.v * dt;
+      if (bt.position.z > zMax) bt.position.z = zMin;
+      if (bt.position.z < zMin) bt.position.z = zMax;
+      bt.position.y = -1.5 + Math.sin(t * 1.3 + bt.userData.v) * 0.15;
+    }
+  });
+  return buildStartGate(parent, track, { pillar: 0xf2f4f8, beam: 0xc0362c, text: 'START · HARBOR BAY', bannerBg: '#c0362c', band: 0x1d4fb0, metal: 0.3 });
+}
+
+// ======================= Dune Metropolis =======================
+function duneProps(ctx) {
+  const { track, batch, rnd, groundAt, parent, updaters } = ctx;
+  const hw = track.halfW;
+  const B = track.bounds;
+  skyline(ctx, 520, 58, (x, z) => {
+    const cd = Math.hypot(x - B.cx, z - B.cz);
+    if (rnd() > 0.6) return null;
+    return { kind: rnd() < 0.55 ? 'gold' : 'glass', h: 40 + rnd() * 90 + Math.max(0, 500 - cd) * 0.25 * rnd(), roof: 0xd9c7a0 };
+  });
+  // Landmark: a stepped supertall tower with a needle spire
+  const spot = findFree(track, rnd, B.cx, B.cz, 40, 120);
+  if (spot) {
+    const gy = groundAt(spot[0], spot[1]);
+    let y = gy, w = 34;
+    for (let k = 0; k < 7; k++) {
+      const h = 46 - k * 3;
+      addBuilding(batch, spot[0], y, spot[1], w, h, w * 0.8, k * 0.12, 'glass', 0xcfd8e3);
+      y += h;
+      w *= 0.8;
+    }
+    const spire = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 2.4, 70, 8), std(0xdfe6ee, { metalness: 0.9, roughness: 0.2 }));
+    spire.position.set(spot[0], y + 35, spot[1]);
+    parent.add(spire);
+    const tip = new THREE.Mesh(new THREE.SphereGeometry(1.2, 8, 6), glow(0xff3030, 4));
+    tip.position.set(spot[0], y + 71, spot[1]);
+    parent.add(tip);
+  }
+  // palm-lined straights and scattered palm groves
+  alongTrack(track, 22, (s) => {
+    if (track.bridge[s.i]) return;
+    for (const side of [-1, 1]) {
+      const lat = side * (hw + 6 + rnd() * 2);
+      const x = s.x + s.rx * lat, z = s.z + s.rz * lat;
+      if (isFree(track, x, z, 4)) addPalm(batch, x, groundAt(x, z), z, 0.9 + rnd() * 0.3, rnd() * 6);
+    }
+  }, 11);
+  for (let i = 0; i < 260; i++) {
+    const x = B.minX - 300 + rnd() * (B.maxX - B.minX + 600), z = B.minZ - 300 + rnd() * (B.maxZ - B.minZ + 600);
+    if (isFree(track, x, z, 8)) addPalm(batch, x, groundAt(x, z), z, 0.8 + rnd() * 0.5, rnd() * 6);
+  }
+  commonTrackside(ctx, {
+    lamps: true, lampStep: 60,
+    billboards: [
+      TX.billboardTexture('DUNE', 'METROPOLIS', '#e0861f', '#ffd54a'),
+      TX.billboardTexture('SPEED', 'SUNSET SPRINT', '#8e24aa', '#ff7043'),
+      TX.billboardTexture('N2O', 'NITRO BOOST', '#1565c0', '#27c7ff'),
+    ],
+    chevrons: true, chevronBg: '#e0861f', chevronFg: '#ffffff',
+  });
+  addGrandstand(parent, batch, track.sample(track.length - 30, {}), -1, 60, hw, groundAt, 0xe0861f, track);
+  addGrandstand(parent, batch, track.sample(40, {}), 1, 50, hw, groundAt, 0x8e24aa, track);
+  const balloons = [];
+  for (let i = 0; i < 4; i++) {
+    const b = buildHotAirBalloon(['#ff7043', '#8e24aa', '#ffd54a', '#26c6da'][i], '#ffffff');
+    b.position.set(B.cx + (rnd() - 0.5) * 700, 90 + rnd() * 60, B.cz + (rnd() - 0.5) * 700);
+    b.userData.ph = rnd() * 6;
+    parent.add(b);
+    balloons.push(b);
+  }
+  updaters.push((dt, t) => { for (const b of balloons) b.position.y += Math.sin(t * 0.4 + b.userData.ph) * 0.02; });
+  return buildStartGate(parent, track, { pillar: 0xe8d3a8, beam: 0x8e24aa, text: 'START · DUNE METROPOLIS', bannerBg: '#8e24aa', band: 0xe0861f, metal: 0.5 });
+}
+
+// ======================= Formula 1 Grands Prix =======================
+function pitBuilding(ctx) {
+  const { track, batch, groundAt } = ctx;
+  const hw = track.halfW;
+  const s = {};
+  for (let k = 0; k < 12; k++) {
+    track.sample(track.length - 24 - k * 12.5, s);
+    const lat = hw + 17;
+    const x = s.x + s.rx * lat, z = s.z + s.rz * lat;
+    if (!isFree(track, x, z, 8)) continue;
+    addBuilding(batch, x, groundAt(x, z), z, 16, 9, 12.6, s.hd, 'modern', 0xeeeeee);
+  }
+}
+
+function floodlights(ctx, step = 90) {
+  const { track, batch, groundAt } = ctx;
+  const hw = track.halfW;
+  const pole = geo('floodPole', () => { const g = new THREE.CylinderGeometry(0.25, 0.4, 20, 6); g.translate(0, 10, 0); return g; });
+  const head = geo('floodHead', () => { const g = new THREE.BoxGeometry(3, 1.4, 0.6); g.translate(0, 20.5, 0); return g; });
+  let k = 0;
+  alongTrack(track, step, (s) => {
+    if (track.inTunnel(s.d)) return;
+    const side = k++ % 2 ? 1 : -1;
+    if (inPits(ctx, s, side)) return;
+    const lat = side * (hw + 7);
+    const x = s.x + s.rx * lat, z = s.z + s.rz * lat;
+    if (!isFree(track, x, z, 4)) return;
+    const y = Math.min(groundAt(x, z), s.y);
+    batch.add(pole, std(0x6a707a, { metalness: 0.6, roughness: 0.4 }), M(x, y, z, s.hd));
+    batch.add(head, glow(0xfff6d8, 3.5), M(x, y, z, s.hd + (side > 0 ? Math.PI : 0)), false);
+  }, 30);
+}
+
+function gpProps(ctx) {
+  const { track, batch, rnd, groundAt, parent, updaters, map } = ctx;
+  const gp = map.f1, P = map.theme.props;
+  const hw = track.halfW, B = track.bounds;
+  pitBuilding(ctx);
+  // surroundings: skyline kept back from the circuit, then vegetation
+  if (P.skyline) {
+    const sk = P.skyline;
+    skyline(ctx, 420, gp.dense ? 32 : 44, (x, z) => {
+      if (track.nearest(x, z, hw + sk.ring * (gp.dense ? 0.25 : 1))) return null;
+      if (groundAt(x, z) < -0.5 || rnd() > (gp.dense ? sk.density + 0.25 : sk.density)) return null;
+      return { kind: sk.kinds[(rnd() * sk.kinds.length) | 0], h: sk.h[0] + rnd() * (sk.h[1] - sk.h[0]), roof: 0x8f96a3 };
+    });
+  }
+  for (let i = 0; i < P.treeCount; i++) {
+    const x = B.minX - 320 + rnd() * (B.maxX - B.minX + 640), z = B.minZ - 320 + rnd() * (B.maxZ - B.minZ + 640);
+    if (!isFree(track, x, z, 8)) continue;
+    const y = groundAt(x, z);
+    if (y < -0.8) continue;
+    if (P.trees === 'pine') addPine(batch, x, y, z, 0.8 + rnd() * 0.6, rnd() * 6, false);
+    else if (P.trees === 'palm') addPalm(batch, x, y, z, 0.8 + rnd() * 0.4, rnd() * 6);
+    else addTree(batch, x, y, z, 0.8 + rnd() * 0.6, rnd() * 6, rnd() < 0.3 ? 0x6fbf4a : 0x3f9e4a);
+  }
+  const title = gp.name.replace(/ GP$/, '').toUpperCase();
+  commonTrackside(ctx, {
+    lamps: !!P.night, lampStep: 34,
+    billboards: [
+      TX.billboardTexture(title, 'GRAND PRIX', '#15151e', '#e10600'),
+      TX.billboardTexture('F1', 'WORLD CHAMPIONSHIP', '#e10600', '#ff5a3a'),
+      TX.billboardTexture('DRS', 'ZONE', '#1e2a4a', '#27c7ff'),
+      TX.billboardTexture('PIT', 'LANE', '#111111', '#555555'),
+    ],
+    bbStep: 150,
+    chevrons: true, chevronBg: '#e10600', chevronFg: '#ffffff',
+  });
+  if (P.floodlights) floodlights(ctx);
+  // grandstands on the main straight and around the three tightest corners
+  addGrandstand(parent, batch, track.sample(track.length - 60, {}), -1, 90, hw, groundAt, 0x2e6fd6, track);
+  const peaks = [];
+  for (let i = 0; i < track.N; i += 4) {
+    const c = Math.abs(track.curv[i]);
+    if (c < 0.018) continue;
+    if (peaks.some((p) => Math.min(Math.abs(p.i - i), track.N - Math.abs(p.i - i)) < track.N / 8)) continue;
+    peaks.push({ i, c });
+  }
+  peaks.sort((a, b) => b.c - a.c);
+  const cols = [0xe10600, 0x27c7ff, 0xffc906];
+  peaks.slice(0, 3).forEach((p, k) => {
+    const s = track.sample(p.i * track.ds + 30, {});
+    addGrandstand(parent, batch, s, track.curv[p.i] > 0 ? 1 : -1, 50, hw, groundAt, cols[k], track);
+  });
+  // standing fans behind catch fences on the outside of the next corners, and opposite the pits
+  peaks.slice(3, 9).forEach((p) => standingCrowd(ctx, track.sample(p.i * track.ds, {}), track.curv[p.i] > 0 ? 1 : -1, 36));
+  standingCrowd(ctx, track.sample(track.length - 200, {}), -1, 60);
+  if (P.boats) {
+    const boats = [];
+    for (let i = 0; i < 40 && boats.length < 10; i++) {
+      const x = B.cx + (rnd() - 0.5) * 1400, z = B.cz + (rnd() - 0.5) * 1400;
+      if (groundAt(x, z) > -3) continue;
+      const bt = buildSailboat(i % 3 ? 0xffffff : 0xe10600);
+      bt.position.set(x, -1.5, z);
+      bt.rotation.y = rnd() * 6;
+      bt.userData.v = 1 + rnd() * 2;
+      parent.add(bt);
+      boats.push(bt);
+    }
+    updaters.push((dt, t) => { for (const bt of boats) bt.position.y = -1.5 + Math.sin(t * 1.3 + bt.userData.v) * 0.15; });
+  }
+  return buildStartGate(parent, track, { pillar: 0xf2f4f8, beam: 0x15151e, text: title + ' GRAND PRIX', bannerBg: '#15151e', band: 0xe10600, metal: 0.4 });
+}

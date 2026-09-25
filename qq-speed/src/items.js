@@ -29,7 +29,7 @@ export class ItemSystem {
     this.boxes = [];
     this.missiles = [];
     this.bananas = [];
-    // 道具箱：彩色问号方块
+    // Item boxes: colorful question-mark blocks
     const tex = textTexture('?', { w: 128, h: 128, bg: null, fg: '#ffffff', font: '900 110px Arial Black, Arial', stroke: '#1d4fb0' });
     const boxMat = new THREE.MeshStandardMaterial({ color: 0x55c8ff, emissive: 0x1d6ff2, emissiveIntensity: 0.6, transparent: true, opacity: 0.85, roughness: 0.2, metalness: 0.3 });
     const qMat = new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthWrite: false, side: THREE.DoubleSide });
@@ -143,7 +143,7 @@ export class ItemSystem {
 
   update(dt, racers, standings) {
     const t = performance.now() * 0.001;
-    // 道具箱
+    // Item boxes
     for (const b of this.boxes) {
       if (b.respawn > 0) {
         b.respawn -= dt;
@@ -165,7 +165,7 @@ export class ItemSystem {
         }
       }
     }
-    // 香蕉皮
+    // Banana peels
     for (let i = this.bananas.length - 1; i >= 0; i--) {
       const bn = this.bananas[i];
       bn.age += dt;
@@ -182,7 +182,7 @@ export class ItemSystem {
         this.bananas.splice(i, 1);
       }
     }
-    // 导弹：追踪目标
+    // Missiles: home in on the target
     for (let i = this.missiles.length - 1; i >= 0; i--) {
       const m = this.missiles[i];
       m.life -= dt;
@@ -212,7 +212,7 @@ export class ItemSystem {
     }
   }
 
-  // AI 使用道具的简单决策
+  // Simple AI item-usage decisions
   aiThink(r, dt, standings) {
     if (!r.items.length) return;
     r.itemTimer -= dt;

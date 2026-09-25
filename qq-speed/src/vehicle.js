@@ -1,6 +1,6 @@
 import { clamp, wrapAngle, damp } from './util.js';
 
-// 手感参数（米/秒）。显示时速 = 速度 × 3.6
+// Handling parameters (m/s). Displayed km/h = speed × 3.6
 export const TUNE = {
   vmax: 55, // ~198 km/h
   vmaxNitro: 76, // ~274 km/h
@@ -24,10 +24,11 @@ export const TUNE = {
 };
 
 export class PlayerCar {
-  constructor(track, model, name) {
+  constructor(track, model, name, tune = {}) {
     this.track = track;
     this.model = model;
     this.name = name;
+    this.T = { ...TUNE, ...tune }; // per-car handling
     this.isPlayer = true;
     this.events = [];
     this.proj = {};
@@ -88,7 +89,7 @@ export class PlayerCar {
       this.nitroCount--;
     }
     const wasSmall = this.smallBoost > 0.35;
-    this.nitroTime = Math.min(4.5, Math.max(0, this.nitroTime) + TUNE.nitroTime);
+    this.nitroTime = Math.min(4.5, Math.max(0, this.nitroTime) + this.T.nitroTime);
     this.s = Math.max(this.s, 20) + 4;
     this.emit('nitro', { double: wasSmall });
     if (wasSmall) this.emit('double', {});
@@ -99,14 +100,14 @@ export class PlayerCar {
     if (!this.drifting) return;
     this.drifting = false;
     if (clean && this.driftTime > 0.22) {
-      this.smallWindow = TUNE.smallWindow;
+      this.smallWindow = this.T.smallWindow;
       this.windowKind = 'drift';
     }
     this.emit('driftEnd', { time: this.driftTime });
   }
 
   update(dt, inp, active, itemMode) {
-    const T = TUNE;
+    const T = this.T;
     const tr = this.track;
     if (!active) inp = NO_INPUT;
     const spinning = this.spin > 0;
@@ -115,11 +116,13 @@ export class PlayerCar {
       inp = NO_INPUT;
     }
 
-    // 平滑转向
-    const steerT = (inp.left ? 1 : 0) - (inp.right ? 1 : 0);
-    this.steer = damp(this.steer, steerT, 12, dt);
+    // Smoothed steering
+    // analog from tilt/swipe (+ = left), or -1/0/1 from keys and buttons
+    const steerT = inp.steer ?? (inp.left ? 1 : 0) - (inp.right ? 1 : 0);
+    // tilt/swipe are already smooth and proportional, so the car follows them faster than keys
+    this.steer = damp(this.steer, steerT, inp.analog ? 20 : 12, dt);
 
-    // 各种加速状态
+    // Boost states
     let vmax = T.vmax, acc = T.accel;
     if (this.nitroTime > 0) { vmax = T.vmaxNitro; acc = T.nitroAccel; this.nitroTime -= dt; }
     if (this.smallBoost > 0) { vmax += this.smallBoostPower; acc += 14; this.smallBoost -= dt; }
@@ -131,7 +134,7 @@ export class PlayerCar {
     if (this.shield > 0) this.shield -= dt;
     this.vmaxNow = vmax;
 
-    // 小喷 / 落地喷窗口
+    // Mini boost / landing boost windows
     if (this.smallWindow > 0) {
       this.smallWindow -= dt;
       if (inp.upPressed || inp.wPressed) {
@@ -150,28 +153,37 @@ export class PlayerCar {
     if (inp.nitroPressed && !itemMode) this.triggerNitro();
 
     const onGround = !this.airborne;
-    // 纵向
-    this.throttle = inp.up ? 1 : inp.down ? -1 : 0;
+    // Longitudinal
+    this.throttle = inp.down ? -1 : this.cruise ? (inp.throttle ?? (inp.up ? 1 : 0)) : inp.up ? 1 : 0;
+    this.braking = !!inp.down && this.s > 1;
     if (onGround) {
-      if (inp.up) {
-        if (this.s < 0) this.s += T.brake * dt;
-        else if (this.s < vmax) this.s += acc * (1 - Math.pow(this.s / vmax, 2) * 0.85) * dt;
-      } else if (inp.down) {
+      // the brake wins over the throttle: touch controls keep the throttle on, and keyboard players may hold both
+      if (inp.down) {
         if (this.s > 0.5) this.s -= T.brake * dt;
         else this.s = Math.max(-T.reverseMax, this.s - 14 * dt);
+      } else if (this.cruise && this.s >= 0 && active) {
+        // F1: the car holds a cruising speed by itself; throttle (0..1) adds speed on top, full throttle = flat out
+        const t = inp.throttle ?? (inp.up ? 1 : 0);
+        const boosting = this.nitroTime > 0 || this.smallBoost > 0 || this.padTime > 0 || this.startBoost > 0;
+        const target = boosting ? vmax : this.cruise * vmax + (1 - this.cruise) * vmax * t;
+        if (this.s < target) this.s += acc * (1 - Math.pow(this.s / vmax, 2) * 0.85) * Math.max(0.6, t) * dt;
+        else this.s -= Math.min(this.s - target, 7 * dt); // lift: engine braking back down to the target
+      } else if (inp.up) {
+        if (this.s < 0) this.s += T.brake * dt;
+        else if (this.s < vmax) this.s += acc * (1 - Math.pow(this.s / vmax, 2) * 0.85) * dt;
       } else {
         const dec = (T.roll + Math.abs(this.s) * 0.06) * dt;
         this.s = Math.abs(this.s) <= dec ? 0 : this.s - Math.sign(this.s) * dec;
       }
       if (this.s > vmax) this.s -= (this.s - vmax) * 1.1 * dt;
-      // 坡度影响
+      // Slope effect
       this.s -= tr.slope[this.hint] * Math.cos(this.h - tr.hd[this.hint]) * 6 * dt;
     }
 
-    // 进入漂移：Shift + 方向
-    if (!this.drifting && inp.shift && steerT !== 0 && this.s > T.driftMinSpeed && onGround && !spinning) {
+    // Enter drift: Shift + direction
+    if (!this.drifting && inp.shift && Math.abs(steerT) > 0.3 && this.s > T.driftMinSpeed && onGround && !spinning) {
       this.drifting = true;
-      this.driftDir = steerT;
+      this.driftDir = Math.sign(steerT);
       this.driftTime = 0;
       this.releaseTime = 0;
       this.smallWindow = 0;
@@ -222,7 +234,7 @@ export class PlayerCar {
     }
     if (spinning) this.h += 9 * dt;
 
-    // 位置积分
+    // Integrate position
     const dirSign = this.s >= 0 ? 1 : -1;
     const mv = this.s >= 0 ? this.m : this.h;
     let vx = Math.sin(mv) * Math.abs(this.s) * dirSign;
@@ -234,7 +246,7 @@ export class PlayerCar {
     this.hint = p.i;
     this.d = p.d;
 
-    // 护栏碰撞
+    // Wall collision
     const lim = tr.halfW - 1.1;
     this.impact = 0;
     if (Math.abs(p.lat) > lim) {
@@ -256,7 +268,7 @@ export class PlayerCar {
         if (this.s >= 0) {
           this.s = ns;
           if (ns > 0.5) this.m = Math.atan2(vx, vz);
-          // 车头顺着墙摆正
+          // Straighten the nose along the wall
           const th = Math.abs(wrapAngle(this.h - p.hd)) < Math.PI / 2 ? p.hd : p.hd + Math.PI;
           this.h += wrapAngle(th - this.h) * Math.min(1, 0.6 * impact + 0.05);
         } else this.s = -ns;
@@ -269,7 +281,7 @@ export class PlayerCar {
     }
     this.lat = p.lat;
 
-    // 垂直：贴地 / 腾空 / 落地
+    // Vertical: grounded / airborne / landing
     const groundY = p.y + p.lat * Math.sin(p.bank);
     if (this.airborne) {
       this.vy -= T.gravity * dt;
@@ -289,7 +301,7 @@ export class PlayerCar {
         this.airTime = 0;
       }
     } else {
-      // 沿赛道方向的速度分量；竖直向心加速度超过重力即腾空
+      // Speed component along the track; go airborne once vertical centripetal acceleration exceeds gravity
       const va = this.s * Math.cos(this.m - p.hd);
       if (va > 18 && va * va * -tr.vcurv[p.i] > T.gravity) {
         this.airborne = true;
@@ -302,12 +314,12 @@ export class PlayerCar {
       }
     }
 
-    // 逆行检测
+    // Wrong-way detection
     const fwdDot = Math.cos(wrapAngle(this.h - p.hd));
     if (fwdDot < -0.35 && this.s > 4) this.wrongWay += dt;
     else this.wrongWay = Math.max(0, this.wrongWay - dt * 2);
 
-    // 加速带
+    // Boost pads
     if (tr.boostPads)
       for (const bp of tr.boostPads) {
         let dd = this.d - (bp.d - bp.len / 2);
@@ -322,7 +334,7 @@ export class PlayerCar {
       }
   }
 
-  // 同步 3D 模型
+  // Sync the 3D model
   syncModel(dt) {
     const mdl = this.model;
     const u = mdl.userData;
@@ -336,18 +348,30 @@ export class PlayerCar {
     this.pitchVis = damp(this.pitchVis, pitchT, 10, dt);
     this.rollVis = damp(this.rollVis, -bankAlong, 10, dt);
     mdl.rotation.set(this.pitchVis, this.h, this.rollVis, 'YXZ');
-    // 车身动态：转向侧倾、加减速俯仰
+    // Body dynamics: roll when steering, pitch under acceleration/braking
     const sp = Math.abs(this.s);
     const lean = this.drifting ? this.driftDir * 0.07 : this.steer * 0.045 * clamp(sp / 30, 0, 1);
     const pitchDyn = this.throttle > 0 && sp < 30 ? -0.025 : this.throttle < 0 && this.s > 5 ? 0.04 : 0;
     u.root.rotation.z = damp(u.root.rotation.z, lean, 8, dt);
     u.root.rotation.x = damp(u.root.rotation.x, pitchDyn - (this.nitroTime > 0 ? 0.02 : 0), 6, dt);
     for (const w of u.wheels) {
-      w.spin.rotation.x += (this.s * dt) / 0.47;
+      w.spin.rotation.x += (this.s * dt) / w.r;
       if (w.front) w.steer.rotation.y = this.drifting ? -this.driftDir * 0.3 : this.steer * 0.38;
     }
+    // F1: the driver works the steering wheel (counter-steering while drifting)
+    u.drive?.(this.drifting ? -this.driftDir * 0.55 : this.steer);
     updateFlames(u, this.nitroTime > 0, this.smallBoost > 0 || this.padTime > 0 || this.startBoost > 0);
+    brakeLights(u, this.braking, Math.abs(this.s));
     u.shield.visible = this.shield > 0;
+  }
+}
+
+// brake lights flare when braking; on a hard stop from speed the brake discs glow too
+export function brakeLights(u, braking, speed) {
+  u.tailM.emissiveIntensity = braking ? 11 : 3;
+  if (u.rotorM) {
+    u.heat = Math.max(0, Math.min(1, (u.heat || 0) + (braking && speed > 20 ? 0.04 : -0.015)));
+    u.rotorM.emissive.setRGB(1, 0.35, 0.05).multiplyScalar(u.heat * 2.2);
   }
 }
 

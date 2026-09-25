@@ -37,7 +37,7 @@ function cached(key, fn) {
   return cache.get(key);
 }
 
-// 路面：u 横跨整个路宽，v 沿路方向（一张 = 24 米）
+// Road: u spans the full road width, v runs along the road (one tile = 24 m)
 export function roadTexture(style) {
   return cached('road-' + style, () => {
     const W = 512, H = 1024;
@@ -45,7 +45,7 @@ export function roadTexture(style) {
     const rnd = mulberry32(7);
     if (style === 'asphalt') {
       noiseFill(g, W, H, '#474b55', 0.16, rnd, 2);
-      // 车辙暗带
+      // Dark tire-track bands
       for (const x of [0.3, 0.7]) {
         const grd = g.createLinearGradient(W * x - 40, 0, W * x + 40, 0);
         grd.addColorStop(0, 'rgba(0,0,0,0)');
@@ -65,7 +65,7 @@ export function roadTexture(style) {
         g.fillRect(W * 0.25 - 3, y, 6, 128);
         g.fillRect(W * 0.75 - 3, y, 6, 128);
       }
-      // 路面蓝色霓虹边
+      // Blue neon road edges
       g.fillStyle = '#2aa8ff';
       g.fillRect(0, 0, 8, H);
       g.fillRect(W - 8, 0, 8, H);
@@ -95,7 +95,7 @@ export function roadTexture(style) {
         g.fillStyle = `rgba(0,0,0,${rnd() * 0.08})`;
         g.fillRect(rnd() * W, rnd() * H, 2, 2);
       }
-      // 蓝色路缘
+      // Blue curbs
       g.fillStyle = '#2f7fd8';
       g.fillRect(0, 0, 14, H);
       g.fillRect(W - 14, 0, 14, H);
@@ -125,7 +125,7 @@ export function roadTexture(style) {
         g.fillStyle = `rgba(${rnd() > 0.5 ? '255,240,200' : '90,60,30'},${rnd() * 0.12})`;
         g.fillRect(rnd() * W, rnd() * H, 2, 2);
       }
-      // 紫色路边（参考法老金字塔原画）
+      // Purple road edges (based on the Pharaoh's Pyramid concept art)
       g.fillStyle = '#5b3f9e';
       g.fillRect(0, 0, 18, H);
       g.fillRect(W - 18, 0, 18, H);
@@ -135,7 +135,7 @@ export function roadTexture(style) {
     } else if (style === 'plate') {
       g.fillStyle = '#3c4a66';
       g.fillRect(0, 0, W, H);
-      // 菱形防滑钢板
+      // Diamond-plate steel
       for (let y = 0; y < H; y += 24) {
         for (let x = 0; x < W; x += 24) {
           const ox = ((y / 24) & 1) * 12;
@@ -155,7 +155,7 @@ export function roadTexture(style) {
         g.fillStyle = `rgba(255,255,255,${rnd() * 0.08})`;
         g.fillRect(rnd() * W, rnd() * H, 2, 2);
       }
-      // 雪边与亮蓝边线
+      // Snowy edges and bright blue edge lines
       const grd = g.createLinearGradient(0, 0, 40, 0);
       grd.addColorStop(0, 'rgba(240,248,255,0.95)');
       grd.addColorStop(1, 'rgba(240,248,255,0)');
@@ -203,7 +203,7 @@ export function checkerTexture(a = '#111', b = '#fff', nx = 8, ny = 2) {
   });
 }
 
-// 护栏：一张覆盖 16 米
+// Walls: one tile covers 16 m
 export function wallTexture(style) {
   return cached('wall-' + style, () => {
     const W = 1024, H = 128;
@@ -238,7 +238,7 @@ export function wallTexture(style) {
       }
       g.fillStyle = '#2d6fc4';
       g.fillRect(0, 0, W, 18);
-      // 蓝色栏杆格
+      // Blue railing grid
       g.strokeStyle = '#3a82d6';
       g.lineWidth = 5;
       for (let x = 0; x < W; x += 64) {
@@ -265,7 +265,7 @@ export function wallTexture(style) {
       g.fillRect(0, 0, W, 20);
       g.fillStyle = '#e8c547';
       g.fillRect(0, 20, W, 4);
-      // 象形符号
+      // Hieroglyphs
       g.fillStyle = 'rgba(80,45,20,0.55)';
       for (let x = 30; x < W; x += 120) {
         g.beginPath();
@@ -350,7 +350,7 @@ export function groundTexture(type) {
   });
 }
 
-// 建筑立面：窗户网格
+// Building facades: window grid
 export function facadeTexture(kind) {
   return cached('facade-' + kind, () => {
     const W = 256, H = 512;
@@ -420,6 +420,38 @@ export function facadeTexture(kind) {
           g.strokeStyle = 'rgba(120,80,40,0.4)';
           g.strokeRect(x + (((y / 32) & 1) * 32), y, 64, 32);
         }
+    } else if (kind === 'night') {
+      // dark tower with a scatter of lit windows; used as its own emissive map so the windows glow at night
+      g.fillStyle = '#10131f';
+      g.fillRect(0, 0, W, H);
+      // whole floors tend to be lit or dark together, mostly in warm office light
+      for (let y = 10; y < H; y += 32) {
+        const floorLit = rnd() < 0.45 ? 0.75 : 0.12;
+        const tint = rnd() < 0.8 ? '#ffd48a' : '#8fe3ff';
+        for (let x = 10; x < W; x += 30) {
+          g.fillStyle = rnd() < floorLit ? tint : '#1b2233';
+          g.fillRect(x, y, 20, 18);
+        }
+      }
+      for (let y = 0; y < H; y += 176) {
+        g.fillStyle = rnd() > 0.5 ? '#ff2d95' : '#27c7ff';
+        g.fillRect(0, y, W, 3);
+      }
+    } else if (kind === 'gold') {
+      const grd = g.createLinearGradient(0, 0, W, H);
+      grd.addColorStop(0, '#f6d7a0');
+      grd.addColorStop(0.5, '#c98f4a');
+      grd.addColorStop(1, '#7a4f2a');
+      g.fillStyle = grd;
+      g.fillRect(0, 0, W, H);
+      for (let y = 0; y < H; y += 20) {
+        g.fillStyle = 'rgba(255,240,210,0.3)';
+        g.fillRect(0, y, W, 2);
+      }
+      for (let x = 0; x < W; x += 26) {
+        g.fillStyle = 'rgba(60,35,15,0.45)';
+        g.fillRect(x, 0, 2, H);
+      }
     } else if (kind === 'lodge') {
       g.fillStyle = '#7a4a2a';
       g.fillRect(0, 0, W, H);
@@ -459,10 +491,10 @@ export function billboardTexture(title, sub, c1 = '#ff7a00', c2 = '#ffd000', fg 
     g.font = 'italic 900 92px "Arial Black", Arial, sans-serif';
     g.shadowColor = 'rgba(0,0,0,0.35)';
     g.shadowBlur = 8;
-    g.fillText(title, 256, sub ? 108 : 128);
+    g.fillText(title, 256, sub ? 108 : 128, 472);
     if (sub) {
       g.font = 'bold 40px "PingFang SC","Microsoft YaHei",sans-serif';
-      g.fillText(sub, 256, 196);
+      g.fillText(sub, 256, 196, 472);
     }
     const t = toTex(c, { repeat: false });
     return t;
@@ -491,7 +523,7 @@ export function chevronTexture(bg = '#ffd000', fg = '#1a1a1a') {
   });
 }
 
-// 加速带：蓝色霓虹箭头（11城原画中的蓝色箭头）
+// Boost pads: blue neon arrows (the blue arrows from the City 11 concept art)
 export function boostPadTexture(color = '#27c7ff') {
   return cached('boost' + color, () => {
     const [c, g] = mk(256, 512);
@@ -567,10 +599,10 @@ export function textTexture(text, { w = 512, h = 128, bg = null, fg = '#fff', fo
     if (stroke) {
       g.strokeStyle = stroke;
       g.lineWidth = 10;
-      g.strokeText(text, w / 2, h / 2);
+      g.strokeText(text, w / 2, h / 2, w - 24);
     }
     g.fillStyle = fg;
-    g.fillText(text, w / 2, h / 2);
+    g.fillText(text, w / 2, h / 2, w - 24);
     return toTex(c, { repeat: false });
   });
 }

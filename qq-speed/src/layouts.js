@@ -1,5 +1,5 @@
-// 赛道中心线控制点 [x, z, y]（单位：米），闭合 Catmull-Rom 曲线
-// 布局按 QQ飞车对应地图的风格与节奏设计：起步直道、连续弯、发卡弯、桥梁、隧道、跳台
+// Track centerline control points [x, z, y] (meters), closed Catmull-Rom curve
+// Layouts follow the style and rhythm of the matching QQ Speed maps: start straight, S-bends, hairpins, bridges, tunnels, jumps
 export const LAYOUTS = {
   city: {
     width: 26,
@@ -13,7 +13,7 @@ export const LAYOUTS = {
       [-262, -60, 4], [-300, -95, 1], [-370, -110, 0], [-400, -160, 0],
       [-370, -190, 0],
     ],
-    // 各类路段（按控制点区间外延，占整圈比例 0~1 在构建时计算）
+    // Special segments (extended from control-point ranges; their 0–1 fraction of the lap is computed at build time)
   },
   aegean: {
     width: 24,
@@ -47,6 +47,36 @@ export const LAYOUTS = {
       [165, 140, 0], [80, 70, 0], [0, 0, 0], [-80, -50, 0],
       [-170, -60, 0], [-270, -20, 0], [-340, -60, 0], [-350, -150, 0],
       [-300, -200, 0],
+    ],
+  },
+  // Street circuit: right-angle corners between towers, a chicane and a tight S through the middle
+  neon: {
+    width: 24,
+    points: [
+      [-300, -200, 0], [-100, -200, 0], [100, -200, 0], [230, -195, 0], [290, -150, 0], [300, -60, 0], [300, 40, 0],
+      [280, 110, 0], [220, 140, 0], [120, 140, 0], [60, 170, 0], [40, 240, 0], [60, 320, 0], [0, 380, 0],
+      [-100, 380, 0], [-200, 380, 0], [-280, 340, 0], [-300, 260, 0], [-260, 190, 0], [-180, 160, 0],
+      [-120, 110, 0], [-130, 40, 0], [-200, 0, 0], [-290, -20, 0], [-350, -80, 0], [-350, -160, 0],
+    ],
+  },
+  // Waterfront start, over the channel, up into the hills, back across the channel and down to the harbor
+  bay: {
+    width: 25,
+    points: [
+      [-300, -150, 0], [-160, -155, 1], [-70, -152, 5], [0, -150, 6.5], [70, -150, 5], [160, -145, 1],
+      [260, -120, 2], [330, -40, 5], [350, 60, 10], [320, 150, 14], [250, 210, 16], [160, 240, 13],
+      [80, 250, 9], [0, 250, 7], [-80, 250, 9], [-160, 240, 12], [-250, 280, 15], [-330, 240, 14],
+      [-390, 160, 11], [-420, 70, 8], [-430, -20, 5], [-415, -100, 2], [-370, -148, 0.5],
+    ],
+  },
+  // Long flat-out straights, a jump off the ramp on the north side, and a hairpin back onto the start
+  dune: {
+    width: 26,
+    points: [
+      [-320, -265, 0], [-100, -262, 0], [150, -252, 0], [330, -200, 0], [400, -80, 0], [380, 60, 2],
+      [310, 150, 5], [250, 168, 6.2], [190, 172, 0.4], [40, 180, 0], [-60, 240, 0], [-180, 300, 0],
+      [-300, 260, 0], [-370, 180, 0], [-400, 90, 0], [-360, 20, 0], [-300, -40, 0], [-330, -120, 0],
+      [-400, -170, 0], [-430, -230, 0], [-390, -266, 0],
     ],
   },
 };
