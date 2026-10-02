@@ -23,6 +23,32 @@ export const TUNE = {
   gravity: 30,
 };
 
+// Engine drive (m/s²) below top speed: grip-limited off the line, then power-limited, so it fades as speed builds
+// and the last stretch to top speed takes a while (default car: 0-100 km/h in ~2.7 s, ~9 s to 90% of top speed).
+// Boosts (nitro, mini boost, pads, rocket start) bypass this and keep their hard kick.
+const LAUNCH = 0.45; // launch thrust as a share of T.accel (~1 g for the default car)
+const GRIP_END = 0.4; // share of top speed where the tyres stop being the limit and engine power takes over
+export function engineAccel(T, s, vmax) {
+  const x = Math.max(s, 0.01) / vmax;
+  return Math.max(0, T.accel * LAUNCH * (Math.min(1, GRIP_END / x) - GRIP_END * x * x));
+}
+
+// Six gears spread over the nitro top speed (the same gears the engine sound shifts through).
+// Returns the drive multiplier: power is cut briefly at each upshift. Keeps car.gear and car.shiftT.
+export function gearCut(car, dt) {
+  const g = (Math.max(0, car.s) / car.T.vmaxNitro) * 6;
+  const gear = car.gear ?? 0;
+  if (Math.floor(g) > gear && gear < 5) {
+    car.gear = gear + 1;
+    car.shiftT = 0.14;
+  } else if (g < gear - 0.2) car.gear = Math.floor(g); // downshift with a little hysteresis, no cut
+  if (car.shiftT > 0) {
+    car.shiftT -= dt;
+    return 0.3;
+  }
+  return 1;
+}
+
 export class PlayerCar {
   constructor(track, model, name, tune = {}) {
     this.track = track;
@@ -72,6 +98,8 @@ export class PlayerCar {
     this.pitchVis = 0;
     this.rollVis = 0;
     this.throttle = 0;
+    this.gear = 0;
+    this.shiftT = 0;
     this.track.project(this.x, this.y, this.z, -1, this.proj);
     this.hint = this.proj.i;
     this.d = this.proj.d;
@@ -123,12 +151,12 @@ export class PlayerCar {
     this.steer = damp(this.steer, steerT, inp.analog ? 20 : 12, dt);
 
     // Boost states
-    let vmax = T.vmax, acc = T.accel;
-    if (this.nitroTime > 0) { vmax = T.vmaxNitro; acc = T.nitroAccel; this.nitroTime -= dt; }
-    if (this.smallBoost > 0) { vmax += this.smallBoostPower; acc += 14; this.smallBoost -= dt; }
-    if (this.padTime > 0) { vmax += 12; acc += 20; this.padTime -= dt; }
-    if (this.startBoost > 0) { vmax += 10; acc += 26; this.startBoost -= dt; }
-    if (this.magnet > 0) { vmax += 10; acc += 12; this.magnet -= dt; }
+    let vmax = T.vmax, acc = T.accel, kick = false;
+    if (this.nitroTime > 0) { vmax = T.vmaxNitro; acc = T.nitroAccel; this.nitroTime -= dt; kick = true; }
+    if (this.smallBoost > 0) { vmax += this.smallBoostPower; acc += 14; this.smallBoost -= dt; kick = true; }
+    if (this.padTime > 0) { vmax += 12; acc += 20; this.padTime -= dt; kick = true; }
+    if (this.startBoost > 0) { vmax += 10; acc += 26; this.startBoost -= dt; kick = true; }
+    if (this.magnet > 0) { vmax += 10; acc += 12; this.magnet -= dt; kick = true; }
     vmax = Math.min(vmax, 86);
     if (this.slowTime > 0) { vmax *= 0.55; this.slowTime -= dt; }
     if (this.shield > 0) this.shield -= dt;
@@ -156,6 +184,8 @@ export class PlayerCar {
     // Longitudinal
     this.throttle = inp.down ? -1 : this.cruise ? (inp.throttle ?? (inp.up ? 1 : 0)) : inp.up ? 1 : 0;
     this.braking = !!inp.down && this.s > 1;
+    const cut = gearCut(this, dt);
+    const drive = kick ? acc * (1 - Math.pow(this.s / vmax, 2) * 0.85) : engineAccel(T, this.s, vmax) * cut;
     if (onGround) {
       // the brake wins over the throttle: touch controls keep the throttle on, and keyboard players may hold both
       if (inp.down) {
@@ -164,13 +194,12 @@ export class PlayerCar {
       } else if (this.cruise && this.s >= 0 && active) {
         // F1: the car holds a cruising speed by itself; throttle (0..1) adds speed on top, full throttle = flat out
         const t = inp.throttle ?? (inp.up ? 1 : 0);
-        const boosting = this.nitroTime > 0 || this.smallBoost > 0 || this.padTime > 0 || this.startBoost > 0;
-        const target = boosting ? vmax : this.cruise * vmax + (1 - this.cruise) * vmax * t;
-        if (this.s < target) this.s += acc * (1 - Math.pow(this.s / vmax, 2) * 0.85) * Math.max(0.6, t) * dt;
+        const target = kick ? vmax : this.cruise * vmax + (1 - this.cruise) * vmax * t;
+        if (this.s < target) this.s += drive * Math.max(0.6, t) * dt;
         else this.s -= Math.min(this.s - target, 7 * dt); // lift: engine braking back down to the target
       } else if (inp.up) {
         if (this.s < 0) this.s += T.brake * dt;
-        else if (this.s < vmax) this.s += acc * (1 - Math.pow(this.s / vmax, 2) * 0.85) * dt;
+        else if (this.s < vmax) this.s += drive * dt;
       } else {
         const dec = (T.roll + Math.abs(this.s) * 0.06) * dt;
         this.s = Math.abs(this.s) <= dec ? 0 : this.s - Math.sign(this.s) * dec;
@@ -207,7 +236,8 @@ export class PlayerCar {
       }
       this.driftAngle = a;
       const sa = Math.abs(Math.sin(a));
-      if (onGround) this.s -= (2.5 + 11 * sa) * dt;
+      // scrub matched to engineAccel: a clean drift holds its speed mid-range and bleeds a little near top speed
+      if (onGround) this.s -= (1.2 + 5 * sa) * dt;
       if (!itemMode && onGround) {
         this.gauge += dt * T.gaugeRate * (0.3 + sa * 1.7) * clamp(this.s / 35, 0.3, 1.1);
         while (this.gauge >= 1) {

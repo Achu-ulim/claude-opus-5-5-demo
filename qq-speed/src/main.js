@@ -1273,10 +1273,12 @@ class Game {
   askCelebration() {
     if (this.resultShown || !this.player?.finished) return;
     this.celeb = { phase: 'ask' };
-    $('celebs').innerHTML = this.celebOptions().map((o, i) => `<button class="celeb" data-id="${o.id}" type="button"><span class="ci">${o.icon}</span>${o.name}<small>${IS_TOUCH ? '' : i + 1}</small></button>`).join('');
+    // F1: no pick within 2 s means donuts, the classic F1 win celebration; other races skip to results after 12 s
+    const auto = this.race.f1 ? 'donuts' : null;
+    $('celebs').innerHTML = this.celebOptions().map((o, i) => `<button class="celeb${o.id === auto ? ' auto' : ''}" data-id="${o.id}" type="button"><span class="ci">${o.icon}</span>${o.name}<small>${IS_TOUCH ? '' : i + 1}</small></button>`).join('');
     $('celebrate').classList.remove('hidden');
     clearTimeout(this.celebT);
-    this.celebT = setTimeout(() => { if (this.celeb?.phase === 'ask') this.celebrate(null); }, 12000);
+    this.celebT = setTimeout(() => { if (this.celeb?.phase === 'ask') this.celebrate(auto); }, auto ? 2000 : 12000);
   }
 
   celebrate(kind) {

@@ -440,7 +440,7 @@ function buildBlimp() {
   const stripe = new THREE.Mesh(new THREE.SphereGeometry(6.05, 32, 20, 0, Math.PI * 2, Math.PI * 0.42, Math.PI * 0.16), std(0xffffff));
   stripe.scale.set(1, 1, 3.2);
   g.add(stripe);
-  const tex = TX.textTexture('SPEED', { w: 512, h: 128, fg: '#ffffff', font: 'italic 900 100px "Arial Black", Arial', stroke: '#1d2d7a' });
+  const tex = TX.textTexture('GOODYEAR', { w: 512, h: 128, fg: '#fdd100', font: '900 84px "Arial Black", Arial', stroke: '#0f2b6b' });
   for (const sx of [-1, 1]) {
     const t = new THREE.Mesh(new THREE.PlaneGeometry(18, 4.5), new THREE.MeshBasicMaterial({ map: tex, transparent: true, side: THREE.DoubleSide }));
     t.position.set(sx * 6.1, 0.8, 0);
@@ -717,12 +717,7 @@ function cityProps(ctx) {
   }, 13);
   commonTrackside(ctx, {
     lamps: true,
-    billboards: [
-      TX.billboardTexture('SPEED', 'TOP SPEED', '#ff6a00', '#ffc400'),
-      TX.billboardTexture('N2O', 'NITRO BOOST', '#1565c0', '#27c7ff'),
-      TX.billboardTexture('CITY 11', 'CITY RACE', '#7b3df0', '#ff6fd8'),
-      TX.billboardTexture('DRIFT', 'DRIFT CHARGE', '#e53935', '#ff8a65'),
-    ],
+    billboards: ['samsung', 'redbull', 'shell', 'dhl'].map((id) => TX.brandTexture(id)),
   });
   addGrandstand(parent, batch, track.sample(track.length - 30, {}), -1, 60, hw, groundAt, 0x2e6fd6, track);
   addGrandstand(parent, batch, track.sample(40, {}), -1, 50, hw, groundAt, 0xe53935, track);
@@ -838,7 +833,8 @@ function buildTowerBridge(ctx, d) {
     arch.position.set(0, 11, 0);
     arch.scale.set(1, 0.5, 1);
     tw.add(arch);
-    const sign = new THREE.Mesh(new THREE.PlaneGeometry(12, 2.4), new THREE.MeshStandardMaterial({ map: TX.textTexture('SPEEDQQ.COM', { w: 512, h: 96, bg: '#ff6a00', fg: '#fff', font: 'bold 60px Arial' }), emissive: 0x552200 }));
+    const bannerTex = TX.brandTexture('redbull', 512, 96);
+    const sign = new THREE.Mesh(new THREE.PlaneGeometry(12, 2.4), new THREE.MeshStandardMaterial({ map: bannerTex, emissiveMap: bannerTex, emissive: 0xffffff, emissiveIntensity: 0.3 }));
     sign.position.set(0, 17.5, -3.6);
     sign.rotation.y = Math.PI;
     tw.add(sign);
@@ -1001,7 +997,7 @@ function aegeanProps(ctx) {
   }, 5);
   commonTrackside(ctx, {
     chevrons: true, chevronBg: '#ffd000', chevronFg: '#1a1a1a',
-    billboards: [TX.billboardTexture('AEGEAN', 'AEGEAN ROMANCE', '#1d63c9', '#5ab0ff'), TX.billboardTexture('SPEED', 'TOP SPEED', '#ff8a00', '#ffd54a')],
+    billboards: ['gulf', 'pirelli'].map((id) => TX.brandTexture(id)),
     bbStep: 260,
   });
   // Beach umbrellas
@@ -1185,7 +1181,7 @@ function egyptProps(ctx) {
   }
   commonTrackside(ctx, {
     chevrons: true, chevronBg: '#5b3f9e', chevronFg: '#f3e3b5',
-    billboards: [TX.billboardTexture('PHARAOH', 'PYRAMIDS', '#5b3f9e', '#e8c547'), TX.billboardTexture('SPEED', 'DESERT JUMP', '#e0861f', '#ffd54a')],
+    billboards: ['shell', 'dhl'].map((id) => TX.brandTexture(id)),
     bbStep: 240,
   });
   return buildStartGate(parent, track, { pillar: 0xe0c08a, beam: 0xe0c08a, text: 'START · PHARAOH', bannerBg: '#5b3f9e', band: 0x3a62c9, pylon: true, sunDisk: true, h: 12 });
@@ -1266,7 +1262,7 @@ function snowProps(ctx) {
   }, 9);
   commonTrackside(ctx, {
     lamps: true, lampStep: 60,
-    billboards: [TX.billboardTexture('SPEED', 'SNOW ADVENTURE', '#1e4fb0', '#39c5ff'), TX.billboardTexture('Victory', 'GO FOR IT!', '#c62828', '#ff7a59')],
+    billboards: ['redbull', 'michelin'].map((id) => TX.brandTexture(id)),
     bbStep: 200,
   });
   addGrandstand(parent, batch, track.sample(track.length - 40, {}), 1, 70, hw, groundAt, 0xc62828, track);
@@ -1466,12 +1462,7 @@ function neonProps(ctx) {
   neonArches(ctx, 140, [0xff2d95, 0x27c7ff, 0xb36bff]);
   commonTrackside(ctx, {
     lamps: true, lampStep: 36,
-    billboards: [
-      TX.billboardTexture('NEON', 'NIGHT RACE', '#ff2d95', '#7b3df0'),
-      TX.billboardTexture('TOKYO', 'DRIFT CITY', '#00b8f0', '#1a237e'),
-      TX.billboardTexture('N2O', 'NITRO BOOST', '#3dffb0', '#00796b'),
-      TX.billboardTexture('SPEED', 'AFTER DARK', '#ffd23a', '#ff2d95'),
-    ],
+    billboards: ['sony', 'monster', 'panasonic', 'bridgestone'].map((id) => TX.brandTexture(id)),
     bbStep: 120,
     chevrons: true, chevronBg: '#ff2d95', chevronFg: '#ffffff',
   });
@@ -1556,11 +1547,7 @@ function bayProps(ctx) {
   buildSuspensionBridge(ctx, track.dAt(0, 250), 0xc0362c);
   commonTrackside(ctx, {
     lamps: true,
-    billboards: [
-      TX.billboardTexture('BAY', 'HARBOR RACE', '#c0362c', '#ff8a65'),
-      TX.billboardTexture('SPEED', 'TOP SPEED', '#1565c0', '#27c7ff'),
-      TX.billboardTexture('N2O', 'HILL CLIMB', '#2e7d32', '#9ccc65'),
-    ],
+    billboards: ['gulf', 'mobil1', 'castrol'].map((id) => TX.brandTexture(id)),
     chevrons: true, chevronBg: '#ffd000', chevronFg: '#1a1a1a',
   });
   addGrandstand(parent, batch, track.sample(track.length - 30, {}), -1, 50, hw, groundAt, 0xc0362c, track);
@@ -1629,11 +1616,7 @@ function duneProps(ctx) {
   }
   commonTrackside(ctx, {
     lamps: true, lampStep: 60,
-    billboards: [
-      TX.billboardTexture('DUNE', 'METROPOLIS', '#e0861f', '#ffd54a'),
-      TX.billboardTexture('SPEED', 'SUNSET SPRINT', '#8e24aa', '#ff7043'),
-      TX.billboardTexture('N2O', 'NITRO BOOST', '#1565c0', '#27c7ff'),
-    ],
+    billboards: ['emirates', 'rolex', 'petronas'].map((id) => TX.brandTexture(id)),
     chevrons: true, chevronBg: '#e0861f', chevronFg: '#ffffff',
   });
   addGrandstand(parent, batch, track.sample(track.length - 30, {}), -1, 60, hw, groundAt, 0xe0861f, track);
@@ -1711,9 +1694,7 @@ function gpProps(ctx) {
     lamps: !!P.night, lampStep: 34,
     billboards: [
       TX.billboardTexture(title, 'GRAND PRIX', '#15151e', '#e10600'),
-      TX.billboardTexture('F1', 'WORLD CHAMPIONSHIP', '#e10600', '#ff5a3a'),
-      TX.billboardTexture('DRS', 'ZONE', '#1e2a4a', '#27c7ff'),
-      TX.billboardTexture('PIT', 'LANE', '#111111', '#555555'),
+      ...['pirelli', 'rolex', 'dhl', 'shell'].map((id) => TX.brandTexture(id)),
     ],
     bbStep: 150,
     chevrons: true, chevronBg: '#e10600', chevronFg: '#ffffff',

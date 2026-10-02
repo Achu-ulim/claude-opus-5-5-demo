@@ -1,5 +1,5 @@
 import { clamp, damp, wrapAngle } from './util.js';
-import { updateFlames, brakeLights, TUNE } from './vehicle.js';
+import { updateFlames, brakeLights, TUNE, engineAccel, gearCut } from './vehicle.js';
 
 export class AICar {
   constructor(track, model, name, skill, rnd, tune = {}) {
@@ -22,6 +22,8 @@ export class AICar {
     this.lat = lat;
     this.latV = 0;
     this.s = 0;
+    this.gear = 0;
+    this.shiftT = 0;
     this.nitroTime = 0;
     this.nitroCd = 6 + this.rnd() * 6;
     this.yawOff = 0;
@@ -69,8 +71,14 @@ export class AICar {
     if (this.spin > 0) { this.spin -= dt; vt = 5; spinning = true; }
     if (!active || raceTime < this.startDelay) vt = 0;
     const before = this.s;
-    if (this.s < vt) this.s += (this.nitroTime > 0 ? 34 * (T.nitroAccel / TUNE.nitroAccel) : (20 + 4 * this.skill) * (T.accel / TUNE.accel)) * (1 - Math.pow(this.s / Math.max(vt, 1), 2) * 0.7) * dt;
-    else this.s -= Math.min(this.s - vt, (spinning ? 50 : 30) * dt);
+    // same engine curve and gear changes as the player; nitro keeps its hard kick
+    const cut = gearCut(this, dt);
+    if (this.s < vt) {
+      const drive = this.nitroTime > 0
+        ? 34 * (T.nitroAccel / TUNE.nitroAccel) * (1 - Math.pow(this.s / Math.max(vt, 1), 2) * 0.7)
+        : engineAccel(T, this.s, vmaxBase) * cut * (0.92 + 0.08 * this.skill);
+      this.s = Math.min(vt, this.s + drive * dt);
+    } else this.s -= Math.min(this.s - vt, (spinning ? 50 : 30) * dt);
     this.s = Math.max(0, this.s);
     // slowing faster than lifting off would: that's the brakes
     this.braking = before - this.s > 8 * dt;

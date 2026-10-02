@@ -5,13 +5,13 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover" />
 <meta name="apple-mobile-web-app-capable" content="yes" />
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-<meta name="apple-mobile-web-app-title" content="Speed 3D" />
+<meta name="apple-mobile-web-app-title" content="Driftbolt" />
 <meta name="theme-color" content="#0a1430" />
 <link rel="manifest" href="manifest.webmanifest" />
 <link rel="icon" type="image/png" href="icons/favicon-64.png" />
 <link rel="apple-touch-icon" href="icons/apple-touch-icon.png" />
 <meta name="mobile-web-app-capable" content="yes" />
-<title>Speed 3D · A QQ Speed Fan Remake</title>
+<title>Driftbolt · 3D Arcade Racing</title>
 <meta name="description" content="3D racing in the browser: recreates QQ Speed's City 11, Aegean Romance, Pharaoh's Pyramid and Snow Adventure, with drift charging, mini boosts, double boosts, nitro and item races." />
 <style>
 :root{
@@ -132,6 +132,9 @@ body.touch #cambtn,body.sim #cambtn{display:flex}
 .celeb:hover{transform:translateY(-2px);border-color:#ffd23a}
 .celeb .ci{font-size:28px}
 .celeb small{font-size:10px;color:var(--muted);font-weight:400}
+.celeb.auto{position:relative;overflow:hidden;border-color:#ffd23a}
+.celeb.auto::after{content:"";position:absolute;left:0;bottom:0;width:100%;height:3px;background:#ffd23a;transform-origin:left;animation:celebAuto 2s linear}
+@keyframes celebAuto{from{transform:scaleX(0)}to{transform:scaleX(1)}}
 #celebSkip{margin-top:10px;cursor:pointer;background:none;border:none;color:var(--muted);font:600 12px var(--ui);text-decoration:underline}
 #pausebtn:hover{border-color:#ffd23a}
 /* touch HUD: charge bar moves to the top, out from under the thumbs */
@@ -231,6 +234,7 @@ body.touch .touchcard{display:block}
 .logo{font-family:var(--num);font-style:italic;font-size:64px;line-height:1;letter-spacing:4px;
   background:linear-gradient(180deg,#fff 10%,#ffe36b 45%,#ff8a00 80%);-webkit-background-clip:text;background-clip:text;color:transparent;
   filter:drop-shadow(0 4px 0 #0b3fb0) drop-shadow(0 0 18px rgba(39,199,255,.6));transform:skewX(-8deg)}
+.logo .mark{height:1.1em;width:auto;vertical-align:-.2em;margin-right:.06em}
 .sub{margin:4px 0 12px;font-size:14px;color:#cfe3ff;letter-spacing:3px}
 .menu-grid{width:min(1100px,100%);display:grid;grid-template-columns:1.35fr 1fr;gap:16px}
 .card{padding:12px 16px}
@@ -487,7 +491,7 @@ table.res td.pos{font-family:var(--num);font-style:italic;color:var(--yellow);fo
   </div>
 </div>
 
-<div id="clinks"><a href="https://github.com/riba2534/claude-opus-5-5-demo" target="_blank" rel="noopener noreferrer" title="GitHub source" aria-label="GitHub source"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 .297c-6.63 0-12 5.373-12 12 0 5.303 3.438 9.8 8.205 11.385.6.113.82-.258.82-.577 0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61C4.422 18.07 3.633 17.7 3.633 17.7c-1.087-.744.084-.729.084-.729 1.205.084 1.838 1.236 1.838 1.236 1.07 1.835 2.809 1.305 3.495.998.108-.776.417-1.305.76-1.605-2.665-.3-5.466-1.332-5.466-5.93 0-1.31.465-2.38 1.235-3.22-.135-.303-.54-1.523.105-3.176 0 0 1.005-.322 3.3 1.23.96-.267 1.98-.399 3-.405 1.02.006 2.04.138 3 .405 2.28-1.552 3.285-1.23 3.285-1.23.645 1.653.24 2.873.12 3.176.765.84 1.23 1.91 1.23 3.22 0 4.61-2.805 5.625-5.475 5.92.42.36.81 1.096.81 2.22 0 1.606-.015 2.896-.015 3.286 0 .315.21.69.825.57C20.565 22.092 24 17.592 24 12.297c0-6.627-5.373-12-12-12"/></svg></a><a href="https://x.com/riba2534" target="_blank" rel="noopener noreferrer" title="X @riba2534" aria-label="X @riba2534"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18.901 1.153h3.68l-8.04 9.19L24 22.846h-7.406l-5.8-7.584-6.638 7.584H.474l8.6-9.83L0 1.154h7.594l5.243 6.932ZM17.61 20.644h2.039L6.486 3.24H4.298Z"/></svg></a></div>
+<div id="clinks"><a href="https://x.com/agbama_achu" target="_blank" rel="noopener noreferrer" title="X @agbama_achu" aria-label="X @agbama_achu"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18.901 1.153h3.68l-8.04 9.19L24 22.846h-7.406l-5.8-7.584-6.638 7.584H.474l8.6-9.83L0 1.154h7.594l5.243 6.932ZM17.61 20.644h2.039L6.486 3.24H4.298Z"/></svg></a></div>
 
 <div id="touch" class="hidden">
   <div id="t-swipe"><i></i><span>◀ drag to steer ▶</span></div>
@@ -499,8 +503,8 @@ table.res td.pos{font-family:var(--num);font-style:italic;color:var(--yellow);fo
 </div>
 
 <div id="menu" class="screen">
-  <div class="logo">SPEED 3D</div>
-  <div class="sub">QQ Speed Fan Remake · Drift · Charge · Mini Boost · Double Boost · Nitro</div>
+  <div class="logo"><svg class="mark" viewBox="140 50 236 420" aria-hidden="true"><defs><linearGradient id="logoBolt" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff6b0"/><stop offset=".35" stop-color="#ffd23a"/><stop offset="1" stop-color="#ff7a00"/></linearGradient></defs><path d="M318 64 156 290h94l-50 162 162-240h-94z" fill="url(#logoBolt)" stroke="#fff" stroke-width="12" stroke-linejoin="round"/></svg>DRIFTBOLT</div>
+  <div class="sub">3D Arcade Racing · Drift · Charge · Mini Boost · Double Boost · Nitro</div>
   <div class="driver glass"><label for="pname">Driver</label><input id="pname" maxlength="16" autocomplete="off" spellcheck="false"><button id="pdice" title="Random name" aria-label="Random name">🎲</button></div>
   <div class="menu-grid">
     <div class="glass card">
@@ -541,7 +545,7 @@ table.res td.pos{font-family:var(--num);font-style:italic;color:var(--yellow);fo
     <button class="go f1" id="f1btn">🏁 Formula 1</button>
     <button class="go sec" id="boardbtn">Leaderboard</button>
   </div>
-  <div class="mlinks"><button id="installbtn" class="hidden" type="button">📲 Install app</button><span id="iosinstall" class="hidden">📲 Install: tap Share, then “Add to Home Screen”</span><a href="https://github.com/riba2534/claude-opus-5-5-demo" target="_blank" rel="noopener noreferrer"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 .297c-6.63 0-12 5.373-12 12 0 5.303 3.438 9.8 8.205 11.385.6.113.82-.258.82-.577 0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61C4.422 18.07 3.633 17.7 3.633 17.7c-1.087-.744.084-.729.084-.729 1.205.084 1.838 1.236 1.838 1.236 1.07 1.835 2.809 1.305 3.495.998.108-.776.417-1.305.76-1.605-2.665-.3-5.466-1.332-5.466-5.93 0-1.31.465-2.38 1.235-3.22-.135-.303-.54-1.523.105-3.176 0 0 1.005-.322 3.3 1.23.96-.267 1.98-.399 3-.405 1.02.006 2.04.138 3 .405 2.28-1.552 3.285-1.23 3.285-1.23.645 1.653.24 2.873.12 3.176.765.84 1.23 1.91 1.23 3.22 0 4.61-2.805 5.625-5.475 5.92.42.36.81 1.096.81 2.22 0 1.606-.015 2.896-.015 3.286 0 .315.21.69.825.57C20.565 22.092 24 17.592 24 12.297c0-6.627-5.373-12-12-12"/></svg>GitHub repository</a><a href="https://x.com/riba2534" target="_blank" rel="noopener noreferrer"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18.901 1.153h3.68l-8.04 9.19L24 22.846h-7.406l-5.8-7.584-6.638 7.584H.474l8.6-9.83L0 1.154h7.594l5.243 6.932ZM17.61 20.644h2.039L6.486 3.24H4.298Z"/></svg>Follow the author on X</a></div>
+  <div class="mlinks"><button id="installbtn" class="hidden" type="button">📲 Install app</button><span id="iosinstall" class="hidden">📲 Install: tap Share, then “Add to Home Screen”</span><a href="https://x.com/agbama_achu" target="_blank" rel="noopener noreferrer"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18.901 1.153h3.68l-8.04 9.19L24 22.846h-7.406l-5.8-7.584-6.638 7.584H.474l8.6-9.83L0 1.154h7.594l5.243 6.932ZM17.61 20.644h2.039L6.486 3.24H4.298Z"/></svg>Follow the author on X</a></div>
   <div class="foot">Unofficial fan project and a tribute to QQ Speed. All models, textures and music are generated procedurally in real time.</div>
 </div>
 

@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { softDotTexture, textTexture } from './textures.js';
+import { engineAccel } from './vehicle.js';
 
 // ---------- Car catalog ----------
 // shape: side profile in (x = along the car, + is the nose; y = up), extruded across `width`.
@@ -209,7 +210,7 @@ function rawSpecs(car) {
   const t = { ...BASE, ...car.tune };
   // 0-100 km/h using the same acceleration curve as PlayerCar
   let s = 0, time = 0;
-  while (s < 100 / 3.6 && time < 20) { s += t.accel * (1 - Math.pow(s / t.vmax, 2) * 0.85) * 0.01; time += 0.01; }
+  while (s < 100 / 3.6 && time < 20) { s += engineAccel(t, s, t.vmax) * 0.01; time += 0.01; }
   return {
     speed: t.vmax,
     accel: 1 / time,
