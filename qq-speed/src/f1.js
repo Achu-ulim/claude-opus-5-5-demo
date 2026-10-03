@@ -97,7 +97,8 @@ export const GPS = [
     sketch: [[0, 0], [40, 0], [52, 6], [54, 18], [46, 28], [40, 40], [48, 50], [62, 52], [74, 46], [80, 34], [92, 30], [100, 40], [96, 56], [84, 66], [60, 70], [30, 70], [10, 64], [-2, 54], [-6, 40], [-2, 28], [-8, 16], [-8, 6]] },
   { id: 'canada', name: 'Canadian GP', circuit: 'Circuit Gilles Villeneuve, Montréal', flag: '🇨🇦', theme: 'park', len: 2700, lake: true,
     sketch: [[60, -10], [80, -14], [100, -10], [116, -16], [128, -12], [133, -4], [127, 3], [112, 5], [96, 10], [70, 8], [50, 12], [30, 10], [12, 12], [0, 8], [-4, -2], [6, -10], [20, -8], [40, -14]] },
-  { id: 'monaco', name: 'Monaco GP', circuit: 'Circuit de Monaco', flag: '🇲🇨', theme: 'coast', len: 2000, hills: 6, dense: true,
+  // tunnel: sketch points it runs between (Monaco's, from Portier to the harbour chicane)
+  { id: 'monaco', name: 'Monaco GP', circuit: 'Circuit de Monaco', flag: '🇲🇨', theme: 'coast', len: 2000, hills: 6, dense: true, tunnel: [9, 11],
     sketch: [[0, 0, 0], [20, 0, 1], [26, 6, 3], [30, 16, 6], [38, 22, 8], [46, 20, 8], [50, 12, 6], [56, 8, 5], [62, 14, 4], [60, 24, 3], [54, 30, 2], [46, 36, 1], [34, 40, 0], [22, 38, 0], [14, 44, 0], [6, 40, 0], [4, 30, 0], [-4, 24, 0], [-10, 16, 0], [-8, 6, 0]] },
   { id: 'barcelona', name: 'Barcelona GP', circuit: 'Circuit de Barcelona-Catalunya', flag: '🇪🇸', theme: 'dry', len: 2600, hills: 5,
     sketch: [[0, 0], [70, 0], [80, -6], [78, -16], [86, -22], [96, -30], [92, -42], [80, -46], [68, -40], [56, -46], [44, -40], [36, -30], [24, -28], [12, -34], [2, -30], [-6, -20], [-6, -8]] },
@@ -149,13 +150,14 @@ export function circuitPoints(gp) {
 // Map configs in the same shape as maps.js, so the rest of the game can load a Grand Prix like any other track
 export const F1_MAPS = GPS.map((gp) => {
   const th = THEMES[gp.theme];
+  const points = circuitPoints(gp);
   return {
     id: 'f1-' + gp.id,
     name: gp.name,
     tag: gp.circuit,
     f1: gp,
     theme: th,
-    layoutData: { width: 24, points: circuitPoints(gp) },
+    layoutData: { width: 24, points },
     sky: th.sky, hemi: th.hemi, fog: th.fog, ground: th.ground, groundTint: '#ffffff',
     water: th.water || (gp.lake ? { color: '#2a7fc0', deep: '#0b3f7a', y: -1.6 } : undefined),
     mountains: th.mountains,
@@ -163,6 +165,8 @@ export const F1_MAPS = GPS.map((gp) => {
       road: 'asphalt', wall: 'city', curbA: '#e10600', curbB: '#ffffff', deckColor: 0x9aa0aa,
       checkerA: '#101010', checkerB: '#ffffff', boostColor: '#27c7ff',
       boostPads: [],
+      tunnels: gp.tunnel && [{ from: points[gp.tunnel[0]], to: points[gp.tunnel[1]] }],
+      tunnelOuter: 0xd8d0c0,
       shoulder: { width: 10, tex: 'plaza' },
     },
     // only Suzuka's crossover is a real bridge; elsewhere the ground follows the track up and down

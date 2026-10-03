@@ -77,6 +77,8 @@ export class RaceSim {
     for (const r of g.racers) {
       if (!r.car) continue;
       if (r.pit) { this.drive(r, dt); continue; }
+      const celeb = g.celeb;
+      if (r.isPlayer && celeb?.phase === 'go' && (celeb.kind === 'burnout' || celeb.kind === 'donuts')) this.celebWear(r, dt);
       if (r.finished || r.retired) continue;
       const c = r.car;
       const ds = Math.abs(r.s) * dt;
@@ -104,6 +106,14 @@ export class RaceSim {
       r.lastU = u;
     }
     this.crew.update(dt, g.time);
+  }
+
+  // A burnout or donuts after the flag: fuel burns at the flat-out rate and the spinning tyres wear far faster than racing
+  celebWear(r, dt) {
+    const c = r.car;
+    const lapsPerSec = r.T.vmax / this.L;
+    c.fuel = Math.max(0, c.fuel - (lapsPerSec / FUEL_LAPS) * dt);
+    c.tyre = Math.min(1, c.tyre + (lapsPerSec / TYRE_LAPS) * 6 * dt);
   }
 
   // Rivals are not perfect either: in corners they lock up or run wide into the wall. The odds go up with

@@ -1,6 +1,16 @@
 // All sound effects and background music are synthesized live with WebAudio; no external assets
 const NOTE = (n) => 440 * Math.pow(2, (n - 69) / 12);
 
+// Simulated gear shifts: RPM cycles between 0.35 and 1 in each of six gears (speedRatio = speed / nitro top speed)
+function engineRpm(speedRatio) {
+  const gears = 6;
+  const g = Math.min(gears - 1, Math.floor(speedRatio * gears * 0.999));
+  const inGear = speedRatio * gears - g;
+  return 0.3 + inGear * 0.7 * (0.75 + g * 0.05);
+}
+
+const TRAFFIC_VOICES = 4; // rivals heard at once (the nearest ones)
+
 const SONGS = [
   { name: 'Speed City', bpm: 128, root: 57, prog: [[0, 3, 7], [-4, 0, 3], [3, 7, 10], [-2, 2, 5]], lead: [0, 7, 12, 7, 10, 7, 3, 7], bassPat: [1, 0, 1, 1, 0, 1, 1, 0], style: 0 },
   { name: 'Aegean Breeze', bpm: 118, root: 62, prog: [[0, 4, 7], [-3, 0, 4], [5, 9, 12], [7, 11, 14]], lead: [12, 11, 7, 4, 7, 11, 12, 14], bassPat: [1, 0, 0, 1, 1, 0, 1, 0], style: 1 },
@@ -115,17 +125,38 @@ export class GameAudio {
     this.crowdSrc.connect(clp).connect(chp).connect(swell).connect(this.crowdGain).connect(this.sfx);
     this.crowdSrc.start();
 
+    // Rivals' engines: the same synth as the player's, each voice with its own panner
+    this.traffic = [];
+    for (let i = 0; i < TRAFFIC_VOICES; i++) {
+      const o1 = ctx.createOscillator();
+      o1.type = 'sawtooth';
+      const o2 = ctx.createOscillator();
+      o2.type = 'square';
+      const g2 = ctx.createGain();
+      g2.gain.value = 0.35;
+      const f = ctx.createBiquadFilter();
+      f.type = 'lowpass';
+      f.Q.value = 3;
+      const g = ctx.createGain();
+      g.gain.value = 0;
+      o1.connect(f);
+      o2.connect(g2).connect(f);
+      f.connect(g);
+      const pan = ctx.createStereoPanner ? ctx.createStereoPanner() : null;
+      if (pan) g.connect(pan).connect(this.sfx);
+      else g.connect(this.sfx);
+      o1.start();
+      o2.start();
+      this.traffic.push({ o1, o2, f, g, pan, key: null });
+    }
+
     this.schedTimer = setInterval(() => this.schedule(), 25);
   }
 
   setEngine(speedRatio, throttle, boosting, drifting, active) {
     if (!this.ctx) return;
     const t = this.ctx.currentTime;
-    // Simulated gear shifts: RPM cycles between 0.35 and 1 in each gear
-    const gears = 6;
-    const g = Math.min(gears - 1, Math.floor(speedRatio * gears * 0.999));
-    const inGear = speedRatio * gears - g;
-    const rpm = 0.3 + inGear * 0.7 * (0.75 + g * 0.05);
+    const rpm = engineRpm(speedRatio);
     const base = 55 + rpm * 130 + (boosting ? 35 : 0);
     this.eng1.frequency.setTargetAtTime(base, t, 0.05);
     this.eng2.frequency.setTargetAtTime(base * 0.5, t, 0.05);
@@ -136,7 +167,67 @@ export class GameAudio {
     this.windGain.gain.setTargetAtTime(active ? speedRatio * 0.05 + (boosting ? 0.18 : 0) : 0, t, 0.15);
   }
 
-  silence() { this.setEngine(0, 0, false, false, false); }
+  silence() {
+    this.setEngine(0, 0, false, false, false);
+    this.setTraffic([]);
+  }
+
+  // Rivals near the camera, nearest first: [{ key, ratio, throttle, boost, dist, pan, doppler, tone }].
+  // Each keeps its voice while it stays in range so the pitch glides; the level falls off with distance,
+  // distant engines lose their top end, and doppler (approach / recede pitch factor) makes a pass go "neeeow".
+  setTraffic(list) {
+    if (!this.ctx) return;
+    const t = this.ctx.currentTime;
+    for (const v of this.traffic) if (v.key && !list.some((c) => c.key === v.key)) v.key = null;
+    for (const c of list) {
+      let v = this.traffic.find((x) => x.key === c.key);
+      const fresh = !v;
+      if (fresh) {
+        v = this.traffic.find((x) => !x.key);
+        if (!v) continue;
+        v.key = c.key;
+      }
+      const rpm = engineRpm(c.ratio);
+      const base = (55 + rpm * 130 + (c.boost ? 35 : 0)) * c.tone * c.doppler;
+      const near = 6 / Math.max(c.dist, 6); // 1 within 6 m, then inverse-distance
+      if (fresh) {
+        v.o1.frequency.setValueAtTime(base, t);
+        v.o2.frequency.setValueAtTime(base * 0.5, t);
+      } else {
+        v.o1.frequency.setTargetAtTime(base, t, 0.05);
+        v.o2.frequency.setTargetAtTime(base * 0.5, t, 0.05);
+      }
+      v.f.frequency.setTargetAtTime((500 + rpm * 1600 + (c.throttle > 0 ? 400 : 0)) * (0.35 + 0.65 * Math.sqrt(near)), t, 0.08);
+      v.g.gain.setTargetAtTime(this.sfxOn === false ? 0 : 0.11 * near * (0.65 + 0.35 * c.throttle), t, 0.06);
+      if (v.pan) v.pan.pan.setTargetAtTime(c.pan, t, 0.05);
+    }
+    for (const v of this.traffic) if (!v.key) v.g.gain.setTargetAtTime(0, t, 0.15);
+  }
+
+  // A car going by close: a short rush of air, panned to its side (-1 left .. 1 right)
+  whoosh(pan, k = 1) {
+    if (!this.ctx || this.sfxOn === false) return;
+    const ctx = this.ctx, t = ctx.currentTime;
+    const src = ctx.createBufferSource();
+    src.buffer = this.noise;
+    const f = ctx.createBiquadFilter();
+    f.type = 'bandpass';
+    f.Q.value = 0.9;
+    f.frequency.setValueAtTime(1500, t);
+    f.frequency.exponentialRampToValueAtTime(420, t + 0.5);
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(0.24 * k, t + 0.07);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.55);
+    src.connect(f).connect(g);
+    if (ctx.createStereoPanner) {
+      const p = ctx.createStereoPanner();
+      p.pan.value = pan;
+      g.connect(p).connect(this.sfx);
+    } else g.connect(this.sfx);
+    src.start(t, Math.random());
+    src.stop(t + 0.6);
+  }
 
   // ---------- Sound effects ----------
   tone(freq, dur, type = 'sine', vol = 0.3, slide = 0, delay = 0) {
@@ -262,6 +353,69 @@ export class GameAudio {
     src.connect(hp).connect(g).connect(this.sfx);
     src.start(at, Math.random());
     src.stop(at + 0.08);
+  }
+
+  // A short, stately brass anthem for the podium (an original tune, not any country's). Returns its length in seconds.
+  anthem() {
+    if (!this.ctx || this.sfxOn === false) return 0;
+    const ctx = this.ctx, t0 = ctx.currentTime + 0.1, beat = 0.36;
+    const brass = (at, midi, dur, vol) => {
+      const f = NOTE(midi);
+      const lp = ctx.createBiquadFilter();
+      lp.type = 'lowpass';
+      lp.frequency.setValueAtTime(500, at);
+      lp.frequency.linearRampToValueAtTime(2600, at + 0.06);
+      lp.frequency.exponentialRampToValueAtTime(1100, at + dur);
+      const g = ctx.createGain();
+      g.gain.setValueAtTime(0.0001, at);
+      g.gain.exponentialRampToValueAtTime(vol, at + 0.05);
+      g.gain.setValueAtTime(vol * 0.8, at + dur * 0.7);
+      g.gain.exponentialRampToValueAtTime(0.0001, at + dur + 0.12);
+      lp.connect(g).connect(this.sfx);
+      for (const det of [-7, 6]) {
+        const o = ctx.createOscillator();
+        o.type = 'sawtooth';
+        o.frequency.value = f;
+        o.detune.value = det;
+        o.connect(lp);
+        o.start(at);
+        o.stop(at + dur + 0.2);
+      }
+    };
+    const play = (line, vol) => {
+      let t = t0;
+      for (const [n, b] of line) {
+        if (n) brass(t, n, b * beat * 0.95, vol);
+        t += b * beat;
+      }
+      return t - t0;
+    };
+    const len = play([[67, 1], [67, 1], [72, 1.5], [71, 0.5], [69, 1], [67, 1], [72, 2], [74, 1], [76, 1.5], [74, 0.5], [72, 1], [71, 1], [72, 3]], 0.11);
+    play([[52, 2], [53, 2], [52, 2], [55, 2], [57, 2], [53, 2], [55, 2], [48, 1]], 0.07); // harmony
+    play([[36, 2], [41, 2], [36, 2], [43, 2], [45, 2], [41, 2], [43, 2], [36, 1]], 0.1); // bass
+    return len;
+  }
+
+  // champagne: the cork pops, then the fizz hisses for a while
+  champagne(dur = 4) {
+    if (!this.ctx || this.sfxOn === false) return;
+    this.tone(520, 0.07, 'square', 0.16, 0.4);
+    this.noiseBurst(0.09, 2200, 1.2, 0.5);
+    const ctx = this.ctx, t = ctx.currentTime;
+    const src = ctx.createBufferSource();
+    src.buffer = this.noise;
+    src.loop = true;
+    const f = ctx.createBiquadFilter();
+    f.type = 'highpass';
+    f.frequency.value = 3800;
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(0.09, t + 0.15);
+    g.gain.setValueAtTime(0.09, t + dur - 0.6);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    src.connect(f).connect(g).connect(this.sfx);
+    src.start(t);
+    src.stop(t + dur + 0.05);
   }
 
   airHorn() {

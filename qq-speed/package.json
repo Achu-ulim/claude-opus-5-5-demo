@@ -5,8 +5,11 @@
   "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
+    "build": "node build.mjs",
     "deploy": "wrangler deploy",
-    "preview": "wrangler dev"
+    "preview": "wrangler dev",
+    "mp:dev": "wrangler dev -c server/wrangler.jsonc --port 8787",
+    "mp:deploy": "wrangler deploy -c server/wrangler.jsonc"
   },
   "keywords": [],
   "author": "",

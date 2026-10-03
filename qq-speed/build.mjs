@@ -11,6 +11,8 @@ const res = await esbuild.build({
   write: false,
   legalComments: 'none',
   logLevel: 'warning',
+  // online play server (wss://…); unset, local builds use `npm run mp:dev` on port 8787 and others have no online play
+  define: { __MP_URL__: JSON.stringify(process.env.MP_URL || '') },
 });
 const js = res.outputFiles[0].text.replace(/<\/script/gi, '<\\/script');
 const html = fs.readFileSync('src/index.html', 'utf8').replace('<!--APP_SCRIPT-->', () => `<script>${js}</script>`);

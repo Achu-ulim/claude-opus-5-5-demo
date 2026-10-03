@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { softDotTexture, textTexture } from './textures.js';
-import { engineAccel } from './vehicle.js';
+import { engineAccel, gearCut } from './vehicle.js';
 
 // ---------- Car catalog ----------
 // shape: side profile in (x = along the car, + is the nose; y = up), extruded across `width`.
@@ -208,9 +208,10 @@ export const CARS = [
 const BASE = { vmax: 55, vmaxNitro: 76, accel: 24, turnRate: 1.9, grip: 12, driftYaw: 1.5, driftYawAlign: 0.85, driftGrip: 2.0, maxDriftAngle: 1.15, gaugeRate: 0.36, nitroTime: 2.8 };
 function rawSpecs(car) {
   const t = { ...BASE, ...car.tune };
-  // 0-100 km/h using the same acceleration curve as PlayerCar
-  let s = 0, time = 0;
-  while (s < 100 / 3.6 && time < 20) { s += engineAccel(t, s, t.vmax) * 0.01; time += 0.01; }
+  // 0-100 km/h using the same acceleration curve and gear changes as PlayerCar
+  const sim = { s: 0, T: t };
+  let time = 0;
+  while (sim.s < 100 / 3.6 && time < 20) { sim.s += engineAccel(t, sim.s, t.vmax) * gearCut(sim, 0.01) * 0.01; time += 0.01; }
   return {
     speed: t.vmax,
     accel: 1 / time,
@@ -631,7 +632,7 @@ export function buildCar(car, { name = null, isPlayer = false } = {}) {
   shield.visible = false;
   group.add(shield);
 
-  group.userData = { root, wheels, flames, exhausts, flameMatOuter, under, glowMat, tag, shield, skin: car, isPlayer, tailM, rotorM, track: S.track, rearZ: -S.axles[0] };
+  group.userData = { root, wheels, flames, exhausts, flameMatOuter, under, glowMat, tag, shield, skin: car, isPlayer, tailM, rotorM, track: S.track, rearZ: -S.axles[0], size: { front: S.len[1], rear: -S.len[0], halfW: S.width / 2 } };
   return group;
 }
 
@@ -849,7 +850,7 @@ export function buildF1Car(team, { name = null, isPlayer = false } = {}) {
   shield.visible = false;
   group.add(shield);
 
-  group.userData = { root, wheels, flames: [fg], exhausts, flameMatOuter, under, glowMat, tag, shield, skin: team, isPlayer, tailM, track: 0.82, rearZ: 1.55, wing, drive, driver: { drv, freeArms, helmet, visor: visorM, setSeated } };
+  group.userData = { root, wheels, flames: [fg], exhausts, flameMatOuter, under, glowMat, tag, shield, skin: team, isPlayer, tailM, track: 0.82, rearZ: 1.55, size: { front: 3.2, rear: 2.6, halfW: 1.0 }, wing, drive, driver: { drv, freeArms, helmet, visor: visorM, setSeated } };
   drive(0);
   return group;
 }

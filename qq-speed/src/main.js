@@ -17,11 +17,15 @@ import { League, CUPS, POINTS } from './league.js';
 import { Confetti } from './confetti.js';
 import { pitLayout, buildPitLane } from './pitlane.js';
 import { RaceSim } from './racesim.js';
+import { Podium } from './podium.js';
 import { Particles, SkidMarks } from './effects.js';
 import { GameAudio } from './audio.js';
 import { Input } from './input.js';
 import { HUD } from './hud.js';
 import { ItemSystem } from './items.js';
+import { RemoteCar, LAGGING } from './remote.js';
+import { Online } from './online.js';
+import { COUNTDOWN } from './netproto.js';
 import { clamp, lerp, damp, dampAngle, wrapAngle, mulberry32, formatTime, smoothstep } from './util.js';
 import { setMaxAniso } from './textures.js';
 
@@ -29,6 +33,9 @@ const $ = (id) => document.getElementById(id);
 const mapById = (id) => MAPS.find((m) => m.id === id) || F1_MAPS.find((m) => m.id === id);
 const ordinal = (n) => { const v = n % 100; return n + (v >= 11 && v <= 13 ? 'th' : ['th', 'st', 'nd', 'rd'][n % 10] || 'th'); };
 const STORE = 'feiche3d.v1';
+const TRAFFIC_RANGE = 180; // rivals farther than this (m) are out of earshot
+const SOUND_SPEED = 120; // m/s; well below the real 343 so passes at racing closing speeds get an audible Doppler drop
+const _camDir = new THREE.Vector3();
 const DIFFS = [
   { id: 0, name: 'Rookie', skill: [0.55, 0.75], rubber: [0.88, 1.03] },
   { id: 1, name: 'Skilled', skill: [0.85, 1.05], rubber: [0.93, 1.06] },
@@ -49,6 +56,23 @@ const STEER = [
 const DT = 1 / 120;
 const TAKEDOWN_SPEED = 11; // m/s closing speed (~40 km/h) that wrecks the car on the receiving end
 const FATAL_SPEED = 20; // Grand Prix: a car-to-car hit this hard (~72 km/h closing) retires the car
+const CAR_SIZE = { front: 2.4, rear: 2.4, halfW: 1 }; // footprint for models that don't carry their own
+
+// Closest points between two 2D segments p1 + s*d1 and p2 + t*d2 (s, t in 0..1); Ericson, Real-Time Collision Detection 5.1.9
+function segClosest(p1x, p1z, d1x, d1z, p2x, p2z, d2x, d2z) {
+  const rx = p1x - p2x, rz = p1z - p2z;
+  const a = d1x * d1x + d1z * d1z, e = d2x * d2x + d2z * d2z, f = d2x * rx + d2z * rz;
+  if (a < 1e-6 && e < 1e-6) return [0, 0];
+  if (a < 1e-6) return [0, clamp(f / e, 0, 1)];
+  const c = d1x * rx + d1z * rz;
+  if (e < 1e-6) return [clamp(-c / a, 0, 1), 0];
+  const b = d1x * d2x + d1z * d2z, den = a * e - b * b;
+  let sv = den > 1e-6 ? clamp((b * f - c * e) / den, 0, 1) : 0;
+  let t = (b * sv + f) / e;
+  if (t < 0) { t = 0; sv = clamp(-c / a, 0, 1); }
+  else if (t > 1) { t = 1; sv = clamp((b - c) / a, 0, 1); }
+  return [sv, t];
+}
 const FATAL_WALL = 45; // Grand Prix: speed into the wall (m/s) that retires the car: head-on at ~160 km/h or a steep hit flat out
 
 // ---------- Terrain base function ----------
@@ -182,6 +206,7 @@ class Game {
     this.confetti = new Confetti($('confetti'));
     this.setupQuality();
     this.buildMenu();
+    this.online = new Online(this);
     window.addEventListener('resize', () => this.resize());
     this.resize();
     const unlock = () => {
@@ -201,6 +226,7 @@ class Game {
       this.startDemo();
       this.last = performance.now();
       requestAnimationFrame(() => this.loop());
+      this.online.boot();
     });
   }
 
@@ -268,6 +294,7 @@ class Game {
     $('steerGroup').classList.toggle('hidden', !IS_TOUCH);
     let thumbs = [];
     try { thumbs = renderCarThumbs(); } catch { /* previews are optional */ }
+    this.carThumbs = thumbs;
     const specs = carSpecs();
     $('skins').innerHTML = CARS.map((c, i) => `<div class="carcard" data-i="${i}">${thumbs[i] ? `<img src="${thumbs[i]}" alt="${c.name}">` : `<div class="swatch" style="background:#${c.body.toString(16).padStart(6, '0')}"></div>`}<div class="cn">${c.name}</div><div class="cc">${c.cls}</div></div>`).join('');
     const SPEC_ROWS = [['speed', 'Top Speed'], ['accel', '0-100 km/h'], ['handling', 'Handling'], ['drift', 'Drift'], ['nitro', 'Nitro']];
@@ -312,7 +339,7 @@ class Game {
     $('start').addEventListener('click', () => this.startRace());
     $('resume').addEventListener('click', () => this.togglePause());
     $('restart').addEventListener('click', () => { $('pause').classList.add('hidden'); this.startRace(this.race); });
-    $('quit').addEventListener('click', () => this.toMenu());
+    $('quit').addEventListener('click', () => (this.race?.online ? this.online.leaveRace() : this.toMenu()));
     $('again').addEventListener('click', () => this.startRace(this.race));
     $('nextRace').addEventListener('click', () => (this.race?.season ? this.startF1Race() : this.startCupRace()));
     $('celebs').addEventListener('click', (e) => { const b = e.target.closest('.celeb'); if (b) this.celebrate(b.dataset.id); });
@@ -378,7 +405,8 @@ class Game {
       this.showBoard();
       this.startDemo();
     });
-    $('back').addEventListener('click', () => this.toMenu());
+    $('back').addEventListener('click', () => (this.race?.online ? this.online.backToRoom() : this.toMenu()));
+    $('onlinebtn').addEventListener('click', () => { this.audio.play('click'); this.online.open(); });
     refresh();
   }
 
@@ -403,17 +431,26 @@ class Game {
     document.body.classList.toggle('steer-swipe', m === 'swipe');
   }
 
-  toMenu() {
-    ['pause', 'result', 'cups', 'board', 'f1s', 'celebrate'].forEach((i) => $(i).classList.add('hidden'));
+  // to = 'online' returns to the online room instead of the lobby
+  toMenu(to = 'menu') {
+    this.endPodium();
+    ['pause', 'result', 'cups', 'board', 'f1s', 'celebrate', 'online'].forEach((i) => $(i).classList.add('hidden'));
     this.celeb = null;
     clearTimeout(this.celebT);
     this.sim = null;
-    document.body.classList.remove('sim');
+    if (this.race?.online) this.race = null; // the online race is over for this player
+    document.body.classList.remove('sim', 'online');
     this.hud.setSim(false);
-    $('menu').classList.remove('hidden');
+    this.hud.finalCount('');
     $('touch').classList.add('hidden');
     this.hud.show(false);
     this.hud.countdown('');
+    if (to === 'online') {
+      // the room's next race may be on any track: stay on this one until it's picked
+      this.online.open();
+      return this.startDemo();
+    }
+    $('menu').classList.remove('hidden');
     // a tournament may have left us on a different track than the one picked in the lobby
     if (this.map && this.map.id !== this.settings.map && !this.loading) this.loadMap(this.settings.map).then(() => this.startDemo());
     else this.startDemo();
@@ -434,6 +471,11 @@ class Game {
   }
 
   togglePause() {
+    // online the race goes on for everyone else: the menu opens over it and the car keeps rolling
+    if (this.race?.online) {
+      $('pause').classList.toggle('hidden');
+      return;
+    }
     if (this.state === 'paused') {
       this.state = this.pausedFrom;
       $('pause').classList.add('hidden');
@@ -448,6 +490,7 @@ class Game {
 
   // ---------- Level ----------
   async loadMap(id) {
+    this.endPodium();
     this.loading = true;
     $('loading').classList.remove('hidden');
     $('loadtxt').textContent = `Generating track: ${mapById(id).name}…`;
@@ -560,6 +603,7 @@ class Game {
   }
 
   makeRacers(withPlayer) {
+    if (withPlayer && this.race.online) return this.makeOnlineRacers(this.race);
     this.clearRacers();
     const S = this.settings;
     const rnd = mulberry32((Date.now() & 0xffff) + 7);
@@ -616,6 +660,54 @@ class Game {
     this.standings = [...this.racers];
   }
 
+  // online grid, in the order the server drew: this player's car plus one RemoteCar per other racer
+  makeOnlineRacers(race) {
+    this.clearRacers();
+    race.grid.forEach((g, k) => {
+      const d = -14 - Math.floor(k / 2) * 11;
+      const lat = (k % 2 ? 1 : -1) * 5.5;
+      const car = CARS[g.car] || CARS[0];
+      let r;
+      if (g.id === race.me) {
+        r = new PlayerCar(this.track, buildCar(car, { isPlayer: true }), g.name, car.tune);
+        r.id = 'me';
+        r.reset(d, lat);
+        r.lapsDone = -1;
+        r.owed = true;
+        r.half = false;
+        r.lastD = r.d;
+        this.player = r;
+      } else {
+        r = new RemoteCar(this.track, buildCar(car, { name: g.name }), g.name, g.id, car.tune);
+        r.place(d, lat);
+      }
+      r.netId = g.id;
+      r.slot = k;
+      r.lapTimes = [];
+      r.items = [];
+      r.finished = false;
+      r.finishTime = 0;
+      r.stats = { drift: 0, small: 0, perfect: 0, double: 0, nitro: 0, crash: 0, top: 0, land: 0, takedown: 0 };
+      r.wreck = 0;
+      r.ghost = 0;
+      r.retired = false;
+      this.scene.add(r.model);
+      this.racers.push(r);
+    });
+    for (const r of this.racers) this.updateProgress(r, true);
+    this.standings = [...this.racers];
+  }
+
+  // the server has drawn the grid: build the track if needed, then line up (Online.onLoad reports back when done)
+  async startOnlineRace({ seq, cfg, grid, me }) {
+    if (this.loading) await new Promise((r) => { const t = setInterval(() => { if (!this.loading) { clearInterval(t); r(); } }, 50); });
+    ['menu', 'pause', 'result', 'cups', 'board', 'f1s', 'celebrate', 'online'].forEach((i) => $(i).classList.add('hidden'));
+    this.endPodium();
+    if (this.map.id !== cfg.map) await this.loadMap(cfg.map);
+    const mine = grid.find((g) => g.id === me);
+    this.startRace({ online: true, seq, startAt: 0, laps: cfg.laps, mode: cfg.mode, skin: mine.car, diff: 1, cup: false, rivals: [], grid, me });
+  }
+
   startDemo() {
     if (!this.track) return;
     this.state = 'menu';
@@ -634,9 +726,14 @@ class Game {
 
   startRace(race = this.quickRace()) {
     if (this.loading) return;
+    this.endPodium();
     this.race = race;
     this.audio.init();
-    ['menu', 'pause', 'result', 'cups', 'board', 'f1s'].forEach((i) => $(i).classList.add('hidden'));
+    ['menu', 'pause', 'result', 'cups', 'board', 'f1s', 'online'].forEach((i) => $(i).classList.add('hidden'));
+    // online: no restarting a shared race, and quitting leaves the race but not the room
+    document.body.classList.toggle('online', !!race.online);
+    $('restart').classList.toggle('hidden', !!race.online);
+    $('quit').textContent = race.online ? 'Leave Race' : 'Back to Lobby';
     this.itemMode = race.mode === 'item';
     this.makeRacers(true);
     this.sim = race.f1 && this.pit ? new RaceSim(this, this.pit, this.pitCrew) : null;
@@ -708,32 +805,48 @@ class Game {
 
   step(dt, inp) {
     const st = this.state;
+    if (st === 'podium') {
+      // the race is over: only the ceremony, its particles and the scenery move
+      this.podium.update(dt);
+      this.fx.smoke.update(dt);
+      this.fx.glow.update(dt);
+      this.updateCrowd(dt);
+      for (const u of this.updaters) u(dt, this.time, this.camera.position);
+      for (const w of this.waters) w.material.uniforms.uTime.value = this.time;
+      return;
+    }
     const racing = st === 'race';
+    // online, the countdown and the race clock run on the server's time, so every racer sees the same ones
+    const net = this.race?.online && st !== 'menu' ? this.online : null;
+    const clock = net && this.race.startAt ? (net.now() - this.race.startAt) / 1000 : null;
     if (st === 'countdown') {
-      this.cdT += dt;
+      if (net) {
+        this.cdT = clock == null ? -1 : COUNTDOWN + clock;
+        this.hud.finalCount(clock == null ? 'Waiting for the other racers…' : '');
+      } else this.cdT += dt;
       const n = Math.floor(this.cdT);
-      if (n !== this.cdShown && n <= 3) {
+      if (n >= 0 && n !== this.cdShown && n <= 3) {
         this.cdShown = n;
         this.hud.countdown(n < 3 ? String(3 - n) : 'GO!');
         this.gate?.set(n < 3 ? n + 1 : 4);
         this.audio.play(n < 3 ? 'count' : 'go');
         if (n === 3) this.excite(0.9, this.race?.f1);
       }
-      if (inp.upPressed && !this.startTried) {
+      if (inp.upPressed && !this.startTried && this.cdT >= 0) {
         this.startTried = true;
         if (this.cdT > 2.72) this.startBoostReady = true;
       }
       if (this.cdT >= 3) {
         this.state = 'race';
-        this.raceTime = 0;
+        this.raceTime = clock ?? 0;
         for (const r of this.racers) if (r.isPlayer) r.lapStart = 0; else r.lapStart = 0;
         if (this.startBoostReady) this.applyStartBoost();
         setTimeout(() => this.hud.countdown(''), 700);
       }
     }
-    if (st === 'finish') this.raceTime += dt;
+    if (st === 'finish') this.raceTime = clock ?? this.raceTime + dt;
     if (st === 'race') {
-      this.raceTime += dt;
+      this.raceTime = clock ?? this.raceTime + dt;
       if (inp.upPressed && !this.startTried && this.raceTime < 0.28) { this.startTried = true; this.applyStartBoost(); }
       if (inp.upPressed) this.startTried = true;
     }
@@ -770,12 +883,17 @@ class Game {
       if (inp.boxPressed && racing && P && !P.finished) this.sim.toggleBox(P);
     }
     const noEdge = { ...pin, upPressed: false, wPressed: false, nitroPressed: false };
+    if (net) {
+      const now = net.now();
+      for (const r of this.racers) if (r.isRemote) r.update(dt, now);
+    }
+    if (aiActive) this.aiTraffic();
     while (this.acc >= DT) {
       this.acc -= DT;
       if (P && !P.pit && !(this.celeb && this.celeb.phase !== 'ask')) P.update(DT, first ? pin : noEdge, active && !P.retired, this.itemMode);
       first = false;
       for (const r of this.racers) {
-        if (r.isPlayer || r.pit) continue;
+        if (r.isPlayer || r.pit || r.isRemote) continue;
         r.update(DT, aiActive && !r.retired, this.raceTime, this.rubber(r));
         if (r.retired) r.lat = damp(r.lat, Math.sign(r.lat || 1) * (this.track.halfW - 2.5), 1.5, DT);
       }
@@ -810,8 +928,9 @@ class Game {
     });
     if (this.items && (racing || st === 'finish')) {
       this.items.update(dt, this.racers, this.standings);
-      for (const r of this.racers) if (!r.isPlayer && !r.finished) this.items.aiThink(r, dt, this.standings);
+      for (const r of this.racers) if (!r.isPlayer && !r.isRemote && !r.finished) this.items.aiThink(r, dt, this.standings);
     }
+    net?.tick(dt);
     if (P) this.handleEvents(P);
     this.emitEffects(dt);
     this.fx.smoke.update(dt);
@@ -827,9 +946,51 @@ class Game {
     // Sound
     if (P && this.celeb && (this.celeb.kind === 'burnout' || this.celeb.kind === 'donuts') && this.celeb.phase === 'go') {
       this.audio.setEngine(0.95, 1, false, true, true);
-    } else if (P && st !== 'menu') {
+    } else if (P && st !== 'menu' && this.celeb?.kind !== 'stalled') {
       this.audio.setEngine(Math.min(1.2, Math.abs(P.s) / P.T.vmaxNitro), st === 'countdown' ? (this.input.has('ArrowUp') ? 1 : 0) : P.throttle, P.boosting, P.drifting && !P.airborne, true);
     } else this.audio.silence();
+    if (P && st !== 'menu') this.trafficAudio(P);
+  }
+
+  // Rivals' engines, heard from the camera: the nearest few swell as they close in, pan to their side and drop
+  // in pitch as they go by (Doppler). A rival passing the player (or being passed) close alongside adds a rush of air.
+  trafficAudio(P) {
+    const cam = this.camera.position;
+    this.camera.getWorldDirection(_camDir);
+    const cr = Math.hypot(_camDir.x, _camDir.z) || 1;
+    const crx = -_camDir.z / cr, crz = _camDir.x / cr; // camera right, flat
+    const pm = P.m ?? P.h;
+    const pvx = Math.sin(pm) * P.s, pvz = Math.cos(pm) * P.s;
+    const fx = Math.sin(P.h), fz = Math.cos(P.h);
+    const near = [];
+    for (const r of this.racers) {
+      if (r === P || r.retired) continue;
+      const ax = r.x - P.x, az = r.z - P.z;
+      const along = ax * fx + az * fz, side = -ax * fz + az * fx; // relative to the player car; side > 0 = right
+      if (r.passAlong !== undefined && Math.sign(along) !== Math.sign(r.passAlong) && Math.abs(side) < 8 && Math.abs(r.s - P.s) > 3 && this.time - (r.passT ?? -9) > 1.5) {
+        r.passT = this.time;
+        this.audio.whoosh(clamp(side / 5, -0.9, 0.9), clamp(Math.abs(r.s - P.s) / 15, 0.4, 1) * clamp(1.2 - Math.abs(side) / 8, 0.3, 1));
+      }
+      r.passAlong = along;
+      const dx = r.x - cam.x, dy = r.y - cam.y, dz = r.z - cam.z;
+      const d = Math.hypot(dx, dy, dz);
+      if (d < TRAFFIC_RANGE) near.push({ r, d, ux: dx / (d || 1), uz: dz / (d || 1) });
+    }
+    near.sort((a, b) => a.d - b.d);
+    this.audio.setTraffic(near.slice(0, 4).map(({ r, d, ux, uz }) => {
+      const hd = r.trackHd ?? r.h;
+      const closing = pvx * ux + pvz * uz, away = Math.sin(hd) * r.s * ux + Math.cos(hd) * r.s * uz;
+      return {
+        key: r,
+        ratio: Math.min(1.2, r.s / r.T.vmaxNitro),
+        throttle: r.braking ? 0 : 1,
+        boost: r.nitroTime > 0,
+        dist: d,
+        pan: clamp(ux * crx + uz * crz, -1, 1) * 0.85,
+        doppler: clamp((SOUND_SPEED + closing) / (SOUND_SPEED + away), 0.75, 1.35),
+        tone: r.enginePitch ?? 1,
+      };
+    }));
   }
 
   rubber(r) {
@@ -869,6 +1030,7 @@ class Game {
   // ---------- Progress / laps ----------
   updateProgress(r, init = false) {
     const L = this.track.length;
+    if (r.isRemote) return; // their progress arrives with their snapshots, their laps from the server
     if (r.isPlayer) {
       const d = r.d;
       if (!init) {
@@ -897,6 +1059,7 @@ class Game {
     r.lapStart = this.raceTime;
     r.lapTimes.push(t);
     const laps = this.race.laps;
+    if (r.isPlayer && this.race.online) this.online.sendLap(r.lapsDone, this.raceTime);
     if (r.lapsDone >= laps && !r.finished) {
       r.finished = true;
       r.finishTime = this.raceTime;
@@ -926,6 +1089,7 @@ class Game {
   checkRaceEnd(dt) {
     const P = this.player;
     if (this.resultShown || this.celeb) return;
+    if (this.race.online) return this.checkOnlineEnd(dt);
     if (P.retired) {
       if (this.raceTime - P.retiredAt > 6) this.showResults();
       return;
@@ -943,7 +1107,60 @@ class Game {
     }
   }
 
+  // online, the server calls the race and sends the results (checkOnlineEnd shows them)
+  checkOnlineEnd(dt) {
+    const P = this.player, net = this.online;
+    if (this.state === 'finish') this.finishT += dt;
+    if (net.results && (!P.finished || this.finishT > 3)) return this.showOnlineResults(net.results);
+    const left = net.graceEnd ? Math.max(0, Math.ceil((net.graceEnd - net.now()) / 1000)) : null;
+    if (left != null) this.hud.finalCount(P.finished ? `Waiting for the other racers · ${left}s` : `A racer has finished! ${left}s left`);
+  }
+
+  // another racer's lap, confirmed by the server
+  onRemoteLap(r, m) {
+    r.lapTimes.push(m.lapT);
+    if (!m.finished || r.finished) return;
+    r.finished = true;
+    r.finishTime = m.time;
+    if (this.firstFinish < 0) this.firstFinish = this.raceTime;
+    if (!this.player?.finished) this.hud.message(`${r.name} finished ${ordinal(m.place)}`, '#ffd23a', true);
+  }
+
+  showOnlineResults(res) {
+    this.resultShown = true;
+    this.state = 'finish';
+    this.hud.finalCount('');
+    const P = this.player, me = this.online.myId;
+    const rows = res.rows;
+    const mine = rows.find((r) => r.id === me);
+    const won = !!mine?.finished && mine.place === 1;
+    $('resTitle').textContent = !mine ? 'Race Over' : !mine.finished ? 'Did Not Finish' : won ? 'You Win!' : `${ordinal(mine.place)} Place`;
+    $('resTitle').classList.toggle('win', won);
+    $('cupBox').innerHTML = '';
+    ['again', 'nextRace', 'resBoard'].forEach((i) => $(i).classList.add('hidden'));
+    $('back').textContent = 'Back to Room';
+    // only this driver's best lap goes into the local track records
+    if (P.lapTimes.length) this.league.recordRace(this.map.id, [{ id: 'me', name: P.name, car: P.model.userData.skin.id, best: Math.min(...P.lapTimes), finished: P.finished }], false);
+    const st = P.stats;
+    $('resStats').innerHTML = [
+      ['Drifts', st.drift], ['Mini Boosts', st.small], ['Perfect Boosts', st.perfect], ['Double Boosts', st.double], ['Nitros', st.nitro], ['Top Speed', Math.round(st.top) + ''], ['Takedowns', st.takedown || 0], ['Crashes', st.crash],
+    ].map(([k, v]) => `<div class="stat"><b>${v}</b>${k}</div>`).join('');
+    const esc = (t) => String(t).replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
+    $('resBody').innerHTML = rows.map((r) => {
+      const total = r.finished ? formatTime(r.time) : r.out ? 'DNF (left)' : `DNF (${Math.floor(clamp((r.prog / res.laps) * 100, 0, 99))}%)`;
+      return `<tr class="${r.id === me ? 'me' : ''}"><td class="pos">${r.place}</td><td>${esc(r.name)}${r.id === me ? ' <small>(you)</small>' : ''}</td><td>${total}</td><td>${formatTime(r.best)}</td><td class="pts"></td></tr>`;
+    }).join('');
+    setTimeout(() => {
+      $('result').classList.remove('hidden');
+      $('touch').classList.add('hidden');
+      if (won) this.confetti.celebrate('podium');
+    }, 400);
+  }
+
   showResults() {
+    if (this.race.online) return; // the server's results follow (checkOnlineEnd)
+    $('resBoard').classList.remove('hidden');
+    $('back').textContent = 'Back to Lobby';
     this.resultShown = true;
     this.state = 'finish';
     this.hud.finalCount('');
@@ -985,13 +1202,35 @@ class Game {
       const total = r.finished ? formatTime(r.finishTime) : r.retired ? 'DNF (retired)' : `DNF (${Math.floor(Math.max(0, Math.min(99, (r.progress / L) * 100 / this.race.laps)))}%)`;
       return `<tr class="${r.isPlayer ? 'me' : ''}"><td class="pos">${i + 1}</td><td>${r.name}</td><td>${total}</td><td>${formatTime(best)}</td><td class="pts">+${(this.race.points || POINTS)[i] || 0}</td></tr>`;
     }).join('');
-    setTimeout(() => {
+    const reveal = () => {
       $('result').classList.remove('hidden');
       $('touch').classList.add('hidden');
       // winning a cup or the championship gets the big gold celebration; a plain race win gets one more burst
       if ((cup?.done || season?.done) && won) this.confetti.celebrate('champion');
       else if (won) this.confetti.celebrate('podium', this.teamColors());
-    }, 400);
+    };
+    // every Grand Prix ends with the podium ceremony; the results follow it
+    if (this.race.f1 && order[0]?.finished) this.startPodium(order.slice(0, 3), () => setTimeout(reveal, 300));
+    else setTimeout(reveal, 400);
+  }
+
+  startPodium(top, onDone) {
+    this.state = 'podium';
+    this.celeb = null;
+    clearTimeout(this.celebT);
+    $('celebrate').classList.add('hidden');
+    $('touch').classList.add('hidden');
+    this.hud.show(false);
+    this.audio.silence();
+    this.ejects = this.ejects.filter((e) => !top.includes(e.r));
+    const title = this.map.f1.name.replace(/ GP$/, '').toUpperCase() + ' GRAND PRIX';
+    this.podium = new Podium(this, top, title, onDone);
+  }
+
+  endPodium() {
+    this.podium?.dispose();
+    this.podium = null;
+    if (this.state === 'podium') this.state = 'finish';
   }
 
   renderCupBox(def, cup) {
@@ -1124,19 +1363,54 @@ class Game {
   }
 
   // ---------- Collisions ----------
+  // Each rival looks ahead for the nearest car in its lane (AICar uses it to pull out and pass, or to lift)
+  aiTraffic() {
+    const L = this.track.length;
+    for (const r of this.racers) {
+      if (r.isPlayer || r.isRemote) continue;
+      r.block = null;
+      let best = 22;
+      for (const o of this.racers) {
+        if (o === r || o.retired || o.pit || o.ghost > 0 || r.pit) continue;
+        const gap = (((o.d - r.d) % L) + L) % L;
+        if (gap > 0.5 && gap < best && Math.abs(o.lat - r.lat) < 2.9) {
+          best = gap;
+          r.block = o;
+          r.blockGap = gap;
+        }
+      }
+    }
+  }
+
+  // a car's footprint: a capsule along its heading, as long and wide as the body. [start x, z, axis x, z, radius]
+  footprint(r) {
+    const sz = r.model.userData.size || CAR_SIZE;
+    const h = r.h + (r.spinAng || 0);
+    const fx = Math.sin(h), fz = Math.cos(h);
+    const mid = (sz.front - sz.rear) / 2, seg = Math.max(0, (sz.front + sz.rear) / 2 - sz.halfW);
+    const cx = r.x + fx * mid, cz = r.z + fz * mid;
+    return [cx - fx * seg, cz - fz * seg, fx * 2 * seg, fz * 2 * seg, sz.halfW];
+  }
+
   collide() {
     const rs = this.racers;
-    const R = 3.1;
+    const fp = rs.map((r) => this.footprint(r));
     for (let i = 0; i < rs.length; i++)
       for (let j = i + 1; j < rs.length; j++) {
         const a = rs[i], b = rs[j];
         if (a.ghost > 0 || b.ghost > 0 || a.pit || b.pit) continue; // wrecked, just respawned or in the pit lane: no contact
-        const dx = b.x - a.x, dz = b.z - a.z;
-        const d2 = dx * dx + dz * dz;
-        if (d2 > R * R || Math.abs(a.y - b.y) > 2.5) continue;
-        const d = Math.sqrt(d2) || 0.01;
+        if (a.isRemote && b.isRemote) continue; // two other players: their own games sort that out
+        if ((b.x - a.x) ** 2 + (b.z - a.z) ** 2 > 64 || Math.abs(a.y - b.y) > 2.5) continue;
+        // nose to tail or side by side: bodies touch when their capsules do
+        const A = fp[i], B = fp[j];
+        const [sa, tb] = segClosest(A[0], A[1], A[2], A[3], B[0], B[1], B[2], B[3]);
+        let dx = B[0] + B[2] * tb - A[0] - A[2] * sa, dz = B[1] + B[3] * tb - A[1] - A[3] * sa;
+        const gap = Math.hypot(dx, dz), R = A[4] + B[4];
+        if (gap >= R) continue;
+        let d = gap;
+        if (d < 1e-3) { dx = b.x - a.x; dz = b.z - a.z; d = Math.hypot(dx, dz); if (d < 1e-3) { dx = 1; dz = 0; d = 1; } }
         const nx = dx / d, nz = dz / d;
-        const over = R - d;
+        const over = R - gap;
         this.pushRacer(a, -nx * over * 0.5, -nz * over * 0.5);
         this.pushRacer(b, nx * over * 0.5, nz * over * 0.5);
         // Velocity exchange (simplified)
@@ -1146,8 +1420,8 @@ class Game {
           // a hard enough hit wrecks the car on the receiving end; rivals need a bigger hit to take out the player
           const pa = va[0] * nx + va[1] * nz, pb = -(vb[0] * nx + vb[1] * nz);
           const [att, vic] = pa >= pb ? [a, b] : [b, a];
-          // no takedowns in the scramble off the grid
-          if (this.state === 'race' && this.raceTime > 4 && -rel > (vic.isPlayer ? TAKEDOWN_SPEED * 1.4 : TAKEDOWN_SPEED)) { this.takedown(att, vic, -rel); continue; }
+          // no takedowns in the scramble off the grid; online every car is a player's, so all get the player's margin
+          if (this.state === 'race' && this.raceTime > 4 && -rel > (vic.isPlayer || vic.isRemote ? TAKEDOWN_SPEED * 1.4 : TAKEDOWN_SPEED)) { this.takedown(att, vic, -rel); continue; }
           const imp = -rel * 0.5;
           if (this.sim && imp > 1.5) { this.sim.damage(att, imp * 0.02, 'wing'); this.sim.damage(vic, imp * 0.012, 'susp'); }
           this.kick(a, -nx * imp, -nz * imp);
@@ -1162,6 +1436,11 @@ class Game {
   }
 
   takedown(att, vic, closing = 0) {
+    // online, each game only decides about its own car: the other player's game wrecks theirs and tells the room
+    if (vic.isRemote) {
+      if (att.isPlayer) att.ghost = Math.max(att.ghost, 0.5);
+      return;
+    }
     if (vic.shield > 0) {
       vic.shield = 0;
       this.sfx('shield', vic);
@@ -1199,6 +1478,7 @@ class Game {
       this.hud.message('Taken Out!', '#ff4b4b');
       this.hud.flash();
       this.shake = 1;
+      if (this.race?.online && att.isRemote) this.online.event({ k: 'wreck', by: att.netId });
     }
   }
 
@@ -1322,6 +1602,12 @@ class Game {
       c.dur = { burnout: 5, donuts: 6.5, fireworks: 6.5, driver: 7.5 }[c.kind];
       return;
     }
+    // ran the tank dry mid-burnout: the engine dies and the show is over
+    if (P.car && P.car.fuel <= 0 && (c.kind === 'burnout' || c.kind === 'donuts')) {
+      c.kind = 'stalled';
+      c.dur = Math.min(c.dur, c.t + 1.5);
+      this.hud.message('Out of fuel!', '#ff4b4b');
+    }
     const u = P.model.userData;
     const rear = u.wheels.filter((w) => !w.front);
     const smokeAtRear = (rate) => {
@@ -1423,26 +1709,31 @@ class Game {
       if (!(r.wreck > 0)) continue;
       r.wreck -= dt;
       if (Math.random() < dt * 30) this.fx.smoke.emit(r.x, r.y + 1, r.z, (Math.random() - 0.5) * 2, 2 + Math.random() * 2, (Math.random() - 0.5) * 2, 1.2, 1.6, 4, 0.18, 0.18, 0.2, 0.7);
-      if (r.wreck > 0) continue;
+      if (r.wreck > 0 || r.isRemote) continue;
       if (r.isPlayer) this.resetPlayer(true);
       else { r.spin = 0; r.lat *= 0.3; r.latV = 0; r.s = 10; }
     }
   }
 
   vel(r) {
-    if (r.isPlayer) return [Math.sin(r.m) * r.s, Math.cos(r.m) * r.s];
+    if (r.isPlayer || r.isRemote) return [Math.sin(r.m) * r.s, Math.cos(r.m) * r.s];
     const s = this.track.sample(r.dist, {});
     return [s.tx * r.s + s.rx * r.latV, s.tz * r.s + s.rz * r.latV];
   }
 
   pushRacer(r, px, pz) {
-    if (r.isPlayer) { r.x += px; r.z += pz; return; }
+    if (r.isRemote) return; // moved by its own player's game
+    r.x += px;
+    r.z += pz;
+    if (r.isPlayer) return;
+    // rivals drive on (distance, lane): apply it there too, so their next step starts from the separated spot
     const s = this.track.sample(r.dist, {});
     r.lat += px * s.rx + pz * s.rz;
     r.pushD += px * s.tx + pz * s.tz;
   }
 
   kick(r, vx, vz) {
+    if (r.isRemote) return;
     if (r.isPlayer) {
       const cx = Math.sin(r.m) * r.s + vx, cz = Math.cos(r.m) * r.s + vz;
       const ns = Math.hypot(cx, cz);
@@ -1454,7 +1745,10 @@ class Game {
     r.latV += vx * s.rx + vz * s.rz;
   }
 
-  hitRacer(r, kind) {
+  // by: the racer whose missile or banana it was
+  hitRacer(r, kind, by = null) {
+    // another player's car: their game applies the hit and tells the room
+    if (r.isRemote) return;
     if (r.shield > 0) {
       r.shield = 0;
       this.sfx('shield', r);
@@ -1469,8 +1763,49 @@ class Game {
       this.hud.message(kind === 'missile' ? 'Hit by a Missile!' : 'Slipped on a Banana!', '#ff4b4b');
       this.hud.flash();
       this.shake = 0.8;
+      if (this.race?.online) this.online.event({ k: 'hit', kind, by: by?.netId || '' });
     }
     this.sfx(kind === 'missile' ? 'boom' : 'banana', r);
+  }
+
+  // item use by this player, for the other racers' games (bananas dropped, missiles fired, peels run over)
+  itemEvent(ev) {
+    if (this.race?.online) this.online.event(ev);
+  }
+
+  // something another player's game reported about their car
+  onNetEvent(r, m) {
+    const P = this.player;
+    const mine = m.by === this.online.myId;
+    switch (m.k) {
+      case 'banana':
+        this.items?.spawnBanana(r, m.bid, m.x, m.y, m.z);
+        break;
+      case 'bananaHit':
+        this.items?.removeBanana(m.bid);
+        break;
+      case 'missile': {
+        const target = m.target === this.online.myId ? P : this.racers.find((x) => x.netId === m.target);
+        this.items?.spawnMissile(r, target || null);
+        break;
+      }
+      case 'hit':
+        if (m.kind === 'banana') this.fx.burst(r.x, r.y + 0.6, r.z, 0xffd400);
+        this.sfx(m.kind === 'missile' ? 'boom' : 'banana', r);
+        if (mine) this.hud.message(m.kind === 'missile' ? `Missile hit ${r.name}!` : `${r.name} slipped on your banana!`, '#ffd23a', true);
+        break;
+      case 'wreck':
+        this.fx.explode(r.x, r.y + 0.8, r.z);
+        this.fx.sparks(r.x, r.y + 0.6, r.z, 24);
+        this.sfx('boom', r);
+        if (mine && P) {
+          P.stats.takedown = (P.stats.takedown || 0) + 1;
+          this.hud.message('TAKEDOWN!', '#ff4b4b');
+          this.excite(0.8, true);
+          this.shake = Math.max(this.shake, 0.5);
+        }
+        break;
+    }
   }
 
   sfx(name, r) {
@@ -1566,7 +1901,8 @@ class Game {
       name: r.name,
       me: r.isPlayer,
       fin: r.finished,
-      tag: r.retired ? 'DNF' : r.pit ? 'PIT' : r.car && r.car.fuel <= 0 ? 'OUT' : r.car && Math.max(r.car.wing, r.car.engine, r.car.susp) > 0.5 ? 'DMG' : '',
+      tag: r.retired ? 'DNF' : r.pit ? 'PIT' : r.car && r.car.fuel <= 0 ? 'OUT' : r.car && Math.max(r.car.wing, r.car.engine, r.car.susp) > 0.5 ? 'DMG'
+        : r.isRemote && r.gone ? 'OUT' : r.isRemote && r.lag > LAGGING && !r.finished ? 'LAG' : '',
       color: '#' + (r.model.userData.skin.dot ?? r.model.userData.skin.body).toString(16).padStart(6, '0'),
     }));
     const lapNow = clamp(P.lapsDone + 1, 1, laps);
@@ -1796,7 +2132,7 @@ class Game {
     const cp = this.camera.position;
     if (this.skyMesh) this.skyMesh.position.copy(cp);
     if (this.sun) {
-      const f = this.player && this.state !== 'menu' ? this.player : this.racers[this.demoTarget] || { x: cp.x, y: cp.y, z: cp.z };
+      const f = this.podium ? this.podium.focus : this.player && this.state !== 'menu' ? this.player : this.racers[this.demoTarget] || { x: cp.x, y: cp.y, z: cp.z };
       // Shadow camera follows the player, snapped to texels to reduce shimmering
       const snap = 150 / this.sun.shadow.mapSize.x;
       const fx = Math.round(f.x / snap) * snap, fz = Math.round(f.z / snap) * snap;

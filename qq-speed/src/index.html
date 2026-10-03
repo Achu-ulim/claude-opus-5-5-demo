@@ -123,6 +123,13 @@ body.steer-swipe #t-swipe,body.steer-tilt #t-center{display:block}
 #pausebtn i{width:5px;height:16px;border-radius:2px;background:#fff}
 #cambtn{display:none;pointer-events:auto;cursor:pointer;width:44px;align-items:center;justify-content:center;font-size:18px;-webkit-tap-highlight-color:transparent}
 body.touch #cambtn,body.sim #cambtn{display:flex}
+#podiumUi{position:fixed;left:0;right:0;margin:0 auto;top:max(16px,env(safe-area-inset-top));z-index:12;width:min(460px,calc(100% - 24px));padding:12px 16px;text-align:center;pointer-events:auto;animation:celebIn .35s ease-out}
+#podiumUi.hidden{display:none}
+#podiumUi .pt{font-size:17px;font-weight:900;margin-bottom:6px}
+#podiumUi .pr div{font-size:14px;line-height:1.7}
+#podiumUi .pr div.me{color:var(--yellow);font-weight:800}
+#podiumUi .pr span{color:var(--muted);font-size:12px}
+#podiumSkip{margin-top:6px;cursor:pointer;background:none;border:none;color:var(--muted);font:600 12px var(--ui);text-decoration:underline}
 #celebrate{position:fixed;left:0;right:0;margin:0 auto;bottom:max(24px,env(safe-area-inset-bottom));z-index:12;padding:14px 16px;text-align:center;pointer-events:auto;width:min(620px,calc(100% - 24px));animation:celebIn .35s ease-out}
 @keyframes celebIn{from{opacity:0;transform:translateY(20px)}to{opacity:1;transform:none}}
 #celebrate.hidden{display:none}
@@ -310,6 +317,7 @@ body.touch .touchcard{display:block}
 .tdot{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:6px;vertical-align:middle}
 #rank .row .tg{font-size:9px;font-weight:900;padding:1px 4px;border-radius:4px;background:#27c7ff;color:#04122c}
 #rank .row .tg.OUT{background:#ff4b4b;color:#fff}
+#rank .row .tg.LAG{background:#ffc107;color:#04122c}
 #pitguide{position:absolute;left:50%;top:96px;transform:translateX(-50%);display:flex;align-items:center;gap:10px;padding:6px 14px 6px 10px;border-color:rgba(255,177,59,.6)}
 #pitguide #pg-arrow{width:26px;height:26px;fill:#ffb13b;filter:drop-shadow(0 0 6px #ff8a00);transition:transform .12s linear}
 #pitguide b{display:block;font-size:11px;letter-spacing:2px;color:#ffb13b}
@@ -370,6 +378,78 @@ table.board td{padding:6px}
 table.res td small{color:var(--muted);font-weight:400}
 table.res td.pts,table.res .gain{color:#6dff9e;font-size:12px}
 #cupBox h3{font-size:14px;color:var(--cyan);letter-spacing:1px;margin:10px 0 2px}
+/* ---------- Online ---------- */
+.go.online{background:linear-gradient(180deg,#34e0aa,#0f9a6e);box-shadow:0 6px 0 #075c40,0 0 30px rgba(52,224,170,.45)}
+.go:disabled{opacity:.45;cursor:not-allowed;transform:none}
+.onlwho{display:flex;align-items:center;justify-content:center;gap:8px;margin-bottom:12px}
+.onlwho label{font-size:12px;letter-spacing:2px;color:var(--cyan);font-weight:800;text-transform:uppercase}
+.onlwho input,.onljoin input{pointer-events:auto;user-select:text;-webkit-user-select:text;padding:6px 10px;border-radius:14px;border:1px solid rgba(255,255,255,.25);background:rgba(255,255,255,.08);color:#fff;outline:none}
+.onlwho input{width:180px;font:700 15px var(--ui)}
+.onlwho input:focus,.onljoin input:focus{border-color:#ffd23a;box-shadow:0 0 10px rgba(255,210,58,.4)}
+.onlgrid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:6px 0 14px}
+.onlcard{cursor:pointer;font-family:var(--ui);color:#fff;text-align:left;border-radius:14px;padding:16px;border:2px solid rgba(255,255,255,.18);background:linear-gradient(180deg,rgba(255,255,255,.1),rgba(255,255,255,.03));transition:transform .15s,border-color .15s}
+.onlcard:hover{transform:translateY(-3px);border-color:#ffd23a}
+.onlcard .ci{display:block;font-size:34px}
+.onlcard .cn{display:block;font-size:20px;font-weight:900;margin:4px 0}
+.onlcard .cd{display:block;font-size:12px;color:#dce8ff;line-height:1.45}
+.onljoin{display:flex;gap:10px;justify-content:center;align-items:center}
+.onljoin input{width:150px;text-align:center;font:italic 900 22px var(--num);letter-spacing:6px;text-transform:uppercase}
+.onljoin input::placeholder{color:rgba(255,255,255,.3);letter-spacing:4px}
+.onljoin .go{margin-top:0;padding:8px 28px;font-size:16px;letter-spacing:2px}
+.onlmsg{min-height:20px;margin-top:10px;font-size:13px;color:#dce8ff}
+.onlmsg.bad{color:#ff9a9a}
+.roomhead{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:12px;text-align:left}
+.roomhead .rk{font-size:11px;letter-spacing:3px;color:var(--cyan);font-weight:800}
+.roomhead .rcode{font-family:var(--num);font-style:italic;font-size:40px;letter-spacing:6px;line-height:1.05;user-select:text;-webkit-user-select:text;
+  background:linear-gradient(180deg,#fff,#ffd23a 60%,#ff8a00);-webkit-background-clip:text;background-clip:text;color:transparent}
+.roomhead .rkind{font-size:11px;color:var(--muted)}
+.rinv{display:flex;gap:8px;flex-wrap:wrap}
+.rinv button{cursor:pointer;font:800 13px var(--ui);color:#fff;background:linear-gradient(180deg,#4a8cff,#1d5fe0);border:none;border-radius:14px;padding:8px 14px}
+.rnet{font-size:12px;font-weight:800;color:#6dff9e;white-space:nowrap}
+.rnet.slow,#netstat.slow{color:#ffd23a}.rnet.bad,#netstat.bad{color:#ff9a9a}
+.roomgrid{display:grid;grid-template-columns:1fr 1.25fr;gap:12px;text-align:left}
+.roomgrid .wide{grid-column:1/-1}
+.rp{display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:10px;background:rgba(255,255,255,.06);margin-bottom:6px}
+.rp.me{background:rgba(255,138,0,.22)}
+.rp.empty{color:var(--muted);font-size:12px;justify-content:center;background:none;border:1px dashed rgba(255,255,255,.22)}
+.rp .dot{width:12px;height:12px;border-radius:50%;flex:none;border:2px solid #fff}
+.rp .who{flex:1;min-width:0}
+.rp .who b{display:block;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.rp .who b small{color:var(--muted);font-weight:400}
+.rp .who>small{font-size:11px;color:var(--muted)}
+.rp .st{font-size:11px;font-weight:800;padding:2px 8px;border-radius:8px;background:rgba(255,255,255,.12);color:var(--muted);white-space:nowrap}
+.rp .st.ok{background:#3ddc84;color:#04122c}.rp .st.host{background:#ffd23a;color:#04122c}.rp .st.race{background:#27c7ff;color:#04122c}.rp .st.wait{background:#ffc107;color:#04122c}
+.rp .kick{cursor:pointer;flex:none;width:26px;height:26px;border-radius:50%;border:1px solid rgba(255,255,255,.25);background:rgba(255,255,255,.08);color:#fff;font-size:12px}
+.rp .kick:hover{background:#c62828}
+.card h3 small{font-size:11px;color:var(--muted);letter-spacing:0;font-weight:400;margin-left:6px}
+#rmSettings.locked .map,#rmSettings.locked .opt{pointer-events:none}
+#rmSettings.locked .map:not(.sel),#rmSettings.locked .opt:not(.sel){opacity:.5}
+.maps.sm{grid-template-columns:repeat(auto-fill,minmax(118px,1fr))}
+.maps.sm .map{min-height:50px;padding:6px 8px}
+.maps.sm .map .nm{font-size:14px}
+.maps.sm .map .tg{font-size:10px}
+.cars.sm{grid-template-columns:repeat(5,minmax(0,1fr))}
+.cars.sm .carcard .cn{font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+/* status and buttons stay in view while the room scrolls */
+.roomacts{position:sticky;bottom:calc(-1 * max(18px,env(safe-area-inset-bottom)));z-index:3;margin:6px -26px -22px;padding:4px 26px max(16px,env(safe-area-inset-bottom));border-radius:0 0 12px 12px;
+  background:linear-gradient(180deg,rgba(12,24,56,0),rgba(12,24,56,.96) 30%)}
+.roomacts .onlmsg{margin-top:0;padding-top:10px}
+.roomacts .btns .go{margin-top:8px}
+.cars.locked{opacity:.5;pointer-events:none}
+#netstat{display:none;position:absolute;left:0;right:0;top:calc(100% + 4px);text-align:center;font-size:11px;font-weight:800;color:#6dff9e;text-shadow:0 1px 2px #000}
+body.online #netstat{display:block}
+body.online table.race th:nth-child(5),body.online table.race td:nth-child(5){display:none}
+@media (max-width:860px){.roomgrid{grid-template-columns:1fr}}
+@media (max-width:600px){
+  .onlgrid{grid-template-columns:1fr}
+  .onlcard{padding:12px}
+  .onlcard .ci{font-size:26px}
+  .roomhead .rcode{font-size:30px}
+  .cars.sm{grid-template-columns:repeat(4,minmax(0,1fr))}
+  .roomacts{margin:6px -12px -14px;padding:4px 12px max(12px,env(safe-area-inset-bottom))}
+  .roomacts .btns{flex-wrap:nowrap}
+  .roomacts .btns .go{flex:1 1 0;min-width:0;padding:10px 6px;font-size:14px;letter-spacing:1px;white-space:nowrap}
+}
 /* small screens: tighter lobby, pinned start buttons, and tables that fit */
 @media (max-width:900px),(max-height:700px){
   .menubtns{position:sticky;bottom:calc(-1 * max(18px,env(safe-area-inset-bottom)));z-index:3;width:calc(100% + 32px);margin:0 -16px;padding:12px 16px max(12px,env(safe-area-inset-bottom));
@@ -383,7 +463,7 @@ table.res td.pts,table.res .gain{color:#6dff9e;font-size:12px}
   .menubtns{gap:8px;flex-wrap:nowrap}
   .season{grid-template-columns:1fr}
   .menubtns .go{flex:1 1 0;min-width:0;max-width:200px;white-space:nowrap;padding:10px 6px;font-size:14px;letter-spacing:0;box-shadow:0 4px 0 #b34a00}
-  .menubtns .go.cup{box-shadow:0 4px 0 #4b1fa0}.menubtns .go.sec{box-shadow:0 4px 0 #0b3a9a}
+  .menubtns .go.cup{box-shadow:0 4px 0 #4b1fa0}.menubtns .go.sec{box-shadow:0 4px 0 #0b3a9a}.menubtns .go.online{box-shadow:0 4px 0 #075c40}
   .card{padding:10px 12px}
   .box{padding:14px 12px}
   .box h2{font-size:22px;margin-bottom:8px;letter-spacing:1px}
@@ -401,10 +481,11 @@ table.res td.pts,table.res .gain{color:#6dff9e;font-size:12px}
   .cupcard .ci{font-size:30px}
   .cupcard .cd{min-height:0}
 }
-/* four lobby buttons: a 2×2 block on narrow phones */
+/* lobby buttons: a two-column block on narrow phones, the leaderboard across the bottom */
 @media (max-width:520px){
   .menubtns{display:grid;grid-template-columns:1fr 1fr}
   .menubtns .go{max-width:none}
+  .menubtns #boardbtn{grid-column:1/-1}
 }
 @media (max-height:500px){
   .logo{font-size:32px}
@@ -414,7 +495,7 @@ table.res td.pts,table.res .gain{color:#6dff9e;font-size:12px}
 #loading .bar{width:260px;height:6px;border-radius:3px;background:rgba(255,255,255,.15);overflow:hidden;margin-top:14px}
 #loading .bar i{display:block;height:100%;width:30%;background:linear-gradient(90deg,#27c7ff,#fff);animation:load 1s infinite}
 @keyframes load{0%{transform:translateX(-100%)}100%{transform:translateX(350%)}}
-#pause,#result,#cups,#board,#f1s{background:rgba(6,14,36,.72);z-index:10}
+#pause,#result,#cups,#board,#f1s,#online{background:rgba(6,14,36,.72);z-index:10}
 .box{padding:22px 26px;min-width:min(520px,100%);text-align:center}
 .box h2{font-size:30px;font-weight:900;margin-bottom:14px;letter-spacing:3px}
 .btns{display:flex;gap:14px;justify-content:center;flex-wrap:wrap}
@@ -458,7 +539,7 @@ table.res td.pos{font-family:var(--num);font-style:italic;color:var(--yellow);fo
       <div class="hint">Ctrl use<br>Alt swap</div>
     </div>
   </div>
-  <div id="minimap" class="glass"><canvas id="mm" width="420" height="420"></canvas></div>
+  <div id="minimap" class="glass"><canvas id="mm" width="420" height="420"></canvas><div id="netstat"></div></div>
   <div id="bigrank"><span class="r" id="rk">1</span><span class="of" id="rkof">/6</span></div>
   <div id="speedo"><canvas id="sp" width="460" height="460"></canvas><div class="v" id="spd">0</div><div class="u">KM/H</div><div id="thr"><i id="thrfill"></i></div><div id="brakeind">BRAKE</div></div>
   <div id="gaugebox" class="glass">
@@ -541,12 +622,19 @@ table.res td.pos{font-family:var(--num);font-style:italic;color:var(--yellow);fo
   </div>
   <div class="menubtns">
     <button class="go" id="start">Quick Race</button>
+    <button class="go online" id="onlinebtn">🌐 Online</button>
     <button class="go cup" id="cupbtn">🏆 Tournament</button>
     <button class="go f1" id="f1btn">🏁 Formula 1</button>
     <button class="go sec" id="boardbtn">Leaderboard</button>
   </div>
   <div class="mlinks"><button id="installbtn" class="hidden" type="button">📲 Install app</button><span id="iosinstall" class="hidden">📲 Install: tap Share, then “Add to Home Screen”</span><a href="https://x.com/agbama_achu" target="_blank" rel="noopener noreferrer"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18.901 1.153h3.68l-8.04 9.19L24 22.846h-7.406l-5.8-7.584-6.638 7.584H.474l8.6-9.83L0 1.154h7.594l5.243 6.932ZM17.61 20.644h2.039L6.486 3.24H4.298Z"/></svg>Follow the author on X</a></div>
   <div class="foot">Unofficial fan project and a tribute to QQ Speed. All models, textures and music are generated procedurally in real time.</div>
+</div>
+
+<div id="podiumUi" class="glass hidden">
+  <div class="pt" id="podiumTitle"></div>
+  <div class="pr" id="podiumRows"></div>
+  <button id="podiumSkip" type="button">Skip to results ▶</button>
 </div>
 
 <div id="celebrate" class="glass hidden">
@@ -607,6 +695,43 @@ table.res td.pos{font-family:var(--num);font-style:italic;color:var(--yellow);fo
     <div class="tabs"><div class="tab" data-tab="drivers">Drivers</div><div class="tab" data-tab="records">Track Records</div></div>
     <div id="boardBody"></div>
     <div class="btns"><button class="go sec" id="boardBack">Back to Lobby</button><button class="go sec danger" id="newBank">New Rival Bank</button></div>
+  </div>
+</div>
+
+<div id="online" class="screen hidden">
+  <div class="glass box wide onl">
+    <div id="onHome">
+      <h2>🌐 Online</h2>
+      <div class="onlwho"><label for="onName">Driver</label><input id="onName" maxlength="16" autocomplete="off" spellcheck="false"></div>
+      <div class="onlgrid">
+        <button class="onlcard" id="onQuick" type="button"><span class="ci">⚡</span><span class="cn">Quick Match</span><span class="cd">Jump into a public room and race whoever is online.</span></button>
+        <button class="onlcard" id="onCreate" type="button"><span class="ci">🔗</span><span class="cn">Private Room</span><span class="cd">Get a room code and an invite link to send to friends.</span></button>
+      </div>
+      <form class="onljoin" id="onJoinForm"><input id="onCode" maxlength="5" placeholder="CODE" autocomplete="off" spellcheck="false" aria-label="Room code"><button class="go sec" type="submit">Join</button></form>
+      <div class="onlmsg" id="onMsg"></div>
+      <div class="note">Up to 6 racers. Your car is the one picked in the lobby; you can change it in the room.</div>
+      <div class="btns"><button class="go sec" id="onBack" type="button">Back to Lobby</button></div>
+    </div>
+    <div id="onRoom" class="hidden">
+      <div class="roomhead">
+        <div><div class="rk">ROOM</div><div class="rcode" id="rmCode"></div><div class="rkind" id="rmKind"></div></div>
+        <div class="rinv"><button id="rmCopy" type="button">📋 Copy invite link</button><button id="rmShare" type="button">📤 Share</button></div>
+        <div class="rnet" id="rmNet"></div>
+      </div>
+      <div class="roomgrid">
+        <div class="card"><h3>Racers <span id="rmCount"></span></h3><div id="rmPlayers"></div></div>
+        <div class="card" id="rmSettings">
+          <h3>Track <small id="rmHostNote"></small></h3>
+          <div class="maps sm" id="rmMaps"></div>
+          <div class="optrow"><div><h3>Mode</h3><div class="opts" id="rmModes"></div></div><div><h3>Laps</h3><div class="opts" id="rmLaps"></div></div></div>
+        </div>
+        <div class="card wide"><h3>Your Car</h3><div class="cars sm" id="rmCars"></div></div>
+      </div>
+      <div class="roomacts">
+        <div class="onlmsg" id="rmMsg"></div>
+        <div class="btns"><button class="go" id="rmReady" type="button">Ready</button><button class="go" id="rmStart" type="button">Start Race</button><button class="go sec" id="rmLeave" type="button">Leave Room</button></div>
+      </div>
+    </div>
   </div>
 </div>
 

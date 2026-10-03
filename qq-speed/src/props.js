@@ -717,7 +717,7 @@ function cityProps(ctx) {
   }, 13);
   commonTrackside(ctx, {
     lamps: true,
-    billboards: ['samsung', 'redbull', 'shell', 'dhl'].map((id) => TX.brandTexture(id)),
+    billboards: ['samsung', 'chowdeck', 'redbull', 'manlago', 'shell', 'dhl'].map((id) => TX.brandTexture(id)),
   });
   addGrandstand(parent, batch, track.sample(track.length - 30, {}), -1, 60, hw, groundAt, 0x2e6fd6, track);
   addGrandstand(parent, batch, track.sample(40, {}), -1, 50, hw, groundAt, 0xe53935, track);
@@ -997,7 +997,7 @@ function aegeanProps(ctx) {
   }, 5);
   commonTrackside(ctx, {
     chevrons: true, chevronBg: '#ffd000', chevronFg: '#1a1a1a',
-    billboards: ['gulf', 'pirelli'].map((id) => TX.brandTexture(id)),
+    billboards: ['gulf', 'chowdeck', 'pirelli', 'manlago'].map((id) => TX.brandTexture(id)),
     bbStep: 260,
   });
   // Beach umbrellas
@@ -1181,7 +1181,7 @@ function egyptProps(ctx) {
   }
   commonTrackside(ctx, {
     chevrons: true, chevronBg: '#5b3f9e', chevronFg: '#f3e3b5',
-    billboards: ['shell', 'dhl'].map((id) => TX.brandTexture(id)),
+    billboards: ['shell', 'chowdeck', 'dhl', 'manlago'].map((id) => TX.brandTexture(id)),
     bbStep: 240,
   });
   return buildStartGate(parent, track, { pillar: 0xe0c08a, beam: 0xe0c08a, text: 'START · PHARAOH', bannerBg: '#5b3f9e', band: 0x3a62c9, pylon: true, sunDisk: true, h: 12 });
@@ -1262,7 +1262,7 @@ function snowProps(ctx) {
   }, 9);
   commonTrackside(ctx, {
     lamps: true, lampStep: 60,
-    billboards: ['redbull', 'michelin'].map((id) => TX.brandTexture(id)),
+    billboards: ['redbull', 'chowdeck', 'michelin', 'manlago'].map((id) => TX.brandTexture(id)),
     bbStep: 200,
   });
   addGrandstand(parent, batch, track.sample(track.length - 40, {}), 1, 70, hw, groundAt, 0xc62828, track);
@@ -1462,7 +1462,7 @@ function neonProps(ctx) {
   neonArches(ctx, 140, [0xff2d95, 0x27c7ff, 0xb36bff]);
   commonTrackside(ctx, {
     lamps: true, lampStep: 36,
-    billboards: ['sony', 'monster', 'panasonic', 'bridgestone'].map((id) => TX.brandTexture(id)),
+    billboards: ['sony', 'chowdeck', 'monster', 'manlago', 'panasonic', 'bridgestone'].map((id) => TX.brandTexture(id)),
     bbStep: 120,
     chevrons: true, chevronBg: '#ff2d95', chevronFg: '#ffffff',
   });
@@ -1547,7 +1547,7 @@ function bayProps(ctx) {
   buildSuspensionBridge(ctx, track.dAt(0, 250), 0xc0362c);
   commonTrackside(ctx, {
     lamps: true,
-    billboards: ['gulf', 'mobil1', 'castrol'].map((id) => TX.brandTexture(id)),
+    billboards: ['gulf', 'chowdeck', 'mobil1', 'manlago', 'castrol'].map((id) => TX.brandTexture(id)),
     chevrons: true, chevronBg: '#ffd000', chevronFg: '#1a1a1a',
   });
   addGrandstand(parent, batch, track.sample(track.length - 30, {}), -1, 50, hw, groundAt, 0xc0362c, track);
@@ -1603,7 +1603,7 @@ function duneProps(ctx) {
   }
   // palm-lined straights and scattered palm groves
   alongTrack(track, 22, (s) => {
-    if (track.bridge[s.i]) return;
+    if (track.bridge[s.i] || track.inTunnel(s.d)) return;
     for (const side of [-1, 1]) {
       const lat = side * (hw + 6 + rnd() * 2);
       const x = s.x + s.rx * lat, z = s.z + s.rz * lat;
@@ -1616,7 +1616,7 @@ function duneProps(ctx) {
   }
   commonTrackside(ctx, {
     lamps: true, lampStep: 60,
-    billboards: ['emirates', 'rolex', 'petronas'].map((id) => TX.brandTexture(id)),
+    billboards: ['emirates', 'chowdeck', 'rolex', 'manlago', 'petronas'].map((id) => TX.brandTexture(id)),
     chevrons: true, chevronBg: '#e0861f', chevronFg: '#ffffff',
   });
   addGrandstand(parent, batch, track.sample(track.length - 30, {}), -1, 60, hw, groundAt, 0xe0861f, track);
@@ -1694,7 +1694,7 @@ function gpProps(ctx) {
     lamps: !!P.night, lampStep: 34,
     billboards: [
       TX.billboardTexture(title, 'GRAND PRIX', '#15151e', '#e10600'),
-      ...['pirelli', 'rolex', 'dhl', 'shell'].map((id) => TX.brandTexture(id)),
+      ...['pirelli', 'chowdeck', 'rolex', 'manlago', 'dhl', 'shell'].map((id) => TX.brandTexture(id)),
     ],
     bbStep: 150,
     chevrons: true, chevronBg: '#e10600', chevronFg: '#ffffff',

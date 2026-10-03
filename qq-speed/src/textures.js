@@ -634,6 +634,62 @@ const BRANDS = {
   petronas: wordmark('#00a19c', '#ffffff', 'PETRONAS', `900 #px ${HEAVY}`),
   goodyear: wordmark('#0f2b6b', '#fdd100', 'GOODYEAR', `900 #px ${HEAVY}`, rules('#fdd100')),
   motul: wordmark('#e30613', '#ffffff', 'MOTUL', `italic 900 #px ${HEAVY}`),
+  // Chow green with a yellow locator bubble beside the lowercase wordmark
+  chowdeck(g, w, h) {
+    g.fillStyle = '#0c513f';
+    g.fillRect(0, 0, w, h);
+    g.textAlign = 'left';
+    g.textBaseline = 'alphabetic';
+    const s = fitFont(g, 'chowdeck', 'bold #px "Arial Rounded MT Bold", "Helvetica Rounded", Arial, sans-serif', Math.round(h * 0.44), w * 0.66);
+    const tw = g.measureText('chowdeck').width, r = s * 0.4;
+    const x0 = (w - (r * 2 + s * 0.22 + tw)) / 2, cx = x0 + r, cy = h / 2 - r * 0.3;
+    g.fillStyle = '#ffc501';
+    g.beginPath();
+    g.arc(cx, cy, r, Math.PI * 0.75, Math.PI * 2.25);
+    g.lineTo(cx, cy + r * 1.6);
+    g.closePath();
+    g.fill();
+    g.fillStyle = '#0c513f';
+    g.beginPath();
+    g.arc(cx, cy, r * 0.42, 0, Math.PI * 2);
+    g.fill();
+    g.fillStyle = '#ffffff';
+    g.fillText('chowdeck', x0 + r * 2 + s * 0.22, h / 2 + s * 0.3);
+  },
+  // Navy-to-blue wordmark, the purple arrow sweeping up past the GO
+  manlago(g, w, h) {
+    g.fillStyle = '#ffffff';
+    g.fillRect(0, 0, w, h);
+    g.textAlign = 'left';
+    g.textBaseline = 'alphabetic';
+    const s = fitFont(g, 'MANLAGO', `900 #px ${HEAVY}`, Math.round(h * 0.42), w * 0.88);
+    const tw = g.measureText('MANLAGO').width, x0 = (w - tw) / 2, y = h / 2 + s * 0.3;
+    const grd = g.createLinearGradient(x0, 0, x0 + tw, 0);
+    grd.addColorStop(0, '#1b1f6e');
+    grd.addColorStop(1, '#2563eb');
+    g.fillStyle = grd;
+    g.fillText('MANLAGO', x0, y);
+    const ax0 = x0 + tw * 0.6, ay0 = y - s * 0.86, ax1 = x0 + tw + s * 0.12, ay1 = y - s * 1.22;
+    const qx = (ax0 + ax1) / 2, qy = ay0 + s * 0.12;
+    g.strokeStyle = g.fillStyle = '#7c3aed';
+    g.lineWidth = s * 0.07;
+    g.lineCap = 'round';
+    g.beginPath();
+    g.moveTo(ax0, ay0);
+    g.quadraticCurveTo(qx, qy, ax1, ay1);
+    g.stroke();
+    const a = Math.atan2(ay1 - qy, ax1 - qx), L = s * 0.22;
+    g.beginPath();
+    g.moveTo(ax1 + Math.cos(a) * L * 0.4, ay1 + Math.sin(a) * L * 0.4);
+    g.lineTo(ax1 + Math.cos(a + 2.6) * L, ay1 + Math.sin(a + 2.6) * L);
+    g.lineTo(ax1 + Math.cos(a - 2.6) * L, ay1 + Math.sin(a - 2.6) * L);
+    g.closePath();
+    g.fill();
+    g.fillStyle = '#64748b';
+    g.textAlign = 'center';
+    g.font = `bold ${Math.round(s * 0.26)}px Arial, sans-serif`;
+    g.fillText('ENTERPRISE TECH SOLUTIONS', w / 2, y + s * 0.5, w * 0.9);
+  },
   monster(g, w, h) {
     g.fillStyle = '#000000';
     g.fillRect(0, 0, w, h);
@@ -656,6 +712,32 @@ function paintBrand(g, id, x, y, w, h) {
   g.clip();
   BRANDS[id](g, w, h);
   g.restore();
+}
+
+// Podium backdrop: the Grand Prix name over a step-and-repeat wall of sponsor boards
+export function podiumBackdropTexture(title, brands) {
+  return cached(`podium-${title}`, () => {
+    const W = 1024, H = 448;
+    const [c, g] = mk(W, H);
+    const grd = g.createLinearGradient(0, 0, 0, H);
+    grd.addColorStop(0, '#23232e');
+    grd.addColorStop(1, '#101016');
+    g.fillStyle = grd;
+    g.fillRect(0, 0, W, H);
+    g.fillStyle = '#e10600';
+    g.fillRect(0, 0, W, 16);
+    g.fillRect(0, H - 16, W, 16);
+    g.fillStyle = '#ffffff';
+    g.textAlign = 'center';
+    g.textBaseline = 'alphabetic';
+    const s = fitFont(g, title, `italic 900 #px ${HEAVY}`, 64, W * 0.9);
+    g.fillText(title, W / 2, 40 + s * 0.85);
+    const cols = 6, rows = 3, pw = 160, ph = 80, gap = 8;
+    const x0 = (W - cols * pw - (cols - 1) * gap) / 2, y0 = 130;
+    for (let r = 0; r < rows; r++)
+      for (let k = 0; k < cols; k++) paintBrand(g, brands[(r * 2 + k) % brands.length], x0 + k * (pw + gap), y0 + r * (ph + gap), pw, ph);
+    return toTex(c, { repeat: false });
+  });
 }
 
 export function brandTexture(id, w = 512, h = 256) {

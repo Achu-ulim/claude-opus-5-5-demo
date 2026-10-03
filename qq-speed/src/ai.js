@@ -13,6 +13,7 @@ export class AICar {
     this.rnd = rnd;
     this.isPlayer = false;
     this.personal = (rnd() - 0.5) * 0.6;
+    this.enginePitch = 0.93 + rnd() * 0.14; // each rival's engine sounds a little different
     this.s2 = {};
     this.reset(0, 0);
   }
@@ -69,6 +70,10 @@ export class AICar {
     let vt = Math.min(vmaxBase, vCorner + (this.nitroTime > 0 ? 6 : 0));
     let spinning = false;
     if (this.spin > 0) { this.spin -= dt; vt = 5; spinning = true; }
+    // a car ahead in this lane: don't drive into it while still lined up behind
+    const b = this.block, hw = tr.halfW - 2.2;
+    const blocked = b && !spinning && Math.abs(this.lat - b.lat) < 2.3 && this.blockGap < 11;
+    if (blocked) vt = Math.min(vt, Math.max(0, b.s - (this.blockGap < 6.5 ? 1.5 : 0)));
     if (!active || raceTime < this.startDelay) vt = 0;
     const before = this.s;
     // same engine curve and gear changes as the player; nitro keeps its hard kick
@@ -91,9 +96,14 @@ export class AICar {
     }
 
     // Racing line: take the inside line through corners
-    const hw = tr.halfW - 2.2;
     const inside = -Math.sign(cAhead) * clamp(Math.abs(cAhead) * 45, 0, 1) * hw * 0.8;
-    const target = clamp(inside + this.personal * hw * 0.8, -hw, hw);
+    let target = clamp(inside + this.personal * hw * 0.8, -hw, hw);
+    // pull out to pass: the side it's already leaning to, unless the wall is there
+    if (b && !spinning && this.blockGap < 20) {
+      let side = this.lat >= b.lat ? 1 : -1;
+      if (Math.abs(b.lat + side * 3.3) > hw) side = -side;
+      target = clamp(b.lat + side * 3.3, -hw, hw);
+    }
     const accLat = clamp((target - this.lat) * 2.2 - this.latV * 2.4, -14, 14);
     this.latV += accLat * dt;
     this.lat += this.latV * dt;

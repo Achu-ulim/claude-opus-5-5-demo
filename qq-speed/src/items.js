@@ -70,7 +70,7 @@ export class ItemSystem {
   dispose() { this.scene.remove(this.group); }
 
   giveRandom(r, rank, total) {
-    if (r.items.length >= 2) return;
+    if (r.isRemote || r.items.length >= 2) return; // another player's game hands out their items
     const w = rank === 1 ? WEIGHTS.lead : rank >= total - 1 ? WEIGHTS.back : WEIGHTS.mid;
     const it = pick(w, this.rnd);
     r.items.push(it);
@@ -101,44 +101,66 @@ export class ItemSystem {
         break;
       }
       case 'banana': {
-        const m = new THREE.Group();
-        const peel = new THREE.Mesh(new THREE.TorusGeometry(0.55, 0.22, 8, 16, Math.PI * 1.3), new THREE.MeshStandardMaterial({ color: 0xffd400, roughness: 0.5, emissive: 0x332a00 }));
-        peel.rotation.x = Math.PI / 2;
-        m.add(peel);
-        for (let k = 0; k < 3; k++) {
-          const leaf = new THREE.Mesh(new THREE.ConeGeometry(0.2, 0.7, 6), peel.material);
-          leaf.position.set(Math.cos(k * 2.1) * 0.5, 0.1, Math.sin(k * 2.1) * 0.5);
-          leaf.rotation.z = Math.PI / 2;
-          leaf.rotation.y = k * 2.1;
-          m.add(leaf);
-        }
         const bx = r.x - Math.sin(r.h) * 3.2, bz = r.z - Math.cos(r.h) * 3.2;
         const p = this.track.project(bx, r.y, bz, r.hint, {});
-        m.position.set(bx, p.y + p.lat * Math.sin(p.bank) + 0.25, bz);
-        m.scale.setScalar(1.4);
-        this.group.add(m);
-        this.bananas.push({ mesh: m, owner: r, age: 0 });
-        g.sfx('banana', r);
+        const id = `${r.netId || r.slot}-${(this.seq = (this.seq || 0) + 1)}`;
+        const by = p.y + p.lat * Math.sin(p.bank) + 0.25;
+        this.spawnBanana(r, id, bx, by, bz);
+        if (r.isPlayer) g.itemEvent?.({ k: 'banana', bid: id, x: bx, y: by, z: bz });
         break;
       }
       case 'missile': {
         const target = g.racerAhead(r);
-        const mesh = new THREE.Group();
-        const body = new THREE.Mesh(this.missileGeo, new THREE.MeshStandardMaterial({ color: 0xffffff, metalness: 0.5, roughness: 0.3 }));
-        mesh.add(body);
-        const nose = new THREE.Mesh(new THREE.ConeGeometry(0.22, 0.5, 10), new THREE.MeshStandardMaterial({ color: 0xff3030 }));
-        nose.rotation.x = Math.PI / 2;
-        nose.position.z = 1.05;
-        mesh.add(nose);
-        mesh.position.set(r.x, r.y + 1.8, r.z);
-        this.group.add(mesh);
-        const dir = new THREE.Vector3(Math.sin(r.h), 0, Math.cos(r.h));
-        this.missiles.push({ mesh, target, owner: r, dir, life: 6, v: Math.max(80, Math.abs(r.s) + 30) });
-        g.sfx('missile', r);
-        if (target && target.isPlayer) g.onMissileLock();
+        this.spawnMissile(r, target);
+        if (r.isPlayer) g.itemEvent?.({ k: 'missile', target: target?.netId || '' });
         break;
       }
     }
+  }
+
+  // a peel on the road, dropped here or by another player's game (id is shared between them)
+  spawnBanana(owner, id, x, y, z) {
+    const m = new THREE.Group();
+    const peel = new THREE.Mesh(new THREE.TorusGeometry(0.55, 0.22, 8, 16, Math.PI * 1.3), new THREE.MeshStandardMaterial({ color: 0xffd400, roughness: 0.5, emissive: 0x332a00 }));
+    peel.rotation.x = Math.PI / 2;
+    m.add(peel);
+    for (let k = 0; k < 3; k++) {
+      const leaf = new THREE.Mesh(new THREE.ConeGeometry(0.2, 0.7, 6), peel.material);
+      leaf.position.set(Math.cos(k * 2.1) * 0.5, 0.1, Math.sin(k * 2.1) * 0.5);
+      leaf.rotation.z = Math.PI / 2;
+      leaf.rotation.y = k * 2.1;
+      m.add(leaf);
+    }
+    m.position.set(x, y, z);
+    m.scale.setScalar(1.4);
+    this.group.add(m);
+    this.bananas.push({ mesh: m, owner, age: 0, id });
+    this.game.sfx('banana', owner);
+  }
+
+  removeBanana(id) {
+    const i = this.bananas.findIndex((b) => b.id === id);
+    if (i < 0) return;
+    this.group.remove(this.bananas[i].mesh);
+    this.bananas.splice(i, 1);
+  }
+
+  // target may be null (nobody ahead): the missile flies straight on and burns out
+  spawnMissile(r, target) {
+    const g = this.game;
+    const mesh = new THREE.Group();
+    const body = new THREE.Mesh(this.missileGeo, new THREE.MeshStandardMaterial({ color: 0xffffff, metalness: 0.5, roughness: 0.3 }));
+    mesh.add(body);
+    const nose = new THREE.Mesh(new THREE.ConeGeometry(0.22, 0.5, 10), new THREE.MeshStandardMaterial({ color: 0xff3030 }));
+    nose.rotation.x = Math.PI / 2;
+    nose.position.z = 1.05;
+    mesh.add(nose);
+    mesh.position.set(r.x, r.y + 1.8, r.z);
+    this.group.add(mesh);
+    const dir = new THREE.Vector3(Math.sin(r.h), 0, Math.cos(r.h));
+    this.missiles.push({ mesh, target, owner: r, dir, life: 6, v: Math.max(80, Math.abs(r.s) + 30) });
+    g.sfx('missile', r);
+    if (target && target.isPlayer) g.onMissileLock();
   }
 
   update(dt, racers, standings) {
@@ -172,12 +194,14 @@ export class ItemSystem {
       bn.mesh.rotation.y += dt;
       let hit = null;
       for (const r of racers) {
-        if (r === bn.owner && bn.age < 1.2) continue;
+        // another player running over a peel is their game's call: it tells us, and the peel goes then
+        if (r.isRemote || (r === bn.owner && bn.age < 1.2)) continue;
         const dx = r.x - bn.mesh.position.x, dz = r.z - bn.mesh.position.z;
         if (dx * dx + dz * dz < 4.4 && Math.abs(r.y - bn.mesh.position.y) < 2.5) { hit = r; break; }
       }
       if (hit || bn.age > 90) {
-        if (hit) this.game.hitRacer(hit, 'banana');
+        if (hit) this.game.hitRacer(hit, 'banana', bn.owner);
+        if (hit?.isPlayer && bn.id) this.game.itemEvent?.({ k: 'bananaHit', bid: bn.id });
         this.group.remove(bn.mesh);
         this.bananas.splice(i, 1);
       }
@@ -194,7 +218,7 @@ export class ItemSystem {
         m.dir.lerp(to, Math.min(1, dt * 6)).normalize();
         m.v = Math.max(m.v, Math.abs(m.target.s) + 35);
         if (dist < 2.6) {
-          this.game.hitRacer(m.target, 'missile');
+          this.game.hitRacer(m.target, 'missile', m.owner);
           this.game.fx.explode(p.x, p.y, p.z);
           this.group.remove(m.mesh);
           this.missiles.splice(i, 1);
