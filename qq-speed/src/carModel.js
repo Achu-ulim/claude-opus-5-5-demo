@@ -662,30 +662,61 @@ export function buildF1Car(team, { name = null, isPlayer = false } = {}) {
   const box = (w, h, d, mat, x, y, z) => add(new THREE.BoxGeometry(w, h, d), mat, x, y, z);
   const mirrored = (fn) => { for (const s of [-1, 1]) fn(s); };
 
-  // floor, survival cell and nose
-  box(1.5, 0.05, 4.4, carbon, 0, 0.1, -0.15);
-  box(0.62, 0.46, 2.1, body, 0, 0.42, 0.55);
-  add(new THREE.CylinderGeometry(0.1, 0.28, 1.6, 14).rotateX(Math.PI / 2), body, 0, 0.36, 2.35).scale.set(1, 0.7, 1);
-  box(0.14, 0.08, 0.3, trim, 0, 0.32, 3.1);
-  // front wing: main plane, flaps in the team trim, endplates
-  const wing = [box(1.94, 0.04, 0.44, accent, 0, 0.13, 2.95), box(1.84, 0.03, 0.24, trim, 0, 0.2, 2.86)];
-  wing[1].rotation.x = -0.35;
-  mirrored((s) => wing.push(box(0.03, 0.22, 0.52, body, s * 0.97, 0.2, 2.93)));
-  // sidepods with dark intakes and a downswept tail
+  // Tapered block: a box whose front face (at z0) and rear face (at z1) each get their own width, height and centre
+  const taper = (mat, z0, z1, f, r) => {
+    const g = new THREE.BoxGeometry(1, 1, 1);
+    const p = g.attributes.position;
+    for (let i = 0; i < p.count; i++) {
+      const front = p.getZ(i) > 0, e = front ? f : r;
+      p.setXYZ(i, p.getX(i) * e.w + (e.x || 0), p.getY(i) * e.h + e.y, front ? z0 : z1);
+    }
+    g.computeVertexNormals();
+    return add(g, mat);
+  };
+
+  // floor: pinched at the nose, wide under the sidepods, narrowing ahead of the rear tyres, trim-coloured edges
+  taper(carbon, 2.5, 1.2, { w: 0.5, h: 0.04, y: 0.1 }, { w: 1.5, h: 0.04, y: 0.09 });
+  taper(carbon, 1.2, -1.1, { w: 1.5, h: 0.04, y: 0.09 }, { w: 1.5, h: 0.04, y: 0.09 });
+  taper(carbon, -1.1, -2.45, { w: 1.1, h: 0.04, y: 0.09 }, { w: 1.0, h: 0.04, y: 0.12 });
+  mirrored((s) => taper(trim, 1.1, -1.05, { w: 0.03, h: 0.05, y: 0.11, x: s * 0.73 }, { w: 0.03, h: 0.05, y: 0.11, x: s * 0.75 }));
+  // long slim nose dropping toward the front wing, with a trim stripe along its spine
+  taper(body, 3.2, 1.5, { w: 0.16, h: 0.1, y: 0.27 }, { w: 0.5, h: 0.32, y: 0.44 });
+  taper(trim, 3.05, 1.5, { w: 0.06, h: 0.02, y: 0.33 }, { w: 0.16, h: 0.02, y: 0.61 });
+  // survival cell around the cockpit, accent band along its lower half
+  taper(body, 1.5, -0.3, { w: 0.5, h: 0.32, y: 0.44 }, { w: 0.66, h: 0.48, y: 0.42 });
+  taper(accent, 1.5, -0.3, { w: 0.52, h: 0.1, y: 0.33 }, { w: 0.68, h: 0.12, y: 0.26 });
+  // front wing: three elements sweeping up at the tips, tall endplates, pylons up to the nose
+  const wing = [];
   mirrored((s) => {
-    box(0.5, 0.4, 1.4, body, s * 0.56, 0.34, 0.0);
-    box(0.44, 0.26, 0.04, carbon, s * 0.56, 0.4, 0.71);
-    const tail = box(0.46, 0.28, 0.9, body, s * 0.5, 0.26, -1.05);
-    tail.rotation.x = 0.18;
-    box(0.06, 0.05, 0.12, carbon, s * 0.72, 0.64, 0.45); // mirror
-    box(0.03, 0.12, 0.03, carbon, s * 0.66, 0.58, 0.45);
+    wing.push(taper(accent, 3.12, 2.78, { w: 0.98, h: 0.035, y: 0.12, x: s * 0.49 }, { w: 0.98, h: 0.035, y: 0.13, x: s * 0.49 }));
+    const f1 = taper(body, 2.86, 2.62, { w: 0.9, h: 0.03, y: 0.17, x: s * 0.5 }, { w: 0.9, h: 0.03, y: 0.24, x: s * 0.5 });
+    const f2 = taper(trim, 2.7, 2.5, { w: 0.82, h: 0.03, y: 0.23, x: s * 0.54 }, { w: 0.82, h: 0.03, y: 0.32, x: s * 0.54 });
+    f1.rotation.z = s * 0.06;
+    f2.rotation.z = s * 0.1;
+    wing.push(f1, f2);
+    wing.push(taper(body, 3.18, 2.5, { w: 0.03, h: 0.16, y: 0.17, x: s * 0.99 }, { w: 0.03, h: 0.34, y: 0.27, x: s * 0.99 }));
+    wing.push(taper(carbon, 3.0, 2.9, { w: 0.03, h: 0.18, y: 0.2, x: s * 0.1 }, { w: 0.03, h: 0.18, y: 0.2, x: s * 0.1 }));
   });
-  // engine cover, airbox, shark fin
-  const cover = box(0.58, 0.42, 1.6, body, 0, 0.62, -0.95);
-  cover.rotation.x = 0.14;
-  box(0.34, 0.3, 0.55, body, 0, 1.0, -0.12);
-  box(0.24, 0.18, 0.04, carbon, 0, 1.02, 0.16);
-  box(0.03, 0.34, 1.1, trim, 0, 0.98, -1.35);
+  // sidepods: tall intake, deep undercut, then sloping down and in toward the rear (downwash style)
+  mirrored((s) => {
+    taper(body, 0.85, -0.2, { w: 0.42, h: 0.34, y: 0.42, x: s * 0.6 }, { w: 0.44, h: 0.36, y: 0.38, x: s * 0.6 });
+    taper(body, -0.2, -1.5, { w: 0.44, h: 0.36, y: 0.38, x: s * 0.6 }, { w: 0.14, h: 0.12, y: 0.2, x: s * 0.4 });
+    taper(carbon, 0.87, 0.83, { w: 0.34, h: 0.12, y: 0.5, x: s * 0.6 }, { w: 0.34, h: 0.12, y: 0.5, x: s * 0.6 }); // intake mouth
+    taper(accent, 0.6, -1.2, { w: 0.03, h: 0.1, y: 0.42, x: s * 0.82 }, { w: 0.03, h: 0.04, y: 0.24, x: s * 0.49 }); // livery flash
+    taper(carbon, 1.35, 1.0, { w: 0.02, h: 0.24, y: 0.26, x: s * 0.5 }, { w: 0.02, h: 0.2, y: 0.24, x: s * 0.58 }); // turning vane
+    box(0.06, 0.05, 0.14, carbon, s * 0.76, 0.66, 0.6); // mirror
+    box(0.03, 0.14, 0.03, carbon, s * 0.68, 0.6, 0.6);
+  });
+  // engine cover: wraps behind the driver and tapers hard into a narrow coke-bottle tail, accent band around it
+  taper(body, -0.3, -1.1, { w: 0.62, h: 0.56, y: 0.62 }, { w: 0.5, h: 0.42, y: 0.56 });
+  taper(body, -1.1, -2.2, { w: 0.5, h: 0.42, y: 0.56 }, { w: 0.18, h: 0.16, y: 0.42 });
+  taper(accent, -0.9, -1.3, { w: 0.55, h: 0.47, y: 0.59 }, { w: 0.47, h: 0.4, y: 0.555 });
+  // airbox over the driver's head with a dark inlet and the onboard camera on top
+  taper(body, 0.05, -0.6, { w: 0.28, h: 0.24, y: 0.98 }, { w: 0.44, h: 0.3, y: 0.84 });
+  taper(carbon, 0.07, 0.03, { w: 0.2, h: 0.16, y: 0.98 }, { w: 0.2, h: 0.16, y: 0.98 });
+  box(0.16, 0.05, 0.08, trim, 0, 1.13, -0.05);
+  // shark fin carrying the trim colour back to the rear wing
+  taper(trim, -0.55, -2.05, { w: 0.025, h: 0.05, y: 1.06 }, { w: 0.025, h: 0.18, y: 0.98 });
   // cockpit, driver, halo
   // open cockpit: side rails and a front coaming, so the driver and wheel show
   mirrored((s) => box(0.06, 0.08, 0.66, carbon, s * 0.24, 0.66, 0.42));
@@ -777,16 +808,21 @@ export function buildF1Car(team, { name = null, isPlayer = false } = {}) {
   const halo = add(new THREE.TorusGeometry(0.38, 0.035, 8, 24, Math.PI), carbon, 0, 0.93, 0.32);
   halo.rotation.set(-Math.PI / 2, 0, Math.PI);
   box(0.05, 0.26, 0.05, carbon, 0, 0.8, 0.72);
-  // rear wing, DRS flap, endplates, beam wing, diffuser
-  box(1.02, 0.05, 0.34, accent, 0, 1.0, -2.3);
-  box(1.02, 0.04, 0.22, trim, 0, 1.1, -2.36).rotation.x = -0.4;
-  mirrored((s) => box(0.03, 0.56, 0.6, body, s * 0.52, 0.86, -2.3));
-  box(0.9, 0.04, 0.2, carbon, 0, 0.5, -2.36);
-  box(0.06, 0.5, 0.12, carbon, 0, 0.72, -2.28);
-  box(1.0, 0.2, 0.34, carbon, 0, 0.2, -2.3);
+  // rear wing: swan-neck pylon, mainplane, DRS flap, tall endplates, beam wing, diffuser with strakes
+  const plane = (mat, z0, z1, y0, y1, h, w = 1.0) => taper(mat, z0, z1, { w, h, y: y0 }, { w, h, y: y1 });
+  plane(accent, -2.12, -2.5, 0.98, 0.94, 0.05);
+  plane(trim, -2.36, -2.6, 1.06, 1.16, 0.04, 0.98);
+  mirrored((s) => {
+    taper(body, -2.1, -2.66, { w: 0.03, h: 0.26, y: 1.0, x: s * 0.52 }, { w: 0.03, h: 0.42, y: 0.98, x: s * 0.52 });
+    taper(trim, -2.3, -2.66, { w: 0.035, h: 0.06, y: 1.18, x: s * 0.52 }, { w: 0.035, h: 0.06, y: 1.2, x: s * 0.52 });
+  });
+  taper(carbon, -2.0, -2.3, { w: 0.05, h: 0.1, y: 0.62 }, { w: 0.05, h: 0.1, y: 0.96 }); // swan neck
+  plane(carbon, -2.2, -2.4, 0.46, 0.5, 0.04, 0.86); // beam wing
+  taper(carbon, -2.0, -2.62, { w: 1.0, h: 0.06, y: 0.12 }, { w: 1.0, h: 0.06, y: 0.3 });
+  for (const x of [-0.36, -0.12, 0.12, 0.36]) taper(carbon, -2.05, -2.62, { w: 0.02, h: 0.1, y: 0.16, x }, { w: 0.02, h: 0.24, y: 0.3, x });
   // rain light plus endplate lights: all flare under braking
-  box(0.2, 0.14, 0.05, tailM, 0, 0.42, -2.5);
-  mirrored((s) => box(0.035, 0.3, 0.04, tailM, s * 0.54, 0.9, -2.58));
+  box(0.2, 0.12, 0.05, tailM, 0, 0.42, -2.5);
+  mirrored((s) => box(0.035, 0.3, 0.04, tailM, s * 0.54, 0.9, -2.68));
 
   // Wheels: big exposed tyres with wheel covers and a compound stripe; wishbones out to each hub
   const wheels = [];
@@ -819,8 +855,8 @@ export function buildF1Car(team, { name = null, isPlayer = false } = {}) {
   // single central exhaust under the rear wing
   const flameMatOuter = new THREE.MeshBasicMaterial({ color: new THREE.Color(0x3aa0ff).multiplyScalar(2.2), transparent: true, opacity: 0.8, blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false });
   const flameMatInner = new THREE.MeshBasicMaterial({ color: new THREE.Color(2.5, 2.5, 2.5), transparent: true, opacity: 0.95, blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false });
-  add(new THREE.CylinderGeometry(0.07, 0.08, 0.2, 10).rotateX(Math.PI / 2), carbon, 0, 0.62, -2.42);
-  const exhausts = [new THREE.Vector3(0, 0.62, -2.55)];
+  add(new THREE.CylinderGeometry(0.07, 0.08, 0.2, 10).rotateX(Math.PI / 2), carbon, 0, 0.44, -2.3);
+  const exhausts = [new THREE.Vector3(0, 0.44, -2.42)];
   const fg = new THREE.Group();
   const outer = new THREE.Mesh(new THREE.ConeGeometry(0.18, 1.5, 12, 1, true), flameMatOuter);
   outer.rotation.x = -Math.PI / 2;
