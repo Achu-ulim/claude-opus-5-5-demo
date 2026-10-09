@@ -46,6 +46,8 @@ export class RemoteCar {
     this.wreck = 0;
     this.pitchVis = 0;
     this.rollVis = 0;
+    this.celeb = null; // their victory celebration, played out here by the game (Game.remoteCelebrate)
+    this.proj = {};
     this._s = {};
   }
 
@@ -108,7 +110,7 @@ export class RemoteCar {
   // once per frame, now = server time (ms)
   update(dt, now) {
     const p = this.snap;
-    if (!p) return;
+    if (!p || this.celeb) return;
     const q = this.predict(now);
     if (this.fresh) {
       this.fresh = false;

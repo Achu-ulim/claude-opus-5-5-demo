@@ -23,6 +23,7 @@ export class GameAudio {
     this.ctx = null;
     this.musicOn = true;
     this.sfxOn = true;
+    this.muted = false; // everything off: engines, effects and music
     this.song = 0;
     this.nextNoteTime = 0;
     this.step = 0;
@@ -36,7 +37,7 @@ export class GameAudio {
     if (!AC) return;
     const ctx = (this.ctx = new AC());
     this.master = ctx.createGain();
-    this.master.gain.value = 0.8;
+    this.master.gain.value = this.muted ? 0 : 0.8;
     const comp = ctx.createDynamicsCompressor();
     comp.threshold.value = -12;
     comp.ratio.value = 4;
@@ -519,6 +520,11 @@ export class GameAudio {
     s.connect(fl).connect(g).connect(this.music);
     s.start(t, Math.random() * 1.5);
     s.stop(t + dur + 0.02);
+  }
+
+  setMuted(on) {
+    this.muted = on;
+    if (this.master) this.master.gain.setTargetAtTime(on ? 0 : 0.8, this.ctx.currentTime, 0.04);
   }
 
   toggleMusic() {

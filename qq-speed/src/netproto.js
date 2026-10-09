@@ -14,7 +14,9 @@ export const COUNTDOWN = 3; // seconds of 3-2-1 before GO
 // Centerline length of each track (m). A lap faster than length / MAX_SPEED can't be driven, so the server rejects it.
 export const TRACK_LEN = { city: 2355, aegean: 2499, egypt: 2430, snow: 2151, neon: 2460, bay: 2077, dune: 2455 };
 export const MAX_SPEED = 90; // m/s, above the 86 m/s every boost combined is capped at
-export const ITEM_EVENTS = ['banana', 'bananaHit', 'missile', 'hit', 'wreck'];
+// what a racer's game tells the others about its car: item use and hits, takedowns, and the winner's celebration
+export const CAR_EVENTS = ['banana', 'bananaHit', 'missile', 'hit', 'wreck', 'celeb'];
+export const CELEBRATIONS = ['burnout', 'donuts', 'fireworks', 'driver'];
 
 // Names end up in innerHTML and on canvas name tags: keep them short and plain (same rule as league.js)
 export function cleanName(s) {

@@ -104,7 +104,7 @@ export class Online {
 
   // the Online screen: the room if we're in one, otherwise quick match / private room / join
   open(msg = '') {
-    ['menu', 'result', 'cups', 'board', 'f1s'].forEach((i) => $(i).classList.add('hidden'));
+    ['menu', 'pause', 'settings', 'result', 'cups', 'board', 'f1s'].forEach((i) => $(i).classList.add('hidden'));
     $('online').classList.remove('hidden');
     $('onHome').classList.toggle('hidden', this.inRoom);
     $('onRoom').classList.toggle('hidden', !this.inRoom);

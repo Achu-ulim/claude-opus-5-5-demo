@@ -119,10 +119,26 @@ body.steer-tilt #t-left,body.steer-tilt #t-right,body.steer-swipe #t-left,body.s
 #t-center{display:none;pointer-events:auto;position:absolute;left:var(--pl);bottom:calc(var(--pb) + var(--tb)*.8 + var(--gap)*2);padding:7px 12px;border-radius:14px;font-size:12px;font-weight:700;color:#fff;background:rgba(255,255,255,.14);border:1px solid rgba(255,255,255,.35);-webkit-tap-highlight-color:transparent}
 #t-center.on{background:rgba(39,199,255,.5)}
 body.steer-swipe #t-swipe,body.steer-tilt #t-center{display:block}
+/* Brake & Steer on the right: brake and steering under the right thumb, drift/nitro/boost (and GAS, BOX) under the left */
+body.ctl-right #t-right{left:auto;right:var(--pr)}
+body.ctl-right #t-left{left:auto;right:calc(var(--pr) + var(--tb) + var(--gap))}
+body.ctl-right #t-brake{left:auto;right:calc(var(--pr) + var(--tb)*.6)}
+body.ctl-right.steer-tilt #t-brake,body.ctl-right.steer-swipe #t-brake{right:var(--pr)}
+body.ctl-right #t-swipe{left:auto;right:0}
+body.ctl-right #t-swipe span{left:auto;right:calc(var(--pr) + var(--tb) + var(--gap)*2)}
+body.ctl-right #t-center{left:auto;right:var(--pr)}
+body.ctl-right #t-drift{right:auto;left:var(--pl)}
+body.ctl-right #t-nitro{right:auto;left:calc(var(--pl) + var(--tb)*1.25 + var(--gap))}
+body.ctl-right #t-boost{right:auto;left:calc(var(--pl) + var(--tb)*.125)}
+body.ctl-right #t-swap{right:auto;left:calc(var(--pl) + var(--tb)*1.35 + var(--gap))}
+body.ctl-right #t-gas{right:auto;left:calc(var(--pl) + var(--tb)*1.3 + var(--gap))}
+body.ctl-right #t-box{right:auto;left:calc(var(--pl) + var(--tb)*.25)}
 #pausebtn{display:flex;pointer-events:auto;cursor:pointer;width:44px;align-items:center;justify-content:center;gap:5px;-webkit-tap-highlight-color:transparent}
 #pausebtn i{width:5px;height:16px;border-radius:2px;background:#fff}
 #cambtn{display:none;pointer-events:auto;cursor:pointer;width:44px;align-items:center;justify-content:center;font-size:18px;-webkit-tap-highlight-color:transparent}
 body.touch #cambtn,body.sim #cambtn{display:flex}
+#mutebtn{display:flex;pointer-events:auto;cursor:pointer;width:44px;align-items:center;justify-content:center;font-size:18px;-webkit-tap-highlight-color:transparent}
+#mutebtn.off{opacity:.65}
 #podiumUi{position:fixed;left:0;right:0;margin:0 auto;top:max(16px,env(safe-area-inset-top));z-index:12;width:min(460px,calc(100% - 24px));padding:12px 16px;text-align:center;pointer-events:auto;animation:celebIn .35s ease-out}
 #podiumUi.hidden{display:none}
 #podiumUi .pt{font-size:17px;font-weight:900;margin-bottom:6px}
@@ -159,7 +175,7 @@ body.touch .touchcard{display:block}
   body.touch #timebox .t,body.touch #lapbox .l{font-size:19px}
   body.touch #timebox .s,body.touch #lapbox .s{font-size:10px;white-space:nowrap}
   body.touch #lapbox{padding:4px 10px}
-  body.touch #pausebtn,body.touch #cambtn{width:38px}
+  body.touch #pausebtn,body.touch #cambtn,body.touch #mutebtn{width:38px}
   body.touch #rank{left:var(--pl);top:var(--pt);width:128px;padding:4px 0;font-size:11px}
   body.touch #rank .row{padding:2px 8px;gap:6px}
   body.touch #rank .row .p{width:14px}
@@ -195,6 +211,10 @@ body.touch .touchcard{display:block}
   body.touch .cs-parts .part{font-size:0;height:5px;padding:0}
   body.touch .cs-box,body.touch .cs-pit{margin-top:3px;padding:2px;font-size:8px}
 }
+/* landscape phones with Brake & Steer on the right: the left thumb's stack (F1's BOX) reaches the car status panel, so it moves under the speed */
+@media (max-height:500px) and (orientation:landscape){
+  body.touch.ctl-right #carstat{left:auto;right:var(--pr);top:calc(var(--pt) + 158px)}
+}
 /* portrait tablets: standings and minimap drop below the top bar; the charge bar sits between them */
 @media (min-width:601px) and (orientation:portrait){
   body.touch #rank,body.touch #minimap,body.touch #gaugebox{top:calc(var(--pt) + 84px)}
@@ -214,7 +234,7 @@ body.touch .touchcard{display:block}
   body.touch #timebox,body.touch #lapbox{padding:3px 6px}
   body.touch #timebox .t,body.touch #lapbox .l{font-size:15px}
   body.touch #timebox .s,body.touch #lapbox .s{font-size:9px}
-  body.touch #pausebtn,body.touch #cambtn{width:32px}
+  body.touch #pausebtn,body.touch #cambtn,body.touch #mutebtn{width:32px}
   body.touch #items{padding:3px 4px;gap:4px}
   body.touch #items .slot{width:32px;height:32px;font-size:17px}
 }
@@ -351,6 +371,8 @@ body.f1 #brakeind{top:182px}
 body.f1.touch #t-gas{display:flex}
 #t-box{--s:calc(var(--tb)*.72);display:none;right:calc(var(--pr) + var(--tb)*.25);bottom:calc(var(--pb) + var(--tb)*2.25 + var(--gap)*2);font-size:calc(var(--tb)*.18)!important;background:rgba(39,199,255,.3)!important}
 body.sim #t-box{display:flex}
+/* (#touch .tb shows every button: GAS and BOX are Formula 1 only, so hide them more specifically elsewhere) */
+body:not(.f1) #t-gas,body:not(.sim) #t-box{display:none}
 #rank .row.gap{justify-content:center;padding:0;line-height:1;color:var(--muted)}
 .go.danger{background:linear-gradient(180deg,#ff6b6b,#c62828);box-shadow:0 6px 0 #7f1414}
 .box.wide{width:min(860px,100%)}
@@ -366,6 +388,14 @@ body.sim #t-box{display:flex}
 .resume{padding:12px;border-radius:12px;background:rgba(255,210,58,.12);border:1px solid rgba(255,210,58,.45);margin-bottom:12px;font-size:14px}
 .resume .btns .go{padding:8px 26px;font-size:16px}
 .note{font-size:12px;color:var(--muted);margin-top:6px}
+.setbox{width:min(580px,100%)}
+.setbox h2{text-align:center}
+.setbox .btns{justify-content:center}
+.setrow{margin-top:14px}
+.setrow h3{margin-bottom:8px}
+.sens{display:flex;align-items:center;gap:10px;font-size:12px;color:var(--muted)}
+.sens input{flex:1;min-width:0;pointer-events:auto;cursor:pointer;accent-color:var(--yellow);touch-action:none;height:28px}
+.sens b{min-width:46px;text-align:right;color:#fff;font-size:15px}
 .tabs{display:flex;gap:8px;justify-content:center;margin-bottom:10px}
 .tab{cursor:pointer;padding:6px 18px;border-radius:16px;border:1px solid rgba(255,255,255,.2);font-size:13px}
 .tab.sel{background:linear-gradient(135deg,var(--orange),#ffb13b);border-color:#ffd48a;font-weight:800}
@@ -464,6 +494,7 @@ body.online table.race th:nth-child(5),body.online table.race td:nth-child(5){di
   .season{grid-template-columns:1fr}
   .menubtns .go{flex:1 1 0;min-width:0;max-width:200px;white-space:nowrap;padding:10px 6px;font-size:14px;letter-spacing:0;box-shadow:0 4px 0 #b34a00}
   .menubtns .go.cup{box-shadow:0 4px 0 #4b1fa0}.menubtns .go.sec{box-shadow:0 4px 0 #0b3a9a}.menubtns .go.online{box-shadow:0 4px 0 #075c40}
+  .menubtns .go.gear{flex:0 0 auto;padding:10px 12px}.menubtns .go.gear span{display:none}
   .card{padding:10px 12px}
   .box{padding:14px 12px}
   .box h2{font-size:22px;margin-bottom:8px;letter-spacing:1px}
@@ -481,11 +512,12 @@ body.online table.race th:nth-child(5),body.online table.race td:nth-child(5){di
   .cupcard .ci{font-size:30px}
   .cupcard .cd{min-height:0}
 }
-/* lobby buttons: a two-column block on narrow phones; with Online showing, the leaderboard spans the bottom row */
+/* lobby buttons: a two-column block on narrow phones; without Online, Settings spans the bottom row */
 @media (max-width:520px){
   .menubtns{display:grid;grid-template-columns:1fr 1fr}
   .menubtns .go{max-width:none}
-  #onlinebtn:not(.hidden) ~ #boardbtn{grid-column:1/-1}
+  .menubtns .go.gear span{display:inline}
+  #onlinebtn.hidden ~ #setbtn{grid-column:1/-1}
 }
 @media (max-height:500px){
   .logo{font-size:32px}
@@ -533,6 +565,7 @@ table.res td.pos{font-family:var(--num);font-style:italic;color:var(--yellow);fo
     <div id="lapbox" class="glass"><div class="l" id="lap">1/3</div><div class="s">LAP</div></div>
     <div id="pausebtn" class="glass" role="button" aria-label="Pause" title="Pause (Esc)"><i></i><i></i></div>
     <div id="cambtn" class="glass" role="button" aria-label="Camera" title="Camera (C)">🎥</div>
+    <div id="mutebtn" class="glass" role="button" aria-label="Mute sound" title="Sound on/off (N)">🔊</div>
     <div id="timebox" class="glass"><div class="t" id="time">00:00.00</div><div class="s" id="best">Best Lap --:--.--</div></div>
     <div id="items" class="glass hidden">
       <div class="slot first" id="slot0"></div><div class="slot" id="slot1"></div>
@@ -567,7 +600,7 @@ table.res td.pos{font-family:var(--num);font-style:italic;color:var(--yellow);fo
     <div>Tap <b>↑</b> or <b>W</b> as the car straightens out of a drift = Mini Boost</div>
     <div><b>Ctrl</b> Nitro / Item (<b>Space</b> also works) <b>Alt</b> Swap items</div>
     <div>Mini Boost + Nitro = Double Boost · Tap <b>↑</b> on landing = Landing Boost</div>
-    <div><b>R</b>Reset <b>C</b>Camera <b>M</b>Music <b>PgUp/PgDn</b>Song <b>Esc</b>Pause</div>
+    <div><b>R</b>Reset <b>C</b>Camera <b>M</b>Music <b>N</b>Sound <b>PgUp/PgDn</b>Song <b>Esc</b>Pause</div>
     <div class="close"><b>H</b> Hide/show this panel</div>
   </div>
 </div>
@@ -596,8 +629,6 @@ table.res td.pos{font-family:var(--num);font-style:italic;color:var(--yellow);fo
       <div class="optrow">
         <div><h3>Laps</h3><div class="opts" id="laps"></div></div>
         <div><h3>Opponents</h3><div class="opts" id="diff"></div></div>
-        <div><h3>Graphics</h3><div class="opts" id="quality"></div></div>
-        <div id="steerGroup" class="hidden"><h3>Steering</h3><div class="opts" id="steer"></div><div class="note" id="steerNote"></div></div>
       </div>
     </div>
     <div class="glass card">
@@ -607,14 +638,15 @@ table.res td.pos{font-family:var(--num);font-style:italic;color:var(--yellow);fo
     </div>
     <div class="glass card touchcard" style="grid-column:1/-1">
       <h3>Touch Controls</h3>
-      <div class="tip">Steer with <b>Tilt</b> (lean the device), <b>Swipe</b> (drag on the left half of the screen) or on-screen <b>Buttons</b>. The car accelerates by itself.
+      <div class="tip">Steer with <b>Tilt</b> (lean the device), <b>Swipe</b> (drag on the steering half of the screen) or on-screen <b>Buttons</b>. The car accelerates by itself.
+        In ⚙️ <b>Settings</b> you can change the steering, its sensitivity, and which thumb brakes and steers.
         Hold <b>Drift</b> while steering to slide and fill the charge bar, tap <b>Nitro</b> to spend it, and tap <b>Boost</b> the moment the car straightens after a drift.
-        Tap the <b>pause</b> button at the top to pause or reset your car.</div>
+        Tap the <b>pause</b> button at the top to pause or reset your car, and 🔊 to mute or unmute the sound.</div>
     </div>
     <div class="glass card keycard" style="grid-column:1/-1">
       <h3>Controls (PC client defaults)</h3>
       <div class="keylist">
-        <b>↑</b>Accelerate&emsp;<b>↓</b>Brake/Reverse&emsp;<b>←</b><b>→</b>Steer&emsp;<b>Shift</b>+Direction Drift&emsp;<b>Ctrl</b> Nitro/Item&emsp;<b>Alt</b> Swap items&emsp;<b>W</b> Mini Boost&emsp;<b>R</b> Reset&emsp;<b>C</b> Camera&emsp;<b>M</b> Music&emsp;<b>PgUp/PgDn</b> Song&emsp;<b>Esc</b> Pause
+        <b>↑</b>Accelerate&emsp;<b>↓</b>Brake/Reverse&emsp;<b>←</b><b>→</b>Steer&emsp;<b>Shift</b>+Direction Drift&emsp;<b>Ctrl</b> Nitro/Item&emsp;<b>Alt</b> Swap items&emsp;<b>W</b> Mini Boost&emsp;<b>R</b> Reset&emsp;<b>C</b> Camera&emsp;<b>M</b> Music&emsp;<b>N</b> Sound on/off&emsp;<b>PgUp/PgDn</b> Song&emsp;<b>Esc</b> Pause
       </div>
       <div class="tip">Tips: drifting fills the charge bar, and a full bar gives you 1 nitro (up to 2). After releasing Shift, tap ↑ the moment the car straightens to trigger a Mini Boost (the sooner the better; nail it for a “Perfect”).
         Stack a Mini Boost with Nitro for a “Double Boost”. Press ↑ the instant “GO” appears for a rocket start, and tap ↑ as you land from a jump for a Landing Boost. Blue arrows are boost pads.</div>
@@ -626,6 +658,7 @@ table.res td.pos{font-family:var(--num);font-style:italic;color:var(--yellow);fo
     <button class="go cup" id="cupbtn">🏆 Tournament</button>
     <button class="go f1" id="f1btn">🏁 Formula 1</button>
     <button class="go sec" id="boardbtn">Leaderboard</button>
+    <button class="go sec gear" id="setbtn" aria-label="Settings" title="Settings">⚙️<span> Settings</span></button>
   </div>
   <div class="mlinks"><button id="installbtn" class="hidden" type="button">📲 Install app</button><span id="iosinstall" class="hidden">📲 Install: tap Share, then “Add to Home Screen”</span><a href="https://x.com/agbama_achu" target="_blank" rel="noopener noreferrer"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18.901 1.153h3.68l-8.04 9.19L24 22.846h-7.406l-5.8-7.584-6.638 7.584H.474l8.6-9.83L0 1.154h7.594l5.243 6.932ZM17.61 20.644h2.039L6.486 3.24H4.298Z"/></svg>Follow the author on X</a></div>
   <div class="foot">Unofficial fan project and a tribute to QQ Speed. All models, textures and music are generated procedurally in real time.</div>
@@ -647,12 +680,28 @@ table.res td.pos{font-family:var(--num);font-style:italic;color:var(--yellow);fo
 
 <div id="loading" class="screen hidden"><div style="font-size:20px;font-weight:800;letter-spacing:3px" id="loadtxt">Generating track…</div><div class="bar"><i></i></div></div>
 
+<div id="settings" class="screen hidden">
+  <div class="glass box setbox">
+    <h2>⚙️ Settings</h2>
+    <div class="setrow"><h3>Graphics</h3><div class="opts" id="quality"></div></div>
+    <div class="setrow"><h3>Sound</h3><div class="opts" id="sound"></div></div>
+    <div class="setrow"><h3>Steering Sensitivity</h3>
+      <div class="sens"><span>Low</span><input type="range" id="sens" min="50" max="150" step="5" aria-label="Steering sensitivity"><span>High</span><b id="sensVal">100%</b></div>
+      <div class="note" id="sensNote"></div>
+    </div>
+    <div class="setrow hidden" id="steerGroup"><h3>Steering</h3><div class="opts" id="steer"></div><div class="note" id="steerNote"></div></div>
+    <div class="setrow hidden" id="sideGroup"><h3>Brake &amp; Steer</h3><div class="opts" id="side"></div><div class="note">The thumb that brakes and steers. Drift, Nitro and Boost go under the other one.</div></div>
+    <div class="btns"><button class="go sec" id="setDone">Done</button></div>
+  </div>
+</div>
+
 <div id="pause" class="screen hidden">
   <div class="glass box">
     <h2>Paused</h2>
     <div class="btns">
       <button class="go" id="resume">Resume</button>
       <button class="go sec" id="resetcar">Reset Car</button>
+      <button class="go sec" id="pauseSet">Settings</button>
       <button class="go sec" id="restart">Restart</button>
       <button class="go sec" id="quit">Back to Lobby</button>
     </div>

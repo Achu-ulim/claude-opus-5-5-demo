@@ -9,6 +9,7 @@ const TILT_FULL = 20; // degrees of lean for full steering lock: tilt all the wa
 export class Input {
   constructor() {
     this.steerMode = 'buttons'; // 'buttons' | 'tilt' | 'swipe'
+    this.sens = 1; // steering sensitivity, 0.5..1.5 (Settings): tilt and swipe need less movement, keys reach full lock faster
     this.tiltRaw = null;
     this.tiltZero = 0;
     this.swipeAxis = 0;
@@ -52,6 +53,7 @@ export class Input {
       right: steer < -0.3,
       steer,
       analog: digital === 0 && this.steerMode !== 'buttons',
+      sens: this.sens,
       shift: this.has('ShiftLeft', 'ShiftRight') || t.shift,
       upPressed: this.was('ArrowUp', 'TouchBoost'),
       wPressed: this.was('KeyW'),
@@ -70,7 +72,7 @@ export class Input {
     if (this.steerMode === 'swipe') return this.swipeAxis;
     if (this.steerMode !== 'tilt' || this.tiltRaw == null) return 0;
     const deg = this.tiltRaw - this.tiltZero;
-    const m = Math.min(1, Math.max(0, Math.abs(deg) - TILT_DEAD) / (TILT_FULL - TILT_DEAD));
+    const m = Math.min(1, (Math.max(0, Math.abs(deg) - TILT_DEAD) * this.sens) / (TILT_FULL - TILT_DEAD));
     return Math.sign(deg) * Math.pow(m, 1.1); // near-linear: the car turns as much as you tilt
   }
 
@@ -106,7 +108,8 @@ export class Input {
   bindSwipe(el) {
     const knob = el.querySelector('i');
     let id = null, x0 = 0;
-    const range = () => Math.max(50, Math.min(140, window.innerWidth * 0.1));
+    // drag (px) for full lock; more sensitive steering needs less
+    const range = () => Math.max(50, Math.min(140, window.innerWidth * 0.1)) / this.sens;
     el.addEventListener('touchstart', (e) => {
       e.preventDefault();
       if (id != null) return;

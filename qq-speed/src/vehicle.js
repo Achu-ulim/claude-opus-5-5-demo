@@ -147,8 +147,9 @@ export class PlayerCar {
     // Smoothed steering
     // analog from tilt/swipe (+ = left), or -1/0/1 from keys and buttons
     const steerT = inp.steer ?? (inp.left ? 1 : 0) - (inp.right ? 1 : 0);
-    // tilt/swipe are already smooth and proportional, so the car follows them faster than keys
-    this.steer = damp(this.steer, steerT, inp.analog ? 20 : 12, dt);
+    // tilt/swipe are already smooth and proportional, so the car follows them faster than keys;
+    // keys and buttons swing to full lock quicker the more sensitive the steering is set
+    this.steer = damp(this.steer, steerT, inp.analog ? 20 : 12 * (inp.sens ?? 1), dt);
 
     // Boost states
     let vmax = T.vmax, acc = T.accel, kick = false;

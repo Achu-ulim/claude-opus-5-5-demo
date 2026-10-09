@@ -5,7 +5,7 @@
 import { DurableObject } from 'cloudflare:workers';
 import {
   MAX_PLAYERS, CODE_LEN, CODE_CHARS, RACE_MAPS, RACE_MODES, LAP_OPTIONS, CAR_COUNT, FINISH_GRACE, COUNTDOWN,
-  TRACK_LEN, MAX_SPEED, ITEM_EVENTS, validSnap, cleanName, normCode,
+  TRACK_LEN, MAX_SPEED, CAR_EVENTS, CELEBRATIONS, validSnap, cleanName, normCode,
 } from '../../src/netproto.js';
 
 const LOBBY_GRACE = 10_000; // ms a dropped player keeps their seat in the lobby (page reload, flaky wifi)
@@ -16,7 +16,10 @@ const AUTO_START = 5_000; // public rooms start by themselves this long after ev
 const EMPTY_TTL = 60_000; // ms an empty room is kept before its storage is wiped
 const MAX_MSG = 2048;
 const RATE = 40, BURST = 80; // messages per second per socket
-const EVENTS = new Set(ITEM_EVENTS);
+const EVENTS = new Set(CAR_EVENTS);
+// once everyone is in, the race waits this long for the winner to start celebrating (their game offers the choice
+// 1.2 s after the line and for 12 s at most), so the others' games hear about it and can show it before the results
+const CELEB_WAIT = 16_000;
 
 const rid = (n) => {
   const b = crypto.getRandomValues(new Uint8Array(n));
@@ -187,7 +190,7 @@ export class Room extends DurableObject {
     const t = [];
     for (const p of this.players) if (!p.connected) t.push(p.goneAt + (this.entry(p.id) ? RACE_GRACE : LOBBY_GRACE));
     if (R.phase === 'loading') t.push(R.race.loadDeadline);
-    if (R.phase === 'race') { t.push(R.race.hardEndAt); if (R.race.endAt) t.push(R.race.endAt); }
+    if (R.phase === 'race') { t.push(R.race.hardEndAt); if (R.race.endAt) t.push(R.race.endAt); if (R.race.celebBy) t.push(R.race.celebBy); }
     if (R.phase === 'lobby' && R.autoStartAt) t.push(R.autoStartAt);
     if (!this.players.length) t.push(R.emptySince + EMPTY_TTL);
     if (t.length) await this.ctx.storage.setAlarm(Math.max(Date.now() + 20, Math.min(...t)));
@@ -209,6 +212,8 @@ export class Room extends DurableObject {
     }
     for (const p of this.players) if (!p.connected && now - p.goneAt >= (this.entry(p.id) ? RACE_GRACE : LOBBY_GRACE)) this.removePlayer(p.id);
     if (R.phase === 'loading' && now >= R.race.loadDeadline) this.beginRace();
+    // the winner never started a celebration: stop waiting for one
+    if (R.phase === 'race' && R.race.celebBy && now >= R.race.celebBy) { R.race.celebBy = 0; this.checkRaceOver(); }
     if (R.phase === 'race' && (now >= R.race.hardEndAt || (R.race.endAt && now >= R.race.endAt))) this.endRace();
     if (R.phase === 'lobby' && R.autoStartAt && now >= R.autoStartAt) {
       R.autoStartAt = 0;
@@ -242,12 +247,20 @@ export class Room extends DurableObject {
       }
       case 'ev': {
         if (!this.entry(p.id) || R.phase !== 'race' || !EVENTS.has(m.k)) return;
-        const ev = { t: 'ev', id: p.id, k: m.k };
-        for (const f of ['x', 'y', 'z']) if (Number.isFinite(m[f])) ev[f] = Math.round(m[f] * 100) / 100;
-        for (const f of ['bid', 'by', 'target', 'kind']) if (typeof m[f] === 'string' && m[f].length <= 24) ev[f] = m[f];
-        const s = JSON.stringify(ev);
-        for (const o of this.sockets((id) => id !== p.id && this.entry(id))) this.sendTo(o, s);
-        return;
+        // only the winner celebrates; their game reports the start of the show, or that they skipped it
+        const celeb = m.k === 'celeb';
+        if (celeb && p.id !== R.race.winner) return;
+        if (!celeb || CELEBRATIONS.includes(m.kind)) {
+          const ev = { t: 'ev', id: p.id, k: m.k };
+          for (const f of ['x', 'y', 'z', 'h']) if (Number.isFinite(m[f])) ev[f] = Math.round(m[f] * 100) / 100;
+          for (const f of ['bid', 'by', 'target', 'kind']) if (typeof m[f] === 'string' && m[f].length <= 24) ev[f] = m[f];
+          const s = JSON.stringify(ev);
+          for (const o of this.sockets((id) => id !== p.id && this.entry(id))) this.sendTo(o, s);
+        }
+        if (!celeb || !R.race.celebBy) return;
+        R.race.celebBy = 0;
+        this.checkRaceOver();
+        return this.commit(false);
       }
       case 'set':
         if (typeof m.name === 'string') p.name = this.uniqueName(cleanName(m.name) || p.name, p.id);
@@ -444,7 +457,12 @@ export class Room extends DurableObject {
     if (done) {
       e.finished = true;
       e.time = Math.round(time * 1000) / 1000;
-      if (!R.race.firstAt) { R.race.firstAt = Date.now(); R.race.endAt = R.race.firstAt + FINISH_GRACE * 1000; }
+      if (!R.race.firstAt) {
+        R.race.firstAt = Date.now();
+        R.race.endAt = R.race.firstAt + FINISH_GRACE * 1000;
+        R.race.winner = p.id;
+        R.race.celebBy = R.race.firstAt + CELEB_WAIT;
+      }
     }
     const place = done ? Object.values(R.race.entries).filter((x) => x.finished).length : 0;
     this.send({ t: 'lap', seq: R.seq, id: p.id, lap, time: e.time || time, lapT: e.lapTimes[e.lapTimes.length - 1], finished: done, place, endAt: R.race.endAt });
@@ -453,7 +471,10 @@ export class Room extends DurableObject {
 
   checkRaceOver() {
     const R = this.room;
-    if (R.phase === 'race' && Object.values(R.race.entries).every((e) => e.finished || e.out)) this.endRace();
+    if (R.phase !== 'race' || !Object.values(R.race.entries).every((e) => e.finished || e.out)) return;
+    // everyone is in, but the winner hasn't started celebrating yet: the rest of the room should get to see it
+    if (R.race.celebBy > Date.now() && this.entry(R.race.winner)) return;
+    this.endRace();
   }
 
   endRace() {
