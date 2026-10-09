@@ -314,13 +314,10 @@ class Game {
     opts($('side'), SIDES, 'side', (x) => x.name);
     $('steerGroup').classList.toggle('hidden', !IS_TOUCH);
     $('sideGroup').classList.toggle('hidden', !IS_TOUCH);
-    this.renderCarCards();
+    this.updateCarThumbs();
     const specs = carSpecs();
-<<<<<<< Updated upstream
     // the live demo shows the car itself, so the lobby only needs a dot per car
     $('skins').innerHTML = CARS.map((c, i) => `<button type="button" class="carcard" data-i="${i}" aria-label="${c.name}" title="${c.name}"></button>`).join('');
-=======
->>>>>>> Stashed changes
     const SPEC_ROWS = [['speed', 'Top Speed'], ['accel', '0-100 km/h'], ['handling', 'Handling'], ['drift', 'Drift'], ['nitro', 'Nitro']];
     const refresh = () => {
       mapsEl.querySelectorAll('.map').forEach((e) => e.classList.toggle('sel', e.dataset.id === S.map));
@@ -372,7 +369,6 @@ class Game {
     bind('side', (i) => (S.side = SIDES[i].id));
     $('mutebtn').addEventListener('click', () => this.setMuted(!S.muted));
     bind('skins', (i) => { S.skin = i; if (this.state === 'menu') this.startDemo(); });
-<<<<<<< Updated upstream
     this.pickCar = (d) => {
       S.skin = (S.skin + d + CARS.length) % CARS.length;
       refresh();
@@ -381,10 +377,8 @@ class Game {
     };
     $('carPrev').addEventListener('click', () => this.pickCar(-1));
     $('carNext').addEventListener('click', () => this.pickCar(1));
-    this.buildSettings();
-=======
     $('custombtn').addEventListener('click', () => this.garage.open(S.skin, 'menu'));
->>>>>>> Stashed changes
+    this.buildSettings();
     $('start').addEventListener('click', () => this.startRace());
     $('resume').addEventListener('click', () => this.togglePause());
     $('restart').addEventListener('click', () => { $('pause').classList.add('hidden'); this.startRace(this.race); });
@@ -473,43 +467,24 @@ class Game {
     return ok;
   }
 
-<<<<<<< Updated upstream
-=======
   // ---------- Garage looks ----------
   lookFor(carIndex) { return cleanLook(this.settings.looks?.[CARS[carIndex]?.id]); }
 
-  // car cards in the lobby, pictured the way the player has made each car
-  renderCarCards() {
+  // car pictures for the online room, drawn the way the player has made each car
+  updateCarThumbs() {
     let thumbs = [];
     try { thumbs = renderCarThumbs(this.settings.looks); } catch { /* previews are optional */ }
     this.carThumbs = thumbs;
-    const hex = (c) => '#' + c.toString(16).padStart(6, '0');
-    $('skins').innerHTML = CARS.map((c, i) => `<div class="carcard${i === this.settings.skin ? ' sel' : ''}" data-i="${i}">${thumbs[i] ? `<img src="${thumbs[i]}" alt="${c.name}">` : `<div class="swatch" style="background:${hex(this.lookFor(i).paint ?? c.body)}"></div>`}<div class="cn">${c.name}</div><div class="cc">${c.cls}</div></div>`).join('');
   }
 
-  // the garage closed: new pictures, and online the room learns the new look
+  // the garage closed: new pictures, the lobby demo shows the new look, and online the room learns it
   onLooksChanged() {
-    this.renderCarCards();
+    this.updateCarThumbs();
     this.online.renderCars();
     this.online.sendLook();
+    if (this.state === 'menu') this.startDemo();
   }
 
-  // Settings opens over the lobby or the pause menu, and goes back to whichever it came from
-  openSettings() {
-    this.audio.play('click');
-    this.settingsFrom = $('pause').classList.contains('hidden') ? 'menu' : 'pause';
-    $(this.settingsFrom).classList.add('hidden');
-    $('settings').classList.remove('hidden');
-  }
-
-  closeSettings() {
-    if ($('settings').classList.contains('hidden')) return;
-    this.audio.play('click');
-    $('settings').classList.add('hidden');
-    $(this.settingsFrom).classList.remove('hidden');
-  }
-
->>>>>>> Stashed changes
   // sound on/off for everything (engines, effects, music), remembered between visits
   setMuted(on) {
     this.settings.muted = on;
@@ -603,17 +578,13 @@ class Game {
   }
 
   onKey(code) {
-<<<<<<< Updated upstream
     if (this.closeSettings && !$('settings').classList.contains('hidden')) {
       if (code === 'Escape') this.closeSettings();
       return;
     }
+    if (code === 'Escape' && this.garage.isOpen) return this.garage.close();
     const inLobby = this.state === 'menu' && !$('menu').classList.contains('hidden') && document.activeElement?.tagName !== 'INPUT';
     if (inLobby && (code === 'ArrowLeft' || code === 'ArrowRight')) return this.pickCar?.(code === 'ArrowLeft' ? -1 : 1);
-=======
-    if (code === 'Escape' && !$('settings').classList.contains('hidden')) return this.closeSettings();
-    if (code === 'Escape' && this.garage.isOpen) return this.garage.close();
->>>>>>> Stashed changes
     if (code === 'Escape' || code === 'KeyP') {
       if (this.state === 'race' || this.state === 'countdown' || this.state === 'paused') this.togglePause();
     } else if (code === 'KeyC') this.cycleCamera();
@@ -788,7 +759,9 @@ class Game {
       } else {
         const rival = race.rivals[ai % race.rivals.length];
         const car = race.f1 ? TEAMS[rival.team] : CARS[rival.car];
-        const model = race.f1 ? buildF1Car(car, { name: rival.name }) : buildCar(car, { name: rival.name });
+        // the lobby demo follows the first car, which is the selected one: show it the way the player made it
+        const look = !withPlayer && ai === 0 ? this.lookFor(rival.car) : undefined;
+        const model = race.f1 ? buildF1Car(car, { name: rival.name }) : buildCar(car, { name: rival.name, look });
         // talent decides where in the difficulty's skill range a rival sits, with a little race-day luck
         const skill = lerp(diff.skill[0], diff.skill[1], withPlayer ? clamp(rival.talent * 0.75 + rnd() * 0.25, 0, 1) : 0.8 + rnd() * 0.2);
         r = new AICar(this.track, model, rival.name, skill, rnd, race.f1 ? teamTune(car) : car.tune);

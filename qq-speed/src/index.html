@@ -308,6 +308,9 @@ body:has(#menu:not(.hidden)) #clinks{display:none}
 #menu .cardots .carcard:hover::before{background:rgba(255,255,255,.6)}
 #menu .cardots .carcard.sel{width:36px}
 #menu .cardots .carcard.sel::before{width:28px;background:var(--bolt)}
+#menu .custbtn{width:auto;margin:0;display:flex;align-items:center;gap:8px;height:44px;padding:0 20px;border-radius:22px;border:1px solid var(--edge);background:var(--ink2);color:var(--cream);font:700 14px var(--body);letter-spacing:1px;text-transform:uppercase;transition:border-color .15s,background .15s}
+#menu .custbtn:hover{border-color:var(--bolt);background:rgba(30,33,50,.9)}
+#menu .custbtn svg{width:18px;height:18px;color:var(--bolt)}
 #carinfo{width:100%;max-width:580px;display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:12px;padding:14px 16px;border-radius:16px;background:var(--ink2);border:1px solid var(--edge);text-align:left}
 #carinfo .spec{display:flex;flex-direction:column;align-items:stretch;gap:6px;margin:0;font-size:11px}
 #carinfo .spec .sk{width:auto;font-weight:700;letter-spacing:1.2px;color:var(--dim);text-transform:uppercase;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -526,8 +529,6 @@ body:not(.f1) #t-gas,body:not(.sim) #t-box{display:none}
 .resume{padding:12px;border-radius:12px;background:rgba(255,210,58,.12);border:1px solid rgba(255,210,58,.45);margin-bottom:12px;font-size:14px}
 .resume .btns .go{padding:8px 26px;font-size:16px}
 .note{font-size:12px;color:var(--muted);margin-top:6px}
-<<<<<<< Updated upstream
-=======
 .custbtn{pointer-events:auto;cursor:pointer;margin-top:10px;width:100%;padding:9px 12px;border-radius:10px;border:1px solid rgba(255,210,58,.55);background:rgba(255,210,58,.12);color:#ffe9a6;font:800 14px var(--ui);letter-spacing:.5px}
 .custbtn:hover{background:rgba(255,210,58,.22)}
 .garbox{width:min(1040px,100%);padding:16px 18px}
@@ -562,15 +563,6 @@ body:not(.f1) #t-gas,body:not(.sim) #t-box{display:none}
   .garview{height:calc(100vh - 150px);position:sticky;top:0}
   .garopts{max-height:calc(100vh - 150px);overflow:auto}
 }
-.setbox{width:min(580px,100%)}
-.setbox h2{text-align:center}
-.setbox .btns{justify-content:center}
-.setrow{margin-top:14px}
-.setrow h3{margin-bottom:8px}
-.sens{display:flex;align-items:center;gap:10px;font-size:12px;color:var(--muted)}
-.sens input{flex:1;min-width:0;pointer-events:auto;cursor:pointer;accent-color:var(--yellow);touch-action:none;height:28px}
-.sens b{min-width:46px;text-align:right;color:#fff;font-size:15px}
->>>>>>> Stashed changes
 .tabs{display:flex;gap:8px;justify-content:center;margin-bottom:10px}
 .tab{cursor:pointer;padding:6px 18px;border-radius:16px;border:1px solid rgba(255,255,255,.2);font-size:13px}
 .tab.sel{background:linear-gradient(135deg,var(--orange),#ffb13b);border-color:#ffd48a;font-weight:800}
@@ -794,34 +786,14 @@ table.res td.pos{font-family:var(--num);font-style:italic;color:var(--yellow);fo
         <h1 id="carName"></h1>
         <p id="carDesc"></p>
       </div>
-<<<<<<< Updated upstream
       <div class="carfoot">
         <div class="carnav">
           <button class="round big" id="carPrev" type="button" aria-label="Previous car"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg></button>
           <div class="cardots" id="skins"></div>
           <button class="round big" id="carNext" type="button" aria-label="Next car"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg></button>
         </div>
+        <button class="custbtn" id="custombtn" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a9 9 0 0 0 0 18c1.1 0 2-.9 2-2 0-.5-.2-1-.5-1.3-.3-.4-.5-.8-.5-1.3 0-1.1.9-2 2-2h2.4A4.6 4.6 0 0 0 21 9.8C21 6 17 3 12 3z"/><circle cx="7.5" cy="11.5" r="1.3" class="f"/><circle cx="10.5" cy="7.5" r="1.3" class="f"/><circle cx="15" cy="7.5" r="1.3" class="f"/></svg>Customize</button>
         <div id="carinfo"></div>
-=======
-    </div>
-    <div class="glass card">
-      <h3>Select Car</h3>
-      <div class="cars" id="skins"></div>
-      <div id="carinfo"></div>
-      <button class="custbtn" id="custombtn" type="button">🎨 Customize this car</button>
-    </div>
-    <div class="glass card touchcard" style="grid-column:1/-1">
-      <h3>Touch Controls</h3>
-      <div class="tip">Steer with <b>Tilt</b> (lean the device), <b>Swipe</b> (drag on the steering half of the screen) or on-screen <b>Buttons</b>. The car accelerates by itself.
-        In ⚙️ <b>Settings</b> you can change the steering, its sensitivity, and which thumb brakes and steers.
-        Hold <b>Drift</b> while steering to slide and fill the charge bar, tap <b>Nitro</b> to spend it, and tap <b>Boost</b> the moment the car straightens after a drift.
-        Tap the <b>pause</b> button at the top to pause or reset your car, and 🔊 to mute or unmute the sound.</div>
-    </div>
-    <div class="glass card keycard" style="grid-column:1/-1">
-      <h3>Controls (PC client defaults)</h3>
-      <div class="keylist">
-        <b>↑</b>Accelerate&emsp;<b>↓</b>Brake/Reverse&emsp;<b>←</b><b>→</b>Steer&emsp;<b>Shift</b>+Direction Drift&emsp;<b>Ctrl</b> Nitro/Item&emsp;<b>Alt</b> Swap items&emsp;<b>W</b> Mini Boost&emsp;<b>R</b> Reset&emsp;<b>C</b> Camera&emsp;<b>M</b> Music&emsp;<b>N</b> Sound on/off&emsp;<b>PgUp/PgDn</b> Song&emsp;<b>Esc</b> Pause
->>>>>>> Stashed changes
       </div>
     </section>
 
@@ -912,8 +884,6 @@ table.res td.pos{font-family:var(--num);font-style:italic;color:var(--yellow);fo
 
 <div id="loading" class="screen hidden"><div style="font-size:20px;font-weight:800;letter-spacing:3px" id="loadtxt">Generating track…</div><div class="bar"><i></i></div></div>
 
-<<<<<<< Updated upstream
-=======
 <div id="garage" class="screen hidden">
   <div class="glass box garbox">
     <div class="garhead"><h2>🎨 Garage</h2><div class="garcar" id="gCar"></div></div>
@@ -935,22 +905,6 @@ table.res td.pos{font-family:var(--num);font-style:italic;color:var(--yellow);fo
   </div>
 </div>
 
-<div id="settings" class="screen hidden">
-  <div class="glass box setbox">
-    <h2>⚙️ Settings</h2>
-    <div class="setrow"><h3>Graphics</h3><div class="opts" id="quality"></div></div>
-    <div class="setrow"><h3>Sound</h3><div class="opts" id="sound"></div></div>
-    <div class="setrow"><h3>Steering Sensitivity</h3>
-      <div class="sens"><span>Low</span><input type="range" id="sens" min="50" max="150" step="5" aria-label="Steering sensitivity"><span>High</span><b id="sensVal">100%</b></div>
-      <div class="note" id="sensNote"></div>
-    </div>
-    <div class="setrow hidden" id="steerGroup"><h3>Steering</h3><div class="opts" id="steer"></div><div class="note" id="steerNote"></div></div>
-    <div class="setrow hidden" id="sideGroup"><h3>Brake &amp; Steer</h3><div class="opts" id="side"></div><div class="note">The thumb that brakes and steers. Drift, Nitro and Boost go under the other one.</div></div>
-    <div class="btns"><button class="go sec" id="setDone">Done</button></div>
-  </div>
-</div>
-
->>>>>>> Stashed changes
 <div id="pause" class="screen hidden">
   <div class="glass box">
     <h2>Paused</h2>
