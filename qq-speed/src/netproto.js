@@ -23,6 +23,25 @@ export function cleanName(s) {
   return String(s || '').replace(/[<>&"'`]/g, '').replace(/\s+/g, ' ').trim().slice(0, 16);
 }
 
+// ---------- Car looks (the garage) ----------
+// Paint, rims, tyres and trim a player picks for a car. Looks only: they never change how a car drives.
+export const FINISHES = ['gloss', 'metallic', 'matte', 'pearl', 'chrome'];
+export const RIM_STYLES = ['star', 'six', 'split', 'mesh', 'turbine', 'dish'];
+export const TYRE_STYLES = ['street', 'redline', 'whitewall', 'letters'];
+const COLOR_KEYS = ['paint', 'accent', 'rimColor', 'caliper', 'glow'];
+
+// keeps only well-formed fields, so a look from storage or another player can't break a car
+export function cleanLook(l) {
+  const out = {};
+  if (!l || typeof l !== 'object') return out;
+  for (const k of COLOR_KEYS) if (Number.isInteger(l[k]) && l[k] >= 0 && l[k] <= 0xffffff) out[k] = l[k];
+  if (FINISHES.includes(l.finish)) out.finish = l.finish;
+  if (RIM_STYLES.includes(l.rim)) out.rim = l.rim;
+  if (TYRE_STYLES.includes(l.tyre)) out.tyre = l.tyre;
+  if (typeof l.stripes === 'boolean') out.stripes = l.stripes;
+  return out;
+}
+
 export function normCode(s) {
   return String(s || '').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, CODE_LEN);
 }

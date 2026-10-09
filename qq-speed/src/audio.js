@@ -34,7 +34,7 @@ export class GameAudio {
   get songs() { return SONGS; }
 
   init() {
-    if (this.ctx) { if (this.ctx.state === 'suspended') this.ctx.resume(); return; }
+    if (this.ctx) { this.resume(); return; }
     const AC = window.AudioContext || window.webkitAudioContext;
     if (!AC) return;
     const ctx = (this.ctx = new AC());
@@ -523,6 +523,12 @@ export class GameAudio {
     s.start(t, Math.random() * 1.5);
     s.stop(t + dur + 0.02);
   }
+
+  // the page went to the background (tab switched, app left, screen locked): a running context keeps its engine
+  // drones and music going, so stop the whole context, and start it again when the player is back.
+  // iOS reports 'interrupted' rather than 'suspended' after a call or a lock
+  suspend() { if (this.ctx?.state === 'running') this.ctx.suspend().catch(() => {}); }
+  resume() { if (this.ctx && this.ctx.state !== 'running' && !document.hidden) this.ctx.resume().catch(() => {}); }
 
   setMuted(on) {
     this.muted = on;

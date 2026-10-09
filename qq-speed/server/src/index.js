@@ -5,7 +5,7 @@
 import { DurableObject } from 'cloudflare:workers';
 import {
   MAX_PLAYERS, CODE_LEN, CODE_CHARS, RACE_MAPS, RACE_MODES, LAP_OPTIONS, CAR_COUNT, FINISH_GRACE, COUNTDOWN,
-  TRACK_LEN, MAX_SPEED, CAR_EVENTS, CELEBRATIONS, validSnap, cleanName, normCode,
+  TRACK_LEN, MAX_SPEED, CAR_EVENTS, CELEBRATIONS, validSnap, cleanName, cleanLook, normCode,
 } from '../../src/netproto.js';
 
 const LOBBY_GRACE = 10_000; // ms a dropped player keeps their seat in the lobby (page reload, flaky wifi)
@@ -162,7 +162,7 @@ export class Room extends DurableObject {
     const R = this.room;
     return {
       t: 'room', code: R.code, public: R.public, host: R.hostId, phase: R.phase, cfg: R.cfg, seq: R.seq, autoStartAt: R.autoStartAt,
-      players: this.players.sort((a, b) => a.joined - b.joined).map((p) => ({ id: p.id, name: p.name, car: p.car, ready: p.ready, connected: p.connected, racing: !!this.entry(p.id) })),
+      players: this.players.sort((a, b) => a.joined - b.joined).map((p) => ({ id: p.id, name: p.name, car: p.car, look: p.look || {}, ready: p.ready, connected: p.connected, racing: !!this.entry(p.id) })),
     };
   }
 
@@ -266,6 +266,7 @@ export class Room extends DurableObject {
         if (typeof m.name === 'string') p.name = this.uniqueName(cleanName(m.name) || p.name, p.id);
         if (!this.entry(p.id)) {
           if (m.car !== undefined) p.car = carIdx(m.car);
+          if (m.look !== undefined) p.look = cleanLook(m.look);
           if (typeof m.ready === 'boolean') p.ready = m.ready;
         }
         this.checkAutoStart();
@@ -331,7 +332,7 @@ export class Room extends DurableObject {
     } else {
       if (this.players.length >= MAX_PLAYERS) return this.reject(ws, 'full');
       const id = rid(8);
-      p = { id, token: rid(24), name: this.uniqueName(cleanName(m.name) || 'Driver', id), car: carIdx(m.car), ready: false, joined: now, connected: true, goneAt: 0 };
+      p = { id, token: rid(24), name: this.uniqueName(cleanName(m.name) || 'Driver', id), car: carIdx(m.car), look: cleanLook(m.look), ready: false, joined: now, connected: true, goneAt: 0 };
       R.players[id] = p;
     }
     if (!R.players[R.hostId]) R.hostId = p.id;
@@ -415,7 +416,7 @@ export class Room extends DurableObject {
       seq: R.seq, cfg: { ...R.cfg }, grid: racers.map((p) => p.id), loadDeadline: Date.now() + LOAD_TIMEOUT, startAt: 0, endAt: 0, hardEndAt: 0, firstAt: 0,
       entries: Object.fromEntries(racers.map((p) => [p.id, { name: p.name, car: p.car, loaded: false, out: false, lap: 0, lapTimes: [], finished: false, time: 0, prog: -1 }])),
     };
-    this.send({ t: 'load', seq: R.seq, cfg: R.race.cfg, grid: racers.map((p) => ({ id: p.id, name: p.name, car: p.car })) });
+    this.send({ t: 'load', seq: R.seq, cfg: R.race.cfg, grid: racers.map((p) => ({ id: p.id, name: p.name, car: p.car, look: p.look || {} })) });
   }
 
   // everyone has the track (or the load timeout ran out): the countdown starts on the server's clock

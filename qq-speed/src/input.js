@@ -32,7 +32,17 @@ export class Input {
       if (PREVENT.has(e.code)) e.preventDefault();
       this.down.delete(e.code);
     });
-    window.addEventListener('blur', () => this.down.clear());
+    window.addEventListener('blur', () => this.releaseAll());
+    document.addEventListener('visibilitychange', () => { if (document.hidden) this.releaseAll(); });
+  }
+
+  // everything let go: a window that loses focus or a page sent to the background never gets the key-up or touch-end,
+  // and a held brake or swipe would still be on when the player comes back
+  releaseAll() {
+    this.down.clear();
+    for (const k in this.touch) this.touch[k] = false;
+    this.releaseSwipe?.();
+    document.querySelectorAll('#touch .tb.on').forEach((e) => e.classList.remove('on'));
   }
 
   has(...codes) { return codes.some((c) => this.down.has(c)); }
@@ -139,6 +149,7 @@ export class Input {
     };
     el.addEventListener('touchend', end);
     el.addEventListener('touchcancel', end);
+    this.releaseSwipe = () => { id = null; this.swipeAxis = 0; el.classList.remove('on'); };
   }
 
   // Touch buttons

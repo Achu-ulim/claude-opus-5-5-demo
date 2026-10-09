@@ -25,7 +25,8 @@ import { HUD } from './hud.js';
 import { ItemSystem } from './items.js';
 import { RemoteCar, LAGGING } from './remote.js';
 import { Online } from './online.js';
-import { COUNTDOWN } from './netproto.js';
+import { Garage } from './garage.js';
+import { COUNTDOWN, cleanLook } from './netproto.js';
 import { clamp, lerp, damp, dampAngle, wrapAngle, mulberry32, formatTime, smoothstep } from './util.js';
 import { setMaxAniso } from './textures.js';
 
@@ -171,6 +172,9 @@ class Game {
     this.settings = Object.assign({ map: 'city', mode: 'speed', skin: 0, laps: 2, diff: 1, quality: IS_TOUCH ? 'mid' : 'high', song: 0, steer: 'tilt', muted: false, side: 'left', sens: 1, sfxVol: 100, musicVol: 100 }, this.load());
     if (!LAPS.includes(this.settings.laps)) this.settings.laps = 3;
     if (!(this.settings.skin >= 0 && this.settings.skin < CARS.length)) this.settings.skin = 0;
+    // garage looks per car id: keep only well-formed ones
+    const looks = this.settings.looks && typeof this.settings.looks === 'object' ? this.settings.looks : {};
+    this.settings.looks = Object.fromEntries(CARS.filter((c) => looks[c.id]).map((c) => [c.id, cleanLook(looks[c.id])]));
     this.canvas = $('gl');
     this.renderer = new THREE.WebGLRenderer({ canvas: this.canvas, antialias: true, powerPreference: 'high-performance' });
     this.renderer.toneMapping = THREE.NeutralToneMapping;
@@ -212,6 +216,7 @@ class Game {
     this.confetti = new Confetti($('confetti'));
     this.setupQuality();
     this.buildMenu();
+    this.garage = new Garage(this);
     this.online = new Online(this);
     window.addEventListener('resize', () => this.resize());
     this.resize();
@@ -221,6 +226,15 @@ class Game {
     };
     window.addEventListener('pointerdown', unlock);
     window.addEventListener('keydown', unlock);
+    // leaving the game (another tab or app, screen locked or off): all sound stops and a race pauses until they're back.
+    // An online race can't wait for one player, so it only goes quiet
+    const away = () => {
+      this.audio.suspend();
+      if (!this.race?.online && (this.state === 'race' || this.state === 'countdown')) this.togglePause();
+    };
+    document.addEventListener('visibilitychange', () => (document.hidden ? away() : this.audio.resume()));
+    window.addEventListener('pagehide', away);
+    window.addEventListener('pageshow', () => this.audio.resume());
     // Ctrl+W closes the tab in browsers: ask for confirmation mid-race so a double boost can't close it by accident
     window.addEventListener('beforeunload', (e) => {
       if (this.state === 'race' || this.state === 'countdown' || this.state === 'paused') {
@@ -300,12 +314,13 @@ class Game {
     opts($('side'), SIDES, 'side', (x) => x.name);
     $('steerGroup').classList.toggle('hidden', !IS_TOUCH);
     $('sideGroup').classList.toggle('hidden', !IS_TOUCH);
-    let thumbs = [];
-    try { thumbs = renderCarThumbs(); } catch { /* previews are optional */ }
-    this.carThumbs = thumbs;
+    this.renderCarCards();
     const specs = carSpecs();
+<<<<<<< Updated upstream
     // the live demo shows the car itself, so the lobby only needs a dot per car
     $('skins').innerHTML = CARS.map((c, i) => `<button type="button" class="carcard" data-i="${i}" aria-label="${c.name}" title="${c.name}"></button>`).join('');
+=======
+>>>>>>> Stashed changes
     const SPEC_ROWS = [['speed', 'Top Speed'], ['accel', '0-100 km/h'], ['handling', 'Handling'], ['drift', 'Drift'], ['nitro', 'Nitro']];
     const refresh = () => {
       mapsEl.querySelectorAll('.map').forEach((e) => e.classList.toggle('sel', e.dataset.id === S.map));
@@ -357,6 +372,7 @@ class Game {
     bind('side', (i) => (S.side = SIDES[i].id));
     $('mutebtn').addEventListener('click', () => this.setMuted(!S.muted));
     bind('skins', (i) => { S.skin = i; if (this.state === 'menu') this.startDemo(); });
+<<<<<<< Updated upstream
     this.pickCar = (d) => {
       S.skin = (S.skin + d + CARS.length) % CARS.length;
       refresh();
@@ -366,6 +382,9 @@ class Game {
     $('carPrev').addEventListener('click', () => this.pickCar(-1));
     $('carNext').addEventListener('click', () => this.pickCar(1));
     this.buildSettings();
+=======
+    $('custombtn').addEventListener('click', () => this.garage.open(S.skin, 'menu'));
+>>>>>>> Stashed changes
     $('start').addEventListener('click', () => this.startRace());
     $('resume').addEventListener('click', () => this.togglePause());
     $('restart').addEventListener('click', () => { $('pause').classList.add('hidden'); this.startRace(this.race); });
@@ -454,6 +473,43 @@ class Game {
     return ok;
   }
 
+<<<<<<< Updated upstream
+=======
+  // ---------- Garage looks ----------
+  lookFor(carIndex) { return cleanLook(this.settings.looks?.[CARS[carIndex]?.id]); }
+
+  // car cards in the lobby, pictured the way the player has made each car
+  renderCarCards() {
+    let thumbs = [];
+    try { thumbs = renderCarThumbs(this.settings.looks); } catch { /* previews are optional */ }
+    this.carThumbs = thumbs;
+    const hex = (c) => '#' + c.toString(16).padStart(6, '0');
+    $('skins').innerHTML = CARS.map((c, i) => `<div class="carcard${i === this.settings.skin ? ' sel' : ''}" data-i="${i}">${thumbs[i] ? `<img src="${thumbs[i]}" alt="${c.name}">` : `<div class="swatch" style="background:${hex(this.lookFor(i).paint ?? c.body)}"></div>`}<div class="cn">${c.name}</div><div class="cc">${c.cls}</div></div>`).join('');
+  }
+
+  // the garage closed: new pictures, and online the room learns the new look
+  onLooksChanged() {
+    this.renderCarCards();
+    this.online.renderCars();
+    this.online.sendLook();
+  }
+
+  // Settings opens over the lobby or the pause menu, and goes back to whichever it came from
+  openSettings() {
+    this.audio.play('click');
+    this.settingsFrom = $('pause').classList.contains('hidden') ? 'menu' : 'pause';
+    $(this.settingsFrom).classList.add('hidden');
+    $('settings').classList.remove('hidden');
+  }
+
+  closeSettings() {
+    if ($('settings').classList.contains('hidden')) return;
+    this.audio.play('click');
+    $('settings').classList.add('hidden');
+    $(this.settingsFrom).classList.remove('hidden');
+  }
+
+>>>>>>> Stashed changes
   // sound on/off for everything (engines, effects, music), remembered between visits
   setMuted(on) {
     this.settings.muted = on;
@@ -523,7 +579,8 @@ class Game {
   // to = 'online' returns to the online room instead of the lobby
   toMenu(to = 'menu') {
     this.endPodium();
-    ['pause', 'settings', 'result', 'cups', 'board', 'f1s', 'celebrate', 'online'].forEach((i) => $(i).classList.add('hidden'));
+    ['pause', 'settings', 'garage', 'result', 'cups', 'board', 'f1s', 'celebrate', 'online'].forEach((i) => $(i).classList.add('hidden'));
+    this.garage.stopPreview();
     this.celeb = null;
     clearTimeout(this.celebT);
     this.sim = null;
@@ -546,12 +603,17 @@ class Game {
   }
 
   onKey(code) {
+<<<<<<< Updated upstream
     if (this.closeSettings && !$('settings').classList.contains('hidden')) {
       if (code === 'Escape') this.closeSettings();
       return;
     }
     const inLobby = this.state === 'menu' && !$('menu').classList.contains('hidden') && document.activeElement?.tagName !== 'INPUT';
     if (inLobby && (code === 'ArrowLeft' || code === 'ArrowRight')) return this.pickCar?.(code === 'ArrowLeft' ? -1 : 1);
+=======
+    if (code === 'Escape' && !$('settings').classList.contains('hidden')) return this.closeSettings();
+    if (code === 'Escape' && this.garage.isOpen) return this.garage.close();
+>>>>>>> Stashed changes
     if (code === 'Escape' || code === 'KeyP') {
       if (this.state === 'race' || this.state === 'countdown' || this.state === 'paused') this.togglePause();
     } else if (code === 'KeyC') this.cycleCamera();
@@ -692,7 +754,7 @@ class Game {
       this.scene.remove(r.model);
       // three re-uploads a disposed geometry if it is used again, so shared (cached) geometry is safe to release here
       r.model.traverse((o) => {
-        if (o.material && !o.isSprite) o.material.dispose();
+        if (o.material && !o.isSprite) for (const m of [].concat(o.material)) m.dispose(); // a two-tone body has two
         if (o.geometry) o.geometry.dispose();
       });
     }
@@ -717,7 +779,7 @@ class Game {
       const lat = (k % 2 ? 1 : -1) * 5.5;
       let r;
       if (k === playerSlot) {
-        const model = race.f1 ? buildF1Car(TEAMS[race.team], { isPlayer: true }) : buildCar(CARS[race.skin], { isPlayer: true });
+        const model = race.f1 ? buildF1Car(TEAMS[race.team], { isPlayer: true }) : buildCar(CARS[race.skin], { isPlayer: true, look: this.lookFor(race.skin) });
         r = new PlayerCar(this.track, model, this.league.name, race.f1 ? teamTune(TEAMS[race.team]) : CARS[race.skin].tune);
         if (race.f1) r.cruise = 0.58; // cruises at ~58% of top speed without throttle
         r.id = 'me';
@@ -769,7 +831,7 @@ class Game {
       const car = CARS[g.car] || CARS[0];
       let r;
       if (g.id === race.me) {
-        r = new PlayerCar(this.track, buildCar(car, { isPlayer: true }), g.name, car.tune);
+        r = new PlayerCar(this.track, buildCar(car, { isPlayer: true, look: g.look }), g.name, car.tune);
         r.id = 'me';
         r.reset(d, lat);
         r.lapsDone = -1;
@@ -778,7 +840,7 @@ class Game {
         r.lastD = r.d;
         this.player = r;
       } else {
-        r = new RemoteCar(this.track, buildCar(car, { name: g.name }), g.name, g.id, car.tune);
+        r = new RemoteCar(this.track, buildCar(car, { name: g.name, look: g.look }), g.name, g.id, car.tune);
         r.place(d, lat);
       }
       r.netId = g.id;
@@ -802,7 +864,8 @@ class Game {
   // the server has drawn the grid: build the track if needed, then line up (Online.onLoad reports back when done)
   async startOnlineRace({ seq, cfg, grid, me }) {
     if (this.loading) await new Promise((r) => { const t = setInterval(() => { if (!this.loading) { clearInterval(t); r(); } }, 50); });
-    ['menu', 'pause', 'settings', 'result', 'cups', 'board', 'f1s', 'celebrate', 'online'].forEach((i) => $(i).classList.add('hidden'));
+    ['menu', 'pause', 'settings', 'garage', 'result', 'cups', 'board', 'f1s', 'celebrate', 'online'].forEach((i) => $(i).classList.add('hidden'));
+    this.garage.stopPreview();
     this.endPodium();
     if (this.map.id !== cfg.map) await this.loadMap(cfg.map);
     const mine = grid.find((g) => g.id === me);
@@ -830,7 +893,8 @@ class Game {
     this.endPodium();
     this.race = race;
     this.audio.init();
-    ['menu', 'pause', 'settings', 'result', 'cups', 'board', 'f1s', 'online'].forEach((i) => $(i).classList.add('hidden'));
+    ['menu', 'pause', 'settings', 'garage', 'result', 'cups', 'board', 'f1s', 'online'].forEach((i) => $(i).classList.add('hidden'));
+    this.garage.stopPreview();
     // online: no restarting a shared race, and quitting leaves the race but not the room
     document.body.classList.toggle('online', !!race.online);
     $('restart').classList.toggle('hidden', !!race.online);

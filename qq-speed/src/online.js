@@ -1,7 +1,7 @@
 // Online play: the Online screens (quick match, private rooms, join by code or invite link), the room lobby,
 // and the glue between the server's messages and the race running in Game.
 import { NetClient } from './net.js';
-import { encodeSnap, SNAPSHOT_HZ, MAX_PLAYERS, LAP_OPTIONS, CODE_LEN, normCode, cleanName } from './netproto.js';
+import { encodeSnap, SNAPSHOT_HZ, MAX_PLAYERS, LAP_OPTIONS, CODE_LEN, normCode, cleanName, cleanLook } from './netproto.js';
 import { CARS } from './carModel.js';
 import { MAPS, MODES } from './maps.js';
 
@@ -95,16 +95,17 @@ export class Online {
       this.game.audio.play('click');
       this.game.settings.skin = +c.dataset.i;
       this.game.save();
-      this.net?.send({ t: 'set', car: +c.dataset.i });
+      this.net?.send({ t: 'set', car: +c.dataset.i, look: this.game.lookFor(+c.dataset.i) });
       this.renderCars();
     });
+    $('rmCustom').addEventListener('click', () => { if (!this.me?.racing) this.game.garage.open(this.me?.car ?? this.game.settings.skin, 'online'); });
     // countdown to a public room's automatic start
     setInterval(() => { if (this.room?.autoStartAt && !$('online').classList.contains('hidden')) this.renderStatus(); }, 250);
   }
 
   // the Online screen: the room if we're in one, otherwise quick match / private room / join
   open(msg = '') {
-    ['menu', 'pause', 'settings', 'result', 'cups', 'board', 'f1s'].forEach((i) => $(i).classList.add('hidden'));
+    ['menu', 'pause', 'settings', 'garage', 'result', 'cups', 'board', 'f1s'].forEach((i) => $(i).classList.add('hidden'));
     $('online').classList.remove('hidden');
     $('onHome').classList.toggle('hidden', this.inRoom);
     $('onRoom').classList.toggle('hidden', !this.inRoom);
@@ -138,7 +139,8 @@ export class Online {
     const net = new NetClient(this.url);
     this.listen(net);
     try {
-      const w = await net.connect(action, code, { name: this.game.league.name, car: this.game.settings.skin }, token);
+      const skin = this.game.settings.skin;
+      const w = await net.connect(action, code, { name: this.game.league.name, car: skin, look: this.game.lookFor(skin) }, token);
       this.net?.leave();
       this.net = net;
       this.myId = w.id;
@@ -219,7 +221,7 @@ export class Online {
     $('rmPlayers').innerHTML = R.players.map((p) => {
       const state = !p.connected ? '<span class="st wait">Reconnecting…</span>' : p.racing ? '<span class="st race">Racing</span>'
         : p.id === R.host && !R.public ? '<span class="st host">Host</span>' : p.ready ? '<span class="st ok">Ready</span>' : '<span class="st">Not ready</span>';
-      return `<div class="rp${p.id === this.myId ? ' me' : ''}"><i class="dot" style="background:${hex(car(p.car).body)}"></i>
+      return `<div class="rp${p.id === this.myId ? ' me' : ''}"><i class="dot" style="background:${hex(cleanLook(p.look).paint ?? car(p.car).body)}"></i>
         <div class="who"><b>${p.id === R.host ? '👑 ' : ''}${esc(p.name)}${p.id === this.myId ? ' <small>(you)</small>' : ''}</b><small>${esc(car(p.car).name)}</small></div>
         ${state}${this.isHost && p.id !== this.myId ? `<button class="kick" data-id="${esc(p.id)}" title="Remove from room" aria-label="Remove ${esc(p.name)}">✕</button>` : ''}</div>`;
     }).join('') + (R.players.length < 2 ? '<div class="rp empty">Waiting for someone to join… send them the invite link.</div>' : '');
@@ -232,6 +234,12 @@ export class Online {
     this.renderCars();
     this.renderStatus();
     this.renderNet();
+  }
+
+  // the room sees this player's car the way they made it in the garage
+  sendLook() {
+    const car = this.me?.car ?? this.game.settings.skin;
+    if (this.room && !this.me?.racing) this.net?.send({ t: 'set', look: this.game.lookFor(car) });
   }
 
   renderCars() {
@@ -310,7 +318,7 @@ export class Online {
     this.graceEnd = 0;
     this.snapAcc = 0;
     $('online').classList.add('hidden');
-    const grid = m.grid.map((g) => ({ id: g.id, name: cleanName(g.name) || 'Driver', car: g.car }));
+    const grid = m.grid.map((g) => ({ id: g.id, name: cleanName(g.name) || 'Driver', car: g.car, look: cleanLook(g.look) }));
     await this.game.startOnlineRace({ seq: m.seq, cfg: m.cfg, grid, me: this.myId });
     if (this.racingIn(m.seq)) this.net?.send({ t: 'loaded', seq: m.seq });
   }
