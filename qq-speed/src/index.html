@@ -481,11 +481,11 @@ body.online table.race th:nth-child(5),body.online table.race td:nth-child(5){di
   .cupcard .ci{font-size:30px}
   .cupcard .cd{min-height:0}
 }
-/* lobby buttons: a two-column block on narrow phones, the leaderboard across the bottom */
+/* lobby buttons: a two-column block on narrow phones; with Online showing, the leaderboard spans the bottom row */
 @media (max-width:520px){
   .menubtns{display:grid;grid-template-columns:1fr 1fr}
   .menubtns .go{max-width:none}
-  .menubtns #boardbtn{grid-column:1/-1}
+  #onlinebtn:not(.hidden) ~ #boardbtn{grid-column:1/-1}
 }
 @media (max-height:500px){
   .logo{font-size:32px}

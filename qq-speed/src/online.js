@@ -72,6 +72,8 @@ export class Online {
     $('rmCopy').addEventListener('click', () => this.copyInvite());
     $('rmShare').addEventListener('click', () => this.shareInvite());
     $('rmShare').classList.toggle('hidden', !navigator.share);
+    // no server address in this build: no Online button (invite links still explain why they can't join)
+    $('onlinebtn').classList.toggle('hidden', !this.url);
     $('rmPlayers').addEventListener('click', (e) => {
       const k = e.target.closest('.kick');
       if (k && this.isHost) this.net.send({ t: 'kick', id: k.dataset.id });
