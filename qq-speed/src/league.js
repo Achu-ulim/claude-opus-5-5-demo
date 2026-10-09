@@ -8,10 +8,19 @@ export const POINTS = [10, 7, 5, 3, 2, 1]; // per finishing position, 6 racers
 const BANK_SIZE = 40;
 
 export const CUPS = [
-  { id: 'rookie', name: 'Rookie Cup', icon: '🥉', races: 3, laps: 2, diff: 0, band: [0, 0.55], desc: 'Three races against the newer drivers in the bank.' },
-  { id: 'pro', name: 'Pro Cup', icon: '🥈', races: 4, laps: 2, diff: 1, band: [0.3, 0.85], desc: 'Four random cities against seasoned rivals.' },
-  { id: 'legend', name: 'Legend Cup', icon: '🏆', races: 5, laps: 3, diff: 2, band: [0.65, 1], desc: 'Five cities, three laps each, against the top of the bank.' },
+  { id: 'rookie', name: 'Rookie Cup', icon: '🥉', color: '#e0a84a', races: 3, laps: 2, diff: 0, band: [0, 0.55], desc: 'Three races against the newer drivers in the bank.' },
+  { id: 'pro', name: 'Pro Cup', icon: '🥈', color: '#d7dae5', races: 4, laps: 2, diff: 1, band: [0.3, 0.85], desc: 'Four random cities against seasoned rivals.' },
+  { id: 'legend', name: 'Legend Cup', icon: '🏆', color: '#ffd23a', races: 5, laps: 3, diff: 2, band: [0.65, 1], desc: 'Five cities, three laps each, against the top of the bank.' },
 ];
+
+// garage finishes that have to be earned, and how. Each one is a flag in the saved data (d.unlocks):
+// Gold is set by winning the Legend Cup, the others will be set by Daily Challenges (league.unlock) once they exist.
+export const LOCKED_FINISHES = {
+  gold: 'Win the Legend Cup to unlock',
+  chrome: 'Unlocks from Daily Challenges',
+  neon: 'Unlocks from Daily Challenges',
+  green: 'Unlocks from Daily Challenges',
+};
 
 const PREFIX = ['Neon', 'Turbo', 'Apex', 'Nitro', 'Shadow', 'Pixel', 'Blaze', 'Frost', 'Storm', 'Rocket', 'Lucky', 'Silent', 'Crimson', 'Vortex', 'Zen', 'Hyper', 'Solar', 'Lunar', 'Iron', 'Velvet', 'Rapid', 'Night', 'Gold', 'Wild'];
 const NOUN = ['Fox', 'Tiger', 'Hawk', 'Wolf', 'Viper', 'Comet', 'Falcon', 'Panda', 'Raven', 'Drifter', 'Ghost', 'Rider', 'Bolt', 'Lynx', 'Cobra', 'Otter', 'Koi', 'Dragon', 'Mantis', 'Jet', 'Shark', 'Phoenix'];
@@ -42,6 +51,13 @@ export function cleanName(s) {
 }
 
 const blankCareer = () => ({ pts: 0, races: 0, wins: 0, podiums: 0, cups: 0 });
+
+// Seasons saved before each round's finishing order was kept: their finished rounds are marked as not recorded (order: null).
+// Their points and wins are still in the season totals; only form and podiums from those rounds are lost.
+function migrateF1(f) {
+  if (!Array.isArray(f.results)) f.results = f.calendar.slice(0, f.idx).map((gp) => ({ gp, order: null }));
+  delete f.teamPts; // constructors are now added up from the drivers' points
+}
 
 // Give each rival a believable back story so the leaderboard means something from day one
 function simulateHistory(talent) {
@@ -79,6 +95,7 @@ export class League {
     let d = null;
     try { d = JSON.parse(localStorage.getItem(KEY)); } catch { /* ignore */ }
     this.d = d && d.v === 1 && Array.isArray(d.bank) ? d : fresh();
+    if (this.d.f1) migrateF1(this.d.f1);
     this.save();
   }
 
@@ -103,8 +120,10 @@ export class League {
     return [...inBand, ...rest].slice(0, n);
   }
 
-  // order: finishing order of the race, [{ id, name, car, best, finished }]; F1 races only count toward lap records
+  // order: finishing order of the race, [{ id, name, car, best, finished }]; F1 races only count toward lap records.
+  // Returns true when the player's best lap is a new track record.
   recordRace(mapId, order, career = true) {
+    const prev = this.d.records[mapId]?.[0]?.time;
     order.forEach((e, i) => {
       const who = e.id === 'me' ? this.d.me : this.rival(e.id);
       if (!who) return;
@@ -125,6 +144,8 @@ export class League {
       }
     });
     this.save();
+    const top = this.d.records[mapId]?.[0];
+    return top?.id === 'me' && (prev === undefined || top.time < prev);
   }
 
   // ---------- Tournaments ----------
@@ -180,6 +201,7 @@ export class League {
       if (id in cup.points) cup.points[id] += gained[id];
     });
     cup.wins[ids[0]] = (cup.wins[ids[0]] || 0) + 1;
+    (cup.places ||= []).push(ids.indexOf('me') + 1); // the player's finish in each race, for the tournament screen
     cup.idx++;
     const standings = this.cupStandings();
     const done = cup.idx >= cup.tracks.length;
@@ -189,6 +211,7 @@ export class League {
       const who = champion.id === 'me' ? this.d.me : this.rival(champion.id);
       if (who) who.career.cups++;
       if (champion.id === 'me') this.d.cupWins[cup.id] = (this.d.cupWins[cup.id] || 0) + 1;
+      if (champion.id === 'me' && cup.id === 'legend') this.unlock('gold');
       this.d.lastCup = { id: cup.id, standings };
       this.d.cup = null;
     }
@@ -197,6 +220,18 @@ export class League {
   }
 
   abandonCup() { this.d.cup = null; this.save(); }
+
+  // ---------- Garage unlocks ----------
+  unlocked(id) {
+    if (!(id in LOCKED_FINISHES)) return true;
+    // Legend Cups won before unlocks existed count too
+    return !!this.d.unlocks?.[id] || (id === 'gold' && this.d.cupWins.legend > 0);
+  }
+
+  unlock(id) {
+    (this.d.unlocks ||= {})[id] = true;
+    this.save();
+  }
 
   // ---------- Formula 1 ----------
   get f1() { return this.d.f1; }
@@ -207,8 +242,10 @@ export class League {
     return this.pickRivals(others.length, [0.25, 1]).map((r, k) => ({ id: r.id, name: r.name, talent: r.talent, team: others[k] }));
   }
 
+  // `order` is the starting grid, ids from pole down: drawn at random for a single Grand Prix
   f1Single(team, laps, diff) {
-    return { f1: true, laps, mode: 'speed', diff, team, points: F1_POINTS, rivals: this.f1Grid(team) };
+    const rivals = this.f1Grid(team);
+    return { f1: true, laps, mode: 'speed', diff, team, points: F1_POINTS, rivals, order: shuffle(['me', ...rivals.map((r) => r.id)]) };
   }
 
   f1Start(team, rounds, laps, diff) {
@@ -216,32 +253,53 @@ export class League {
     // shorter seasons keep a random pick of rounds, still in calendar order
     const calendar = rounds >= all.length ? all : shuffle([...all]).slice(0, rounds).sort((a, b) => all.indexOf(a) - all.indexOf(b));
     const drivers = this.f1Grid(team);
+    // results: each finished round's Grand Prix and finishing order (ids)
     this.d.f1 = {
       team, laps, diff, calendar, idx: 0, drivers,
       pts: Object.fromEntries([['me', 0], ...drivers.map((d) => [d.id, 0])]),
-      teamPts: Object.fromEntries(TEAMS.map((t) => [t.id, 0])),
       wins: {},
+      results: [],
     };
     this.save();
     return this.d.f1;
   }
 
+  // a championship round lines up in championship order, or at random before any points are scored
   f1RaceConfig() {
     const f = this.d.f1;
-    return { f1: true, season: true, laps: f.laps, mode: 'speed', diff: f.diff, team: f.team, points: F1_POINTS, rivals: f.drivers.map((d) => ({ ...d, name: this.rival(d.id)?.name || d.name })) };
+    const ids = this.f1Standings().drivers.map((d) => d.id);
+    return { f1: true, season: true, laps: f.laps, mode: 'speed', diff: f.diff, team: f.team, points: F1_POINTS, rivals: f.drivers.map((d) => ({ ...d, name: this.rival(d.id)?.name || d.name })),
+      order: f.idx ? ids : shuffle(ids) };
   }
 
-  f1TeamOf(id) { const f = this.d.f1; return id === 'me' ? f.team : f.drivers.find((d) => d.id === id)?.team; }
+  f1TeamOf(id, f = this.d.f1) { return id === 'me' ? f.team : f.drivers.find((d) => d.id === id)?.team; }
 
-  f1Standings() {
-    const f = this.d.f1;
-    const drivers = Object.entries(f.pts).map(([id, pts]) => ({ id, pts, wins: f.wins[id] || 0, name: id === 'me' ? this.d.me.name : this.rival(id)?.name || f.drivers.find((d) => d.id === id)?.name || '?', team: TEAMS[this.f1TeamOf(id)] }))
-      .sort((a, b) => b.pts - a.pts || b.wins - a.wins);
-    const teams = TEAMS.map((t) => ({ id: t.id, name: t.name, color: t.dot ?? t.body, pts: f.teamPts[t.id] || 0 })).sort((a, b) => b.pts - a.pts);
+  // Championship tables for a season (the one in progress unless another is passed). Points and wins are the season's totals;
+  // podiums and form (the last five rounds, 0 where a round's order wasn't recorded) come from each round's finishing order.
+  // Constructors add up their cars' points, wins and podiums, and take the better car's place for form.
+  f1Standings(f = this.d.f1) {
+    const rounds = f.results || [];
+    const drivers = Object.entries(f.pts).map(([id, pts]) => {
+      const places = rounds.map((r) => (r.order ? r.order.indexOf(id) + 1 : 0));
+      const wins = f.wins[id] || 0;
+      // a win from a round without a recorded order is still a podium
+      const unrecordedWins = Math.max(0, wins - places.filter((p) => p === 1).length);
+      return {
+        id, pts, wins, podiums: places.filter((p) => p >= 1 && p <= 3).length + unrecordedWins, places, form: places.slice(-5),
+        name: id === 'me' ? this.d.me.name : this.rival(id)?.name || f.drivers.find((d) => d.id === id)?.name || '?', team: TEAMS[this.f1TeamOf(id, f)],
+      };
+    }).sort((a, b) => b.pts - a.pts || b.wins - a.wins);
+    const sum = (list, k) => list.reduce((n, d) => n + d[k], 0);
+    const teams = TEAMS.map((t) => {
+      const cars = drivers.filter((d) => d.team === t);
+      const places = rounds.map((_, k) => Math.min(...cars.map((d) => d.places[k] || Infinity)));
+      return { id: t.id, name: t.name, color: t.dot ?? t.body, team: t, me: cars.some((d) => d.id === 'me'),
+        pts: sum(cars, 'pts'), wins: sum(cars, 'wins'), podiums: sum(cars, 'podiums'), form: places.slice(-5).map((p) => (p === Infinity ? 0 : p)) };
+    }).sort((a, b) => b.pts - a.pts || b.wins - a.wins);
     return { drivers, teams };
   }
 
-  // ids in finishing order; returns { gained, standings, done, champion, round, rounds }
+  // ids in finishing order; returns { gained, standings, season, done, champion, round, rounds }
   f1RaceDone(ids) {
     const f = this.d.f1;
     const gained = {};
@@ -249,13 +307,13 @@ export class League {
       const p = F1_POINTS[i] || 0;
       gained[id] = p;
       if (id in f.pts) f.pts[id] += p;
-      const t = TEAMS[this.f1TeamOf(id)];
-      if (t) f.teamPts[t.id] += p;
     });
     f.wins[ids[0]] = (f.wins[ids[0]] || 0) + 1;
+    f.results.push({ gp: f.calendar[f.idx], order: [...ids] });
     f.idx++;
     const standings = this.f1Standings();
-    const res = { gained, standings, round: f.idx, rounds: f.calendar.length, done: f.idx >= f.calendar.length, champion: null, next: f.calendar[f.idx] };
+    // season: the season itself, which stays readable for the standings screen after the final round clears it
+    const res = { gained, standings, season: f, round: f.idx, rounds: f.calendar.length, done: f.idx >= f.calendar.length, champion: null, next: f.calendar[f.idx] };
     if (res.done) {
       res.champion = standings.drivers[0];
       if (res.champion.id === 'me') this.d.f1Titles = (this.d.f1Titles || 0) + 1;
@@ -276,7 +334,10 @@ export class League {
   records(mapId) { return this.d.records[mapId] || []; }
 
   newBank() {
+    // earned garage finishes are the player's, not the bank's: they carry over
+    const unlocks = { ...this.d.unlocks, ...(this.unlocked('gold') ? { gold: true } : {}) };
     this.d = fresh(this.d.me.name);
+    this.d.unlocks = unlocks;
     this.save();
   }
 }

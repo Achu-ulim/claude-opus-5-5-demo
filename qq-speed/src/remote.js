@@ -1,15 +1,20 @@
 // Another player's car, driven by the snapshots their game sends.
 // Snapshots are ~70 ms apart and arrive a network trip late, and at racing speed that is several car lengths.
 // So the car is predicted forward to the current server time in track space (distance along the centerline + lane):
-// that follows the bends instead of shooting off along a tangent. Corrections are blended out over a few frames.
+// that follows the bends instead of shooting off along a tangent. The prediction carries on the car's acceleration
+// (read from its last two snapshots), and the car on screen chases it with a critically damped spring along the
+// track: its speed changes smoothly instead of surging every time a snapshot lands.
 import { clamp, damp, wrapAngle } from './util.js';
 import { TUNE, updateFlames, brakeLights } from './vehicle.js';
 import { decodeSnap, F } from './netproto.js';
 
 const MAX_AHEAD = 0.5; // s of prediction at most: a racer who goes silent stops rather than driving on blind
 export const LAGGING = 2.5; // s without news: shown as lagging, and no longer solid
-const BLEND = 9; // 1/s: how fast a correction to the predicted position fades out
+const BLEND = 9; // 1/s: how fast a sideways push from a collision on this screen fades out
 const SNAP_DIST = 12; // m: a correction bigger than this (reset, respawn) jumps instead of sliding
+const OMEGA = 6; // 1/s: how tightly the car on screen follows the prediction along the track (no overshoot)
+const MAX_ACC = 30; // m/s²: the most acceleration or braking read from two snapshots
+const ACC_AHEAD = 0.25; // s: how long that acceleration is assumed to carry on
 
 export class RemoteCar {
   constructor(track, model, name, netId, tune = {}) {
@@ -23,8 +28,7 @@ export class RemoteCar {
     this.isRemote = true;
     this.enginePitch = 0.93 + Math.random() * 0.14;
     this.snap = null;
-    this.fresh = false;
-    this.err = { x: 0, y: 0, z: 0, h: 0 };
+    this.err = { x: 0, z: 0 }; // a push from a collision on this screen, fading out
     this.x = this.y = this.z = this.h = this.m = this.s = this.vy = this.steer = 0;
     this.d = 0;
     this.lat = 0;
@@ -49,6 +53,13 @@ export class RemoteCar {
     this.celeb = null; // their victory celebration, played out here by the game (Game.remoteCelebrate)
     this.proj = {};
     this._s = {};
+    this.q = {}; // the prediction, reused every frame
+    this.ready = false; // the first snapshot places the car outright
+    this.dd = 0; // shown distance along the track, its speed, lane and heading offsets from the track
+    this.vd = 0;
+    this.ld = 0;
+    this.hOff = 0;
+    this.mOff = 0;
   }
 
   // on the grid until the first snapshot arrives
@@ -58,44 +69,43 @@ export class RemoteCar {
     this.z = s.z + s.rz * lat;
     this.y = s.y + lat * Math.sin(s.bank);
     this.h = this.m = this.trackHd = s.hd;
-    this.d = s.d;
-    this.lat = lat;
+    this.d = this.dd = s.d;
+    this.lat = this.ld = lat;
+    this.vd = 0;
     this.hint = s.i;
     this.progress = -this.track.length + s.d;
   }
 
   push(arr) {
     const p = decodeSnap(arr);
-    if (this.snap && p.t <= this.snap.t) return; // late or duplicate
+    const prev = this.snap;
+    if (prev && p.t <= prev.t) return; // late or duplicate
     // motion in track space: speed along the centerline and across it, headings relative to it
     const hd = this.track.sample(p.d, this._s).hd;
     p.va = p.s * Math.cos(p.m - hd);
     p.vl = -p.s * Math.sin(p.m - hd);
     p.hOff = wrapAngle(p.h - hd);
     p.mOff = wrapAngle(p.m - hd);
-    this.fresh = !!this.snap; // the first one places the car outright
+    // acceleration along the track from the last two snapshots, lightly smoothed (none after a long gap)
+    const gap = prev ? (p.t - prev.t) / 1000 : 0;
+    p.a = gap > 0.02 && gap < 0.4 ? clamp((p.va - prev.va) / gap, -MAX_ACC, MAX_ACC) * 0.6 + prev.a * 0.4 : 0;
     this.snap = p;
   }
 
+  // where the car should be now: the last snapshot carried forward along the track, still speeding up or slowing
+  // as it was for a moment, then at a steady speed
   predict(now) {
-    const p = this.snap, tr = this.track;
+    const p = this.snap, q = this.q;
     const dt = clamp((now - p.t) / 1000, 0, MAX_AHEAD);
-    const hw = tr.halfW - 1.1;
+    const ta = Math.min(dt, ACC_AHEAD);
+    const hw = this.track.halfW - 1.1;
+    q.dt = dt;
+    q.d = p.d + p.va * dt + p.a * ta * (dt - ta / 2);
+    q.v = p.va + p.a * ta;
+    q.a = dt < ACC_AHEAD ? p.a : 0;
     // lane changes ease off rather than carrying on into the wall
-    const lat = clamp(p.lat + (p.vl * (1 - Math.exp(-3 * dt))) / 3, -hw, hw);
-    const s = tr.sample(p.d + p.va * dt, this._s);
-    const gy = s.y + lat * Math.sin(s.bank);
-    let y = gy, air = false;
-    if (p.flags & F.AIR) {
-      y = p.y + p.vy * dt - 0.5 * TUNE.gravity * dt * dt;
-      if (y > gy) air = true;
-      else y = gy;
-    }
-    return {
-      x: s.x + s.rx * lat, y, z: s.z + s.rz * lat, air, d: s.d, lat, i: s.i, hd: s.hd, bank: s.bank, dt,
-      h: p.flags & F.SPIN ? p.h + 9 * dt : s.hd + p.hOff,
-      m: s.hd + p.mOff,
-    };
+    q.lat = clamp(p.lat + (p.vl * (1 - Math.exp(-3 * dt))) / 3, -hw, hw);
+    return q;
   }
 
   // pushed out of another car on this screen; the offset fades like any other correction, while the car's own
@@ -111,27 +121,50 @@ export class RemoteCar {
   update(dt, now) {
     const p = this.snap;
     if (!p || this.celeb) return;
-    const q = this.predict(now);
-    if (this.fresh) {
-      this.fresh = false;
-      const ex = this.x - q.x, ez = this.z - q.z;
-      if (ex * ex + ez * ez > SNAP_DIST * SNAP_DIST) this.err = { x: 0, y: 0, z: 0, h: 0 };
-      else this.err = { x: ex, y: this.y - q.y, z: ez, h: wrapAngle(this.h - q.h) };
+    const q = this.predict(now), L = this.track.length;
+    let ed = q.d - this.dd;
+    ed -= Math.round(ed / L) * L; // the short way round, across the start line
+    if (!this.ready || Math.abs(ed) > SNAP_DIST) {
+      // first sight of the car, or it reset or respawned: put it there
+      this.ready = true;
+      this.dd = q.d;
+      this.vd = q.v;
+      this.ld = q.lat;
+      this.hOff = p.hOff;
+      this.mOff = p.mOff;
+      this.err.x = this.err.z = 0;
+      ed = 0;
     }
-    const k = Math.exp(-BLEND * dt);
-    const e = this.err;
-    e.x *= k; e.y *= k; e.z *= k; e.h *= k;
-    this.x = q.x + e.x;
-    this.y = q.y + e.y;
-    this.z = q.z + e.z;
-    this.h = q.h + e.h;
-    this.m = q.m + e.h;
-    this.d = q.d;
-    this.lat = q.lat;
-    this.hint = q.i;
-    this.trackHd = q.hd;
-    this.airborne = q.air;
-    this.s = p.s;
+    // a critically damped spring along the track, fed the predicted acceleration: no surges, no overshoot
+    this.vd += (q.a + OMEGA * OMEGA * ed + 2 * OMEGA * (q.v - this.vd)) * dt;
+    this.dd = (((this.dd + this.vd * dt) % L) + L) % L;
+    this.ld = damp(this.ld, q.lat, 8, dt);
+    const kh = 1 - Math.exp(-10 * dt);
+    this.hOff += wrapAngle(p.hOff - this.hOff) * kh;
+    this.mOff += wrapAngle(p.mOff - this.mOff) * kh;
+    const s = this.track.sample(this.dd, this._s);
+    const gy = s.y + this.ld * Math.sin(s.bank);
+    let y = gy, air = false;
+    if (p.flags & F.AIR) {
+      y = p.y + p.vy * q.dt - 0.5 * TUNE.gravity * q.dt * q.dt;
+      if (y > gy) air = true;
+      else y = gy;
+    }
+    // what's left of a push from a collision on this screen
+    const e = this.err, k = Math.exp(-BLEND * dt);
+    e.x *= k;
+    e.z *= k;
+    this.x = s.x + s.rx * this.ld + e.x;
+    this.y = y;
+    this.z = s.z + s.rz * this.ld + e.z;
+    this.h = p.flags & F.SPIN ? p.h + 9 * q.dt : s.hd + this.hOff;
+    this.m = s.hd + this.mOff;
+    this.d = s.d;
+    this.lat = this.ld;
+    this.hint = s.i;
+    this.trackHd = s.hd;
+    this.airborne = air;
+    this.s = this.vd; // wheels and engine follow the speed shown, not each snapshot's
     this.vy = p.vy;
     this.steer = damp(this.steer, p.steer, 12, dt);
     const f = p.flags;
@@ -148,7 +181,7 @@ export class RemoteCar {
     // wrecked, just respawned, lagging or gone: drive through it
     this.ghost = f & F.GHOST || this.lag > LAGGING || this.gone ? 1 : 0;
     this.lapsDone = p.laps;
-    this.progress = p.laps * this.track.length + p.d + p.va * q.dt;
+    this.progress = p.laps * L + p.d + p.va * q.dt;
   }
 
   syncModel(dt) {

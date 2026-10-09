@@ -5,18 +5,18 @@ import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js'
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { LAYOUTS } from './layouts.js';
-import { MAPS, MODES } from './maps.js';
+import { MAPS, MODES, MAP_TINT } from './maps.js';
 import { Track } from './track.js';
 import { buildSky, buildClouds, buildGround, buildWater, buildMountains, Batch, makeNoise } from './world.js';
 import { buildProps, isFree } from './props.js';
-import { buildCar, buildF1Car, CARS, carSpecs, renderCarThumbs, renderTeamThumbs } from './carModel.js';
-import { F1_MAPS, GPS, TEAMS, teamTune } from './f1.js';
+import { buildCar, buildF1Car, CARS, carSpecs, renderCarThumbs } from './carModel.js';
+import { F1_MAPS, F1_POINTS, GPS, TEAMS, teamTune } from './f1.js';
 import { PlayerCar, NO_INPUT } from './vehicle.js';
 import { AICar } from './ai.js';
 import { League, CUPS, POINTS } from './league.js';
 import { Confetti } from './confetti.js';
-import { pitLayout, buildPitLane } from './pitlane.js';
-import { RaceSim } from './racesim.js';
+import { PIT, pitLayout, pitLat, buildPitLane } from './pitlane.js';
+import { RaceSim, COMPOUNDS, pickCompound, tyreLaps } from './racesim.js';
 import { Podium } from './podium.js';
 import { Particles, SkidMarks } from './effects.js';
 import { GameAudio } from './audio.js';
@@ -25,7 +25,11 @@ import { HUD } from './hud.js';
 import { ItemSystem } from './items.js';
 import { RemoteCar, LAGGING } from './remote.js';
 import { Online } from './online.js';
+import { Leagues } from './leagues.js';
+import { Account } from './account.js';
 import { Garage } from './garage.js';
+import { Challenges } from './challenges.js';
+import { Ghosts } from './ghost.js';
 import { COUNTDOWN, cleanLook } from './netproto.js';
 import { clamp, lerp, damp, dampAngle, wrapAngle, mulberry32, formatTime, smoothstep } from './util.js';
 import { setMaxAniso } from './textures.js';
@@ -33,6 +37,7 @@ import { setMaxAniso } from './textures.js';
 const $ = (id) => document.getElementById(id);
 const mapById = (id) => MAPS.find((m) => m.id === id) || F1_MAPS.find((m) => m.id === id);
 const ordinal = (n) => { const v = n % 100; return n + (v >= 11 && v <= 13 ? 'th' : ['th', 'st', 'nd', 'rd'][n % 10] || 'th'); };
+const carDot = (r) => '#' + (r.model.userData.skin.dot ?? r.model.userData.skin.body).toString(16).padStart(6, '0'); // a racer's colour in lists
 const STORE = 'feiche3d.v1';
 const TRAFFIC_RANGE = 180; // rivals farther than this (m) are out of earshot
 const SOUND_SPEED = 120; // m/s; well below the real 343 so passes at racing closing speeds get an audible Doppler drop
@@ -48,6 +53,8 @@ const QUALITY = [
   { id: 'high', name: 'Ultra' },
 ];
 const LAPS = [1, 2, 3, 5];
+const F1_LAPS = [2, 3, 5];
+const F1_ROUNDS = [6, 12, 24];
 const IS_TOUCH = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
 const STEER = [
   { id: 'tilt', name: 'Tilt' },
@@ -55,9 +62,14 @@ const STEER = [
   { id: 'buttons', name: 'Buttons' },
 ];
 const SIDES = [{ id: 'left', name: 'Left' }, { id: 'right', name: 'Right' }]; // touch: the thumb for brake and steering
-// lobby track list: one dot per track in its signature color
-const MAP_TINT = { city: '#4a8cff', aegean: '#2ec4b6', egypt: '#e0a84a', snow: '#cfe6ff', neon: '#ff3da6', bay: '#e0574a', dune: '#e0884a' };
 const DT = 1 / 120;
+// free a car model's GPU copies: three re-uploads a disposed geometry if it is used again, so shared (cached) geometry is safe to release
+function disposeModel(model) {
+  model.traverse((o) => {
+    if (o.material && !o.isSprite) for (const m of [].concat(o.material)) m.dispose(); // a two-tone body has two
+    if (o.geometry) o.geometry.dispose();
+  });
+}
 const TAKEDOWN_SPEED = 11; // m/s closing speed (~40 km/h) that wrecks the car on the receiving end
 const FATAL_SPEED = 20; // Grand Prix: a car-to-car hit this hard (~72 km/h closing) retires the car
 const CAR_SIZE = { front: 2.4, rear: 2.4, halfW: 1 }; // footprint for models that don't carry their own
@@ -169,7 +181,8 @@ const MOUNTAINS = {
 
 class Game {
   constructor() {
-    this.settings = Object.assign({ map: 'city', mode: 'speed', skin: 0, laps: 2, diff: 1, quality: IS_TOUCH ? 'mid' : 'high', song: 0, steer: 'tilt', muted: false, side: 'left', sens: 1, sfxVol: 100, musicVol: 100 }, this.load());
+    this.settings = Object.assign({ map: 'city', mode: 'speed', skin: 0, laps: 2, diff: 1, quality: IS_TOUCH ? 'mid' : 'high', song: 0, steer: 'tilt', muted: false, side: 'left', sens: 1, sfxVol: 100, musicVol: 100,
+      f1: { team: 0, laps: 3, diff: 1, rounds: 6, tyre: 'medium' } }, this.load());
     if (!LAPS.includes(this.settings.laps)) this.settings.laps = 3;
     if (!(this.settings.skin >= 0 && this.settings.skin < CARS.length)) this.settings.skin = 0;
     // garage looks per car id: keep only well-formed ones
@@ -217,7 +230,11 @@ class Game {
     this.setupQuality();
     this.buildMenu();
     this.garage = new Garage(this);
+    this.ghosts = new Ghosts(this);
+    this.challenges = new Challenges(this);
     this.online = new Online(this);
+    this.account = new Account(this, this.online.url);
+    this.leagues = new Leagues(this, this.online);
     window.addEventListener('resize', () => this.resize());
     this.resize();
     const unlock = () => {
@@ -242,11 +259,17 @@ class Game {
         e.returnValue = '';
       }
     });
+    // Log In or Create Account over the lobby, unless this player is logged in or chose to play as a guest;
+    // invite links open once that's settled
+    const signedIn = this.account.start();
     this.loadMap(this.settings.map).then(() => {
       this.startDemo();
       this.last = performance.now();
       requestAnimationFrame(() => this.loop());
+      return signedIn;
+    }).then(() => {
       this.online.boot();
+      this.leagues.boot();
     });
   }
 
@@ -378,6 +401,7 @@ class Game {
     $('carPrev').addEventListener('click', () => this.pickCar(-1));
     $('carNext').addEventListener('click', () => this.pickCar(1));
     $('custombtn').addEventListener('click', () => this.garage.open(S.skin, 'menu'));
+    $('garagebtn').addEventListener('click', () => this.garage.open(S.skin, 'menu'));
     this.buildSettings();
     $('start').addEventListener('click', () => this.startRace());
     $('resume').addEventListener('click', () => this.togglePause());
@@ -394,6 +418,15 @@ class Game {
       if (this.state === 'race' && this.player && !this.player.finished) this.resetPlayer();
     });
     $('resBoard').addEventListener('click', () => this.showBoard('drivers'));
+    $('resStand').addEventListener('click', () => { this.audio.play('click'); this.showStandings(this.lastSeason, 'result'); });
+    $('f1st').addEventListener('click', (e) => {
+      const t = e.target.closest('.sttabs .opt');
+      if (t) { this.stand.tab = t.dataset.tab; this.audio.play('click'); return this.renderStandingsScreen(); }
+      if (e.target.closest('#stBack')) {
+        $('f1st').classList.add('hidden');
+        $(this.stand.from).classList.remove('hidden');
+      }
+    });
 
     // Driver name
     const pname = $('pname');
@@ -407,9 +440,11 @@ class Game {
     $('f1btn').addEventListener('click', () => { this.audio.play('click'); this.showF1(); });
     $('f1s').addEventListener('click', (e) => {
       const F = this.settings.f1;
-      const pick = (id, fn) => { const o = e.target.closest(`#${id} .opt, #${id} .carcard`); if (o) { fn(+o.dataset.i); this.save(); this.audio.play('click'); this.showF1(); return true; } };
-      if (pick('f1Teams', (i) => (F.team = i)) || pick('f1Laps', (i) => (F.laps = [2, 3, 5][i])) || pick('f1Diff', (i) => (F.diff = i)) || pick('f1Len', (i) => (F.rounds = [6, 12, 24][i]))) return;
+      const pick = (id, fn) => { const o = e.target.closest(`#${id} .opt, #${id} .carcard`); if (o) { fn(+o.dataset.i); this.save(); this.audio.play('click'); this.markF1(); return true; } };
+      if (pick('f1Teams', (i) => (F.team = i)) || pick('f1Laps', (i) => (F.laps = F1_LAPS[i])) || pick('f1Diff', (i) => (F.diff = i)) || pick('f1Len', (i) => (F.rounds = F1_ROUNDS[i]))) return;
       if (e.target.closest('#f1Continue')) return this.startF1Race();
+      if (e.target.closest('#f1Leagues')) { this.audio.play('click'); return this.leagues.open('f1s'); }
+      if (e.target.closest('#f1Stand')) { this.audio.play('click'); return this.showStandings(this.league.f1, 'f1s'); }
       if (e.target.closest('#f1Abandon')) {
         if (confirm('Abandon this championship? Your season standings will be lost.')) { this.league.f1Abandon(); this.showF1(); }
         return;
@@ -423,6 +458,27 @@ class Game {
       if (gp) return this.startF1GP(gp.dataset.id);
       if (e.target.closest('#f1Back')) this.toMenu();
     });
+    $('f1w').addEventListener('click', (e) => {
+      const t = e.target.closest('.wktyre');
+      if (t) {
+        this.weekend.tyres.me = this.settings.f1.tyre = t.dataset.k;
+        this.save();
+        this.audio.play('click');
+        return this.markTyre();
+      }
+      if (e.target.closest('#wkGo')) return this.startRace(this.weekend);
+      if (e.target.closest('#wkBack')) { this.audio.play('click'); this.showF1(); }
+    });
+    window.addEventListener('resize', () => { if (!$('f1w').classList.contains('hidden')) this.drawWeekendMap(); });
+    // a mouse wheel scrolls the Grand Prix row sideways, until it reaches either end
+    $('f1Gps').addEventListener('wheel', (e) => {
+      const el = e.currentTarget;
+      const dy = e.deltaY * (e.deltaMode === 1 ? 16 : 1);
+      if (!dy || Math.abs(e.deltaX) >= Math.abs(e.deltaY)) return;
+      if (dy < 0 ? el.scrollLeft <= 0 : el.scrollLeft >= el.scrollWidth - el.clientWidth - 1) return;
+      el.scrollLeft += dy;
+      e.preventDefault();
+    }, { passive: false });
     $('boardbtn').addEventListener('click', () => { this.audio.play('click'); this.showBoard(); });
     $('cups').addEventListener('click', (e) => {
       if (e.target.closest('#cupContinue')) return this.startCupRace();
@@ -475,6 +531,26 @@ class Game {
     let thumbs = [];
     try { thumbs = renderCarThumbs(this.settings.looks); } catch { /* previews are optional */ }
     this.carThumbs = thumbs;
+  }
+
+  // the garage shows its car on the lobby demo: the camera stays on the first racer (the selected car)
+  focusDemoCar() {
+    this.demoTarget = 0;
+    this.demoT = 0;
+    this.demoCut = true;
+  }
+
+  // dress that demo car in the look being made, without restarting the demo
+  dressDemoCar(car, look) {
+    const r = this.racers[0];
+    if (this.state !== 'menu' || !r) return;
+    const model = buildCar(car, { name: r.name, look });
+    model.position.copy(r.model.position);
+    model.rotation.copy(r.model.rotation);
+    this.scene.remove(r.model);
+    disposeModel(r.model);
+    r.model = model;
+    this.scene.add(model);
   }
 
   // the garage closed: new pictures, the lobby demo shows the new look, and online the room learns it
@@ -532,7 +608,7 @@ class Game {
       this.audio.play('click');
     });
     const close = () => { $('settings').classList.add('hidden'); this.save(); };
-    this.openSettings = () => { this.audio.play('click'); refresh(); $('settings').classList.remove('hidden'); $('setClose').focus(); };
+    this.openSettings = () => { this.audio.play('click'); refresh(); this.account?.renderSettings(); $('settings').classList.remove('hidden'); $('setClose').focus(); };
     this.closeSettings = close;
     $('setbtn').addEventListener('click', () => this.openSettings());
     $('pauseSet').addEventListener('click', () => this.openSettings());
@@ -553,19 +629,7 @@ class Game {
 
   // to = 'online' returns to the online room instead of the lobby
   toMenu(to = 'menu') {
-    this.endPodium();
-    ['pause', 'settings', 'garage', 'result', 'cups', 'board', 'f1s', 'celebrate', 'online'].forEach((i) => $(i).classList.add('hidden'));
-    this.garage.stopPreview();
-    this.celeb = null;
-    clearTimeout(this.celebT);
-    this.sim = null;
-    if (this.race?.online) this.race = null; // the online race is over for this player
-    document.body.classList.remove('sim', 'online');
-    this.hud.setSim(false);
-    this.hud.finalCount('');
-    $('touch').classList.add('hidden');
-    this.hud.show(false);
-    this.hud.countdown('');
+    this.leaveRace();
     if (to === 'online') {
       // the room's next race may be on any track: stay on this one until it's picked
       this.online.open();
@@ -577,12 +641,33 @@ class Game {
     else this.startDemo();
   }
 
+  // closes every screen and clears what a race leaves behind (the HUD, the podium, the race sim)
+  leaveRace() {
+    this.endPodium();
+    ['menu', 'pause', 'settings', 'garage', 'chal', 'result', 'cups', 'board', 'f1s', 'f1w', 'f1st', 'lg', 'celebrate', 'online'].forEach((i) => $(i).classList.add('hidden'));
+    this.garage.cancel();
+    this.ghosts.hide();
+    this.challenges.renderDot(); // a new day may have started
+    this.celeb = null;
+    clearTimeout(this.celebT);
+    this.sim = null;
+    if (this.race?.online) this.race = null; // the online race is over for this player
+    document.body.classList.remove('sim', 'online');
+    this.hud.setSim(false);
+    this.hud.finalCount('');
+    $('touch').classList.add('hidden');
+    this.hud.show(false);
+    this.hud.countdown('');
+  }
+
   onKey(code) {
+    if (this.account?.isOpen) return; // typing a name or a code, not driving
     if (this.closeSettings && !$('settings').classList.contains('hidden')) {
       if (code === 'Escape') this.closeSettings();
       return;
     }
-    if (code === 'Escape' && this.garage.isOpen) return this.garage.close();
+    if (code === 'Escape' && this.garage.isOpen) return this.garage.back();
+    if (code === 'Escape' && !$('chal').classList.contains('hidden')) return this.challenges.close();
     const inLobby = this.state === 'menu' && !$('menu').classList.contains('hidden') && document.activeElement?.tagName !== 'INPUT';
     if (inLobby && (code === 'ArrowLeft' || code === 'ArrowRight')) return this.pickCar?.(code === 'ArrowLeft' ? -1 : 1);
     if (code === 'Escape' || code === 'KeyP') {
@@ -723,11 +808,7 @@ class Game {
   clearRacers() {
     for (const r of this.racers) {
       this.scene.remove(r.model);
-      // three re-uploads a disposed geometry if it is used again, so shared (cached) geometry is safe to release here
-      r.model.traverse((o) => {
-        if (o.material && !o.isSprite) for (const m of [].concat(o.material)) m.dispose(); // a two-tone body has two
-        if (o.geometry) o.geometry.dispose();
-      });
+      disposeModel(r.model);
     }
     this.racers = [];
     this.player = null;
@@ -743,13 +824,14 @@ class Game {
     const race = withPlayer ? this.race : { skin: S.skin, diff: S.diff, rivals: this.league.pickRivals(6).map((r, i) => ({ ...r, car: (i + S.skin) % CARS.length })) };
     const diff = DIFFS[race.diff];
     const total = withPlayer ? race.rivals.length + 1 : 6;
-    const playerSlot = withPlayer ? (race.f1 ? Math.floor(total / 2) : 3) : -1;
+    const playerSlot = withPlayer ? Math.min(race.f1 ? Math.floor(total / 2) : 3, total - 1) : -1; // a time trial is a grid of one
+    const order = withPlayer ? race.order : null; // a Formula 1 weekend sets the grid: ids from pole down
     let ai = 0;
     for (let k = 0; k < total; k++) {
       const d = -14 - Math.floor(k / 2) * 11;
       const lat = (k % 2 ? 1 : -1) * 5.5;
       let r;
-      if (k === playerSlot) {
+      if (order ? order[k] === 'me' : k === playerSlot) {
         const model = race.f1 ? buildF1Car(TEAMS[race.team], { isPlayer: true }) : buildCar(CARS[race.skin], { isPlayer: true, look: this.lookFor(race.skin) });
         r = new PlayerCar(this.track, model, this.league.name, race.f1 ? teamTune(TEAMS[race.team]) : CARS[race.skin].tune);
         if (race.f1) r.cruise = 0.58; // cruises at ~58% of top speed without throttle
@@ -757,7 +839,7 @@ class Game {
         r.team = race.team;
         r.reset(d, lat);
       } else {
-        const rival = race.rivals[ai % race.rivals.length];
+        const rival = order ? race.rivals.find((x) => x.id === order[k]) : race.rivals[ai % race.rivals.length];
         const car = race.f1 ? TEAMS[rival.team] : CARS[rival.car];
         // the lobby demo follows the first car, which is the selected one: show it the way the player made it
         const look = !withPlayer && ai === 0 ? this.lookFor(rival.car) : undefined;
@@ -776,7 +858,7 @@ class Game {
       r.itemTimer = 2 + rnd() * 2;
       r.finished = false;
       r.finishTime = 0;
-      r.stats = { drift: 0, small: 0, perfect: 0, double: 0, nitro: 0, crash: 0, top: 0, land: 0, takedown: 0 };
+      r.stats = { drift: 0, driftM: 0, small: 0, perfect: 0, double: 0, nitro: 0, crash: 0, top: 0, land: 0, takedown: 0 };
       r.wreck = 0;
       r.ghost = 0;
       r.immune = 0;
@@ -795,16 +877,19 @@ class Game {
     this.standings = [...this.racers];
   }
 
-  // online grid, in the order the server drew: this player's car plus one RemoteCar per other racer
+  // online grid, in the order the server drew: this player's car plus one RemoteCar per other racer.
+  // In an F1 league each racer drives their team's car
   makeOnlineRacers(race) {
     this.clearRacers();
     race.grid.forEach((g, k) => {
       const d = -14 - Math.floor(k / 2) * 11;
       const lat = (k % 2 ? 1 : -1) * 5.5;
       const car = CARS[g.car] || CARS[0];
+      const team = g.team && TEAMS.find((t) => t.id === g.team);
+      const tune = team ? teamTune(team) : car.tune;
       let r;
       if (g.id === race.me) {
-        r = new PlayerCar(this.track, buildCar(car, { isPlayer: true, look: g.look }), g.name, car.tune);
+        r = new PlayerCar(this.track, team ? buildF1Car(team, { isPlayer: true }) : buildCar(car, { isPlayer: true, look: g.look }), g.name, tune);
         r.id = 'me';
         r.reset(d, lat);
         r.lapsDone = -1;
@@ -813,7 +898,7 @@ class Game {
         r.lastD = r.d;
         this.player = r;
       } else {
-        r = new RemoteCar(this.track, buildCar(car, { name: g.name, look: g.look }), g.name, g.id, car.tune);
+        r = new RemoteCar(this.track, team ? buildF1Car(team, { name: g.name }) : buildCar(car, { name: g.name, look: g.look }), g.name, g.id, tune);
         r.place(d, lat);
       }
       r.netId = g.id;
@@ -822,7 +907,7 @@ class Game {
       r.items = [];
       r.finished = false;
       r.finishTime = 0;
-      r.stats = { drift: 0, small: 0, perfect: 0, double: 0, nitro: 0, crash: 0, top: 0, land: 0, takedown: 0 };
+      r.stats = { drift: 0, driftM: 0, small: 0, perfect: 0, double: 0, nitro: 0, crash: 0, top: 0, land: 0, takedown: 0 };
       r.wreck = 0;
       r.ghost = 0;
       r.immune = 0;
@@ -837,8 +922,8 @@ class Game {
   // the server has drawn the grid: build the track if needed, then line up (Online.onLoad reports back when done)
   async startOnlineRace({ seq, cfg, grid, me }) {
     if (this.loading) await new Promise((r) => { const t = setInterval(() => { if (!this.loading) { clearInterval(t); r(); } }, 50); });
-    ['menu', 'pause', 'settings', 'garage', 'result', 'cups', 'board', 'f1s', 'celebrate', 'online'].forEach((i) => $(i).classList.add('hidden'));
-    this.garage.stopPreview();
+    ['menu', 'pause', 'settings', 'garage', 'chal', 'result', 'cups', 'board', 'f1s', 'f1w', 'f1st', 'lg', 'celebrate', 'online'].forEach((i) => $(i).classList.add('hidden'));
+    this.garage.cancel();
     this.endPodium();
     if (this.map.id !== cfg.map) await this.loadMap(cfg.map);
     const mine = grid.find((g) => g.id === me);
@@ -866,8 +951,13 @@ class Game {
     this.endPodium();
     this.race = race;
     this.audio.init();
-    ['menu', 'pause', 'settings', 'garage', 'result', 'cups', 'board', 'f1s', 'online'].forEach((i) => $(i).classList.add('hidden'));
-    this.garage.stopPreview();
+    if (race.trial) {
+      race.ghost = this.ghosts.cache[this.map.id] || race.ghost;
+      race.beatGhost = false;
+    }
+    this.ghosts.show(race.trial ? race.ghost : null);
+    ['menu', 'pause', 'settings', 'garage', 'chal', 'result', 'cups', 'board', 'f1s', 'f1w', 'f1st', 'lg', 'online'].forEach((i) => $(i).classList.add('hidden'));
+    this.garage.cancel();
     // online: no restarting a shared race, and quitting leaves the race but not the room
     document.body.classList.toggle('online', !!race.online);
     $('restart').classList.toggle('hidden', !!race.online);
@@ -978,6 +1068,7 @@ class Game {
         this.state = 'race';
         this.raceTime = clock ?? 0;
         for (const r of this.racers) if (r.isPlayer) r.lapStart = 0; else r.lapStart = 0;
+        this.ghosts.startLap();
         if (this.startBoostReady) this.applyStartBoost();
         setTimeout(() => this.hud.countdown(''), 700);
       }
@@ -1071,7 +1162,13 @@ class Game {
       for (const r of this.racers) if (!r.isPlayer && !r.isRemote && !r.finished) this.items.aiThink(r, dt, this.standings);
     }
     net?.tick(dt);
-    if (P) this.handleEvents(P);
+    if (P) this.handleEvents(P, dt);
+    // ghost laps (not F1, whose car is a different model): record this lap, and in a time trial move the ghost
+    if (P && this.race && !this.race.f1 && (st === 'race' || st === 'finish')) {
+      const lapT = this.raceTime - (P.lapStart || 0);
+      if (this.state === 'race' && !P.finished) this.ghosts.sample(P, lapT);
+      this.ghosts.place(lapT);
+    }
     this.emitEffects(dt);
     this.fx.smoke.update(dt);
     this.fx.glow.update(dt);
@@ -1148,6 +1245,7 @@ class Game {
     const P = this.player;
     P.startBoost = 1.4;
     P.s = Math.max(P.s, 16);
+    P.stats.rocket = 1; // for the Rocket Start achievement
     this.hud.message('Rocket Start!', '#ffd23a');
     this.audio.play('small');
   }
@@ -1203,6 +1301,12 @@ class Game {
     r.lapStart = this.raceTime;
     r.lapTimes.push(t);
     const laps = this.race.laps;
+    if (r.isPlayer && !this.race.f1) {
+      // the fastest lap on this track becomes its ghost; in a time trial, say when the ghost is beaten
+      const R = this.race, newGhost = this.ghosts.lapDone(this.map.id, t, R.skin, this.lookFor(R.skin));
+      if (R.trial && R.ghost && t < R.ghost.t && !R.beatGhost) { R.beatGhost = true; setTimeout(() => this.hud.message('Ghost beaten!', '#36e2ff'), 1000); }
+      else if (newGhost && R.trial) setTimeout(() => this.hud.message('New ghost lap', '#36e2ff', true), 1000);
+    }
     if (r.isPlayer && this.race.online) this.online.sendLap(r.lapsDone, this.raceTime);
     if (r.lapsDone >= laps && !r.finished) {
       r.finished = true;
@@ -1277,6 +1381,49 @@ class Game {
     if (!this.player?.finished) this.hud.message(`${r.name} finished ${ordinal(m.place)}`, '#ffd23a', true);
   }
 
+  // daily challenges and achievements: what this race counts for (difficulty only offline); a toast says what was earned
+  countChallenges(finished, place) {
+    const st = this.player.stats, R = this.race, won = finished && place === 1 && !R.trial;
+    const { daily, badges } = this.challenges.raceDone({
+      track: this.map.id, diff: R.online || R.trial ? null : R.diff, online: !!R.online, trial: !!R.trial, beatGhost: !!R.beatGhost, finished, won, place,
+      nitro: st.nitro, drift: st.driftM, perfect: st.perfect, double: st.double, crash: st.crash, takedown: st.takedown || 0, rocket: st.rocket,
+    });
+    const news = [];
+    if (daily.length) news.push(`Daily challenge${daily.length > 1 ? 's' : ''} done: ${daily.map((c) => c.title).join(', ')}. Claim in Challenges.`);
+    if (badges.length) news.push(`Achievement${badges.length > 1 ? 's' : ''}: ${badges.map((a) => a.name).join(', ')}`);
+    if (news.length) toast(news.join(' · '), 'OK', () => {});
+  }
+
+  // results screen: the track · mode · laps line and the big finishing position (place 0: did not finish)
+  renderResultHead(place, of, [track, kind, laps]) {
+    $('resMeta').textContent = [track, kind, `${laps} ${laps === 1 ? 'lap' : 'laps'}`].filter(Boolean).join(' · ');
+    $('resPlace').textContent = place ? ordinal(place) : 'DNF';
+    $('resOf').textContent = place ? `/ ${of}` : '';
+    $('resPlaceBox').className = `rplace${place === 1 ? ' gold' : place ? '' : ' dnf'}`;
+  }
+
+  // the player's stats: the headline numbers in big tiles, then a strip of drift and combat counters
+  renderResultStats(total, best, record) {
+    const st = this.player.stats;
+    const cell = ([k, v]) => `<span>${k}</span><b>${v}</b>`;
+    $('resStats').innerHTML = [
+      ['Total', total ? formatTime(total) : 'DNF'], ['Best Lap', formatTime(best)], ['Top Speed', `${Math.round(st.top)}<small>km/h</small>`], ['Perfect Boosts', st.perfect],
+    ].map((t) => `<div class="rtile">${cell(t)}</div>`).join('') + `<div class="rcount">${[
+      ['Drifts', st.drift], ['Mini Boosts', st.small], ['Double Boosts', st.double], ['Nitros', st.nitro], ['Takedowns', st.takedown || 0], ['Crashes', st.crash],
+    ].map((t) => `<div>${cell(t)}</div>`).join('')}</div>`;
+    $('resRecord').classList.toggle('hidden', !record);
+    $('resRecTxt').textContent = `New track record · Best lap ${formatTime(best)}`;
+  }
+
+  // rows in finishing order: { name, me, color, total: seconds or why the racer did not finish, best, pts }
+  renderStandings(rows) {
+    const esc = (t) => String(t).replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
+    $('resBody').parentElement.classList.toggle('dense', rows.length > 8);
+    $('resBody').innerHTML = rows.map((r, i) => `<tr class="${r.me ? 'me' : ''}"><td class="pos">${i + 1}</td>`
+      + `<td><span class="rn"><i style="background:${r.color}"></i><span>${r.me ? 'You · ' : ''}${esc(r.name)}</span></span></td>`
+      + `<td>${typeof r.total === 'number' ? formatTime(r.total) : `DNF <small>${r.total}</small>`}</td><td>${formatTime(r.best)}</td><td class="pts">${r.pts}</td></tr>`).join('');
+  }
+
   showOnlineResults(res) {
     this.resultShown = true;
     this.state = 'finish';
@@ -1286,21 +1433,26 @@ class Game {
     const mine = rows.find((r) => r.id === me);
     const won = !!mine?.finished && mine.place === 1;
     $('resTitle').textContent = !mine ? 'Race Over' : !mine.finished ? 'Did Not Finish' : won ? 'You Win!' : `${ordinal(mine.place)} Place`;
-    $('resTitle').classList.toggle('win', won);
+    $('resTitle').classList.remove('champ');
     $('cupBox').innerHTML = '';
-    ['again', 'nextRace', 'resBoard'].forEach((i) => $(i).classList.add('hidden'));
+    ['again', 'nextRace', 'resBoard', 'resStand'].forEach((i) => $(i).classList.add('hidden'));
     $('back').textContent = 'Back to Room';
+    $('back').classList.add('pri'); // the only way on from here
     // only this driver's best lap goes into the local track records
-    if (P.lapTimes.length) this.league.recordRace(this.map.id, [{ id: 'me', name: P.name, car: P.model.userData.skin.id, best: Math.min(...P.lapTimes), finished: P.finished }], false);
-    const st = P.stats;
-    $('resStats').innerHTML = [
-      ['Drifts', st.drift], ['Mini Boosts', st.small], ['Perfect Boosts', st.perfect], ['Double Boosts', st.double], ['Nitros', st.nitro], ['Top Speed', Math.round(st.top) + ''], ['Takedowns', st.takedown || 0], ['Crashes', st.crash],
-    ].map(([k, v]) => `<div class="stat"><b>${v}</b>${k}</div>`).join('');
-    const esc = (t) => String(t).replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
-    $('resBody').innerHTML = rows.map((r) => {
-      const total = r.finished ? formatTime(r.time) : r.out ? 'DNF (left)' : `DNF (${Math.floor(clamp((r.prog / res.laps) * 100, 0, 99))}%)`;
-      return `<tr class="${r.id === me ? 'me' : ''}"><td class="pos">${r.place}</td><td>${esc(r.name)}${r.id === me ? ' <small>(you)</small>' : ''}</td><td>${total}</td><td>${formatTime(r.best)}</td><td class="pts"></td></tr>`;
-    }).join('');
+    const best = P.lapTimes.length ? Math.min(...P.lapTimes) : 0;
+    const record = best > 0 && this.league.recordRace(this.map.id, [{ id: 'me', name: P.name, car: P.model.userData.skin.id, best, finished: P.finished }], false);
+    this.countChallenges(!!mine?.finished, mine?.place);
+    const mode = MODES.find((m) => m.id === this.race.mode)?.name || '';
+    this.renderResultHead(mine?.finished ? mine.place : 0, rows.length, [this.map.name, `Online ${mode}`, res.laps]);
+    this.renderResultStats(mine?.finished ? mine.time : 0, best, record);
+    this.renderStandings(rows.map((r) => {
+      const racer = r.id === me ? P : this.racers.find((x) => x.netId === r.id);
+      return {
+        name: r.name, me: r.id === me, best: r.best, pts: '',
+        color: racer ? carDot(racer) : '#' + (CARS[r.car] || CARS[0]).body.toString(16).padStart(6, '0'),
+        total: r.finished ? r.time : r.out ? 'left' : `${Math.floor(clamp((r.prog / res.laps) * 100, 0, 99))}%`,
+      };
+    }));
     setTimeout(() => {
       $('result').classList.remove('hidden');
       $('touch').classList.add('hidden');
@@ -1312,6 +1464,7 @@ class Game {
     if (this.race.online) return; // the server's results follow (checkOnlineEnd)
     $('resBoard').classList.remove('hidden');
     $('back').textContent = 'Back to Lobby';
+    $('back').classList.remove('pri');
     this.resultShown = true;
     this.state = 'finish';
     this.hud.finalCount('');
@@ -1320,11 +1473,12 @@ class Game {
     const P = this.player;
     const place = order.indexOf(P) + 1;
     const entries = order.map((r) => ({ id: r.id, name: r.name, car: r.model.userData.skin.id, best: r.lapTimes.length ? Math.min(...r.lapTimes) : 0, finished: r.finished }));
-    this.league.recordRace(this.map.id, entries, !this.race.f1);
+    const record = this.league.recordRace(this.map.id, entries, !this.race.f1 && !this.race.trial);
+    this.countChallenges(P.finished, place);
     const def = this.race.cup && this.league.cupDef();
     const cup = def ? this.league.cupRaceDone(entries.map((e) => e.id)) : null;
     const season = this.race.season && this.league.f1 ? this.league.f1RaceDone(entries.map((e) => e.id)) : null;
-    let title = P.retired ? 'Retired' : !P.finished ? 'Did Not Finish' : place === 1 ? 'You Win!' : `${ordinal(place)} Place`;
+    let title = P.retired ? 'Retired' : !P.finished ? 'Did Not Finish' : this.race.trial ? (this.race.beatGhost ? 'Ghost Beaten!' : 'Time Trial') : place === 1 ? 'You Win!' : `${ordinal(place)} Place`;
     let won = P.finished && place === 1;
     if (cup?.done) {
       const overall = cup.standings.findIndex((x) => x.id === 'me') + 1;
@@ -1337,22 +1491,29 @@ class Game {
       title = won ? '🏆 World Champion!' : `Championship: ${ordinal(overall)}`;
     }
     $('resTitle').textContent = title;
-    $('resTitle').classList.toggle('win', won);
+    $('resTitle').classList.toggle('champ', won && !!(cup?.done || season?.done));
     this.renderCupBox(def, cup);
     if (season) this.renderSeasonBox(season);
     const next = cup || season;
+    // a championship round offers its standings; F1 races don't count toward the career leaderboard
+    this.lastSeason = season?.season;
+    $('resBoard').classList.toggle('hidden', !!season);
+    $('resStand').classList.toggle('hidden', !season);
     $('again').classList.toggle('hidden', !!next);
     $('nextRace').classList.toggle('hidden', !next || next.done);
     $('nextRace').textContent = season ? 'Next Grand Prix' : 'Next Race';
-    const st = P.stats;
-    $('resStats').innerHTML = [
-      ['Drifts', st.drift], ['Mini Boosts', st.small], ['Perfect Boosts', st.perfect], ['Double Boosts', st.double], ['Nitros', st.nitro], ['Top Speed', Math.round(st.top) + ''], ['Takedowns', st.takedown || 0], ['Crashes', st.crash],
-    ].map(([k, v]) => `<div class="stat"><b>${v}</b>${k}</div>`).join('');
-    $('resBody').innerHTML = order.map((r, i) => {
-      const best = r.lapTimes.length ? Math.min(...r.lapTimes) : 0;
-      const total = r.finished ? formatTime(r.finishTime) : r.retired ? 'DNF (retired)' : `DNF (${Math.floor(Math.max(0, Math.min(99, (r.progress / L) * 100 / this.race.laps)))}%)`;
-      return `<tr class="${r.isPlayer ? 'me' : ''}"><td class="pos">${i + 1}</td><td>${r.name}</td><td>${total}</td><td>${formatTime(best)}</td><td class="pts">+${(this.race.points || POINTS)[i] || 0}</td></tr>`;
-    }).join('');
+    const kind = def ? def.name : this.race.f1 ? 'Formula 1' : this.race.trial ? 'Time trial' : MODES.find((m) => m.id === this.race.mode)?.name || '';
+    this.renderResultHead(P.finished ? place : 0, order.length, [this.map.name, kind, this.race.laps]);
+    if (this.race.trial && P.finished) { // alone on the track: the best lap is the headline, not "1st / 1"
+      $('resPlace').textContent = formatTime(entries[place - 1].best);
+      $('resOf').textContent = 'best lap';
+      $('resPlaceBox').className = `rplace time${this.race.beatGhost ? ' gold' : ''}`;
+    }
+    this.renderResultStats(P.finished ? P.finishTime : 0, entries[place - 1].best, record);
+    this.renderStandings(order.map((r, i) => ({
+      name: r.name, me: r.isPlayer, color: carDot(r), best: entries[i].best, pts: this.race.trial ? '' : `+${(this.race.points || POINTS)[i] || 0}`,
+      total: r.finished ? r.finishTime : r.retired ? 'retired' : `${Math.floor(clamp((r.progress / L) * 100 / this.race.laps, 0, 99))}%`,
+    })));
     const reveal = () => {
       $('result').classList.remove('hidden');
       $('touch').classList.add('hidden');
@@ -1416,41 +1577,298 @@ class Game {
 
   // ---------- Formula 1 ----------
   showF1() {
-    const S = this.settings;
-    const F = (S.f1 ||= { team: 0, laps: 3, diff: 1, rounds: 6 });
-    if (!this.teamThumbs) { try { this.teamThumbs = renderTeamThumbs(TEAMS); } catch { this.teamThumbs = []; } }
     const hex = (c) => '#' + c.toString(16).padStart(6, '0');
-    $('f1Teams').innerHTML = TEAMS.map((t, i) => `<div class="carcard${i === F.team ? ' sel' : ''}" data-i="${i}">${this.teamThumbs[i] ? `<img src="${this.teamThumbs[i]}" alt="${t.name}">` : `<div class="swatch" style="background:${hex(t.body)}"></div>`}<div class="cn">${t.name}</div></div>`).join('');
-    const opts = (el, list, cur, label) => { $(el).innerHTML = list.map((v, i) => `<div class="opt${v === cur ? ' sel' : ''}" data-i="${i}">${label(v)}</div>`).join(''); };
-    opts('f1Laps', [2, 3, 5], F.laps, (v) => `${v} laps`);
-    opts('f1Diff', [0, 1, 2], F.diff, (v) => DIFFS[v].name);
-    opts('f1Len', [6, 12, 24], F.rounds, (v) => (v === 24 ? 'Full season (24)' : `${v} rounds`));
-    $('f1Gps').innerHTML = GPS.map((g, i) => `<div class="gp" data-id="${g.id}"><span class="fl">${g.flag}</span><div><div class="gn">${i + 1}. ${g.name}</div><div class="gc">${g.circuit}</div></div></div>`).join('');
+    // the cards and options never change, so they're built once and markF1 moves the selection
+    if (!$('f1Gps').firstChild) {
+      $('f1Teams').innerHTML = TEAMS.map((t, i) => {
+        const tc = hex(t.dot ?? t.body);
+        // pace runs from 0.958 to 1; the bar starts at 0.94 so the slowest team still shows some
+        const pace = Math.round(((t.pace - 0.94) / 0.06) * 100);
+        return `<button type="button" class="carcard" data-i="${i}" style="--tc:${tc};--tcb:${tc}24"><span class="liv"><i style="background:${hex(t.body)}"></i><i style="background:${hex(t.trim)}"></i></span>
+          <span class="cn">${t.name}</span><span class="pace">Pace<span class="pb"><i style="width:${pace}%"></i></span></span></button>`;
+      }).join('');
+      const opts = (el, list, label) => { $(el).innerHTML = list.map((v, i) => `<button type="button" class="opt" data-i="${i}">${label(v)}</button>`).join(''); };
+      opts('f1Laps', F1_LAPS, (v) => `${v}`);
+      opts('f1Diff', DIFFS, (d) => d.name);
+      opts('f1Len', F1_ROUNDS, (v) => (v === 24 ? 'Full 24' : `${v} rounds`));
+      $('f1Gps').innerHTML = GPS.map((g) => `<button type="button" class="gp" data-id="${g.id}"><span class="gcode">${g.code}</span><span class="gn">${g.name}</span><span class="gc">${g.circuit}</span></button>`).join('');
+      $('f1GpNote').textContent = `${GPS.length} circuits · ${IS_TOUCH ? 'swipe' : 'scroll'} for more`;
+    }
+    this.markF1();
+    // the season in progress: round, team, next Grand Prix and where the player stands
     const f = this.league.f1;
-    $('f1Resume').innerHTML = f
-      ? `<div class="resume"><div><b>Championship in progress</b> · ${TEAMS[f.team].name} · Round ${f.idx + 1} of ${f.calendar.length}: ${GPS.find((g) => g.id === f.calendar[f.idx]).flag} ${GPS.find((g) => g.id === f.calendar[f.idx]).name}</div>
-         <div class="btns"><button class="go" id="f1Continue">Continue</button><button class="go sec" id="f1Abandon">Abandon</button></div></div>`
-      : '';
-    ['menu', 'board', 'result', 'cups'].forEach((i) => $(i).classList.add('hidden'));
+    let resume = '';
+    if (f) {
+      const st = this.league.f1Standings();
+      const pos = st.drivers.findIndex((d) => d.id === 'me');
+      const me = st.drivers[pos], lead = st.drivers[pos ? 0 : 1];
+      const pts = (n) => `${n}\u00a0${n === 1 ? 'pt' : 'pts'}`; // kept on one line
+      const where = f.idx === 0 ? 'First race of the season'
+        : me.pts === lead.pts ? (pos ? `You are P${pos + 1}, level on points with the leader` : 'You are P1, level on points')
+        : pos ? `You are P${pos + 1}, ${pts(lead.pts - me.pts)} behind the leader` : `You lead by ${pts(me.pts - lead.pts)}`;
+      resume = `<section class="f1prog" aria-label="Season in progress">
+        <div class="rnd">R${f.idx + 1}</div>
+        <div><div class="f1lab">Season in progress · ${TEAMS[f.team].name} · ${f.calendar.length} rounds</div><div class="nx">Next: ${GPS.find((g) => g.id === f.calendar[f.idx]).name} · ${where}</div></div>
+        <div class="f1acts"><button id="f1Continue" type="button">Continue</button><button id="f1Stand" type="button">Standings</button><button id="f1Abandon" type="button">Abandon</button></div>
+        </section>`;
+    }
+    $('f1Resume').innerHTML = resume;
+    ['menu', 'board', 'result', 'cups', 'f1w', 'f1st', 'lg'].forEach((i) => $(i).classList.add('hidden'));
     $('f1s').classList.remove('hidden');
   }
 
-  async startF1Race() {
-    const f = this.league.f1;
-    if (!f || this.loading) return;
-    ['menu', 'result', 'f1s', 'pause'].forEach((i) => $(i).classList.add('hidden'));
-    const id = 'f1-' + f.calendar[f.idx];
-    if (this.map.id !== id) await this.loadMap(id);
-    this.startRace(this.league.f1RaceConfig());
+  // marks the picked team, laps, opponents and championship length
+  markF1() {
+    const F = this.settings.f1;
+    const mark = (id, sel) => $(id).querySelectorAll('[data-i]').forEach((e) => {
+      e.classList.toggle('sel', +e.dataset.i === sel);
+      e.setAttribute('aria-pressed', +e.dataset.i === sel);
+    });
+    mark('f1Teams', F.team);
+    mark('f1Laps', F1_LAPS.indexOf(F.laps));
+    mark('f1Diff', F.diff);
+    mark('f1Len', F1_ROUNDS.indexOf(F.rounds));
   }
 
-  async startF1GP(gpId) {
+  // a championship round: the race weekend screen first, then the race
+  startF1Race() {
+    const f = this.league.f1;
+    if (!f || this.loading) return;
+    this.showWeekend(this.league.f1RaceConfig(), f.calendar[f.idx], { round: f.idx + 1, rounds: f.calendar.length });
+  }
+
+  startF1GP(gpId) {
     if (this.loading) return;
     const F = this.settings.f1;
-    ['menu', 'result', 'f1s', 'pause'].forEach((i) => $(i).classList.add('hidden'));
+    this.showWeekend(this.league.f1Single(F.team, F.laps, F.diff), gpId);
+  }
+
+  // ---------- Formula 1 race weekend ----------
+  // The circuit and its facts, the starting grid, and the player's starting tyres. LIGHTS OUT starts the race.
+  async showWeekend(race, gpId, season = null) {
+    if (this.loading) return;
+    this.leaveRace();
     const id = 'f1-' + gpId;
     if (this.map.id !== id) await this.loadMap(id);
-    this.startRace(this.league.f1Single(F.team, F.laps, F.diff));
+    this.startDemo();
+    const gp = GPS.find((g) => g.id === gpId);
+    const tr = this.track;
+    const hex = (c) => '#' + c.toString(16).padStart(6, '0');
+    // rivals choose their own sets; the player starts on whatever they picked last time
+    const mine = this.settings.f1.tyre;
+    race.tyres = { me: COMPOUNDS[mine] ? mine : 'medium' };
+    for (const r of race.rivals) race.tyres[r.id] = pickCompound(race.laps, Math.random);
+    this.weekend = race;
+
+    const night = this.map.theme.props.night;
+    $('wkRound').textContent = season ? `Round ${season.round} of ${season.rounds} · Race weekend` : 'Single Grand Prix · Race weekend';
+    $('wkName').textContent = gp.name;
+    $('wkCircuit').textContent = [gp.circuit, night && 'night race', tr.tunnels?.length && 'tunnel'].filter(Boolean).join(' · ');
+    const rec = this.league.records(id)[0];
+    const facts = [
+      ['Laps', race.laps, `${((race.laps * tr.length) / 1000).toFixed(1)} km race`],
+      ['Lap length', `${(tr.length / 1000).toFixed(1)} km`, ''],
+      ['Weather', 'Dry', night ? 'Night, under floodlights' : 'Clear skies'],
+      ['Lap record', rec ? formatTime(rec.time) : 'None', rec ? `${rec.id === 'me' ? 'You' : rec.name} · ${TEAMS.find((t) => t.id === rec.car)?.name || ''}` : 'Set the first one this weekend'],
+    ];
+    $('wkFacts').innerHTML = facts.map(([k, v, sub]) => `<div class="wkfact"><span class="k">${k}</span><b>${v}</b>${sub ? `<span class="s">${sub}</span>` : ''}</div>`).join('');
+    const notes = { soft: 'Most grip, wears fastest', medium: 'Balanced grip and wear', hard: 'Least grip, lasts longest' };
+    $('wkTyres').innerHTML = Object.entries(COMPOUNDS).map(([k, c]) => `<button type="button" class="wktyre" data-k="${k}" style="--c:${c.color};--cb:${c.color}1f"><i></i>
+      <span><b>${c.name}</b><small>${notes[k]} · about ${tyreLaps(k).toFixed(1)} laps</small></span></button>`).join('');
+
+    // the grid, with each car's team colour and starting tyres (and championship points in a season)
+    const pts = season && Object.fromEntries(this.league.f1Standings().drivers.map((d) => [d.id, d.pts]));
+    $('wkGridH').textContent = `Starting grid · ${season && season.round > 1 ? 'by standings' : 'random draw'}`;
+    $('wkGrid').innerHTML = race.order.map((rid, i) => {
+      const me = rid === 'me';
+      const rv = !me && race.rivals.find((x) => x.id === rid);
+      const team = TEAMS[me ? race.team : rv.team];
+      const tyre = COMPOUNDS[race.tyres[rid]];
+      const tc = hex(team.dot ?? team.body);
+      return `<li${me ? ' class="me"' : ''} style="--tc:${tc};--tcb:${tc}29"><i>P${i + 1}</i><span class="tb"></span>
+        <span class="nm">${me ? `You · ${team.name}` : `${team.name} · ${rv.name}`}</span>${pts ? `<span class="pt">${pts[rid]} pts</span>` : ''}
+        <span class="cmp" style="--c:${tyre.color}" title="${tyre.name} tyres">${tyre.name[0]}</span></li>`;
+    }).join('');
+    this.markTyre();
+    $('f1w').classList.remove('hidden');
+    $('f1w').scrollTop = 0;
+    this.drawWeekendMap();
+  }
+
+  // the player's starting tyres, on the picker and on their grid slot
+  markTyre() {
+    const k = this.weekend.tyres.me, c = COMPOUNDS[k];
+    $('wkTyres').querySelectorAll('.wktyre').forEach((e) => {
+      e.classList.toggle('sel', e.dataset.k === k);
+      e.setAttribute('aria-pressed', e.dataset.k === k);
+    });
+    const m = $('wkGrid').querySelector('.me .cmp');
+    m.textContent = c.name[0];
+    m.title = `${c.name} tyres`;
+    m.style.setProperty('--c', c.color);
+  }
+
+  // The circuit drawn from the track's centerline: start/finish line and direction of travel, the pit lane and its entry, and any tunnel
+  drawWeekendMap() {
+    const cv = $('wkMap'), tr = this.track, pit = this.pit;
+    const W = cv.clientWidth, H = cv.clientHeight;
+    if (!W || !H || !tr) return;
+    const dpr = Math.min(2, window.devicePixelRatio || 1);
+    cv.width = Math.round(W * dpr);
+    cv.height = Math.round(H * dpr);
+    const g = cv.getContext('2d');
+    g.setTransform(dpr, 0, 0, dpr, 0, 0);
+    // same orientation as the race minimap: x to the right, z up
+    const b = tr.bounds, pad = 40, L = tr.length;
+    const sc = Math.min((W - pad * 2) / (b.maxX - b.minX), (H - pad * 2) / (b.maxZ - b.minZ));
+    const P = (x, z) => [W / 2 + (x - b.cx) * sc, H / 2 - (z - b.cz) * sc];
+    const q = {};
+    const at = (d, lat = 0) => { tr.sample(d, q); return P(q.x + q.rx * lat, q.z + q.rz * lat); };
+    const path = (d0, d1, lat = () => 0) => {
+      g.beginPath();
+      for (let d = d0; ; d = Math.min(d1, d + 4)) {
+        const [x, y] = at(d, lat(d));
+        if (d === d0) g.moveTo(x, y);
+        else g.lineTo(x, y);
+        if (d >= d1) break;
+      }
+    };
+    const road = Math.max(10, Math.min(18, W / 40));
+    g.lineJoin = g.lineCap = 'round';
+    path(0, L);
+    g.closePath();
+    g.strokeStyle = '#2a2c3c';
+    g.lineWidth = road;
+    g.stroke();
+    g.strokeStyle = '#f4f1e8';
+    g.lineWidth = 3;
+    g.stroke();
+    // tunnels: cyan over the road
+    for (const [d0, d1] of tr.tunnels || []) {
+      path(d0, d1);
+      g.strokeStyle = 'rgba(54,226,255,.85)';
+      g.lineWidth = road - 4;
+      g.stroke();
+    }
+    // the pit lane beside the start straight, pushed clear of the road where the map is too small to show the real gap
+    if (pit) {
+      const k = Math.max(1, (road / 2 + 5) / sc / pit.lat);
+      path(pit.d(0), pit.d(0) + PIT.exit, (d) => pitLat(pit, tr.halfW, (((d - pit.d(0)) % L) + L) % L) * k);
+      g.strokeStyle = '#ffd23a';
+      g.lineWidth = 4;
+      g.stroke();
+      const [x, y] = at(pit.d(0), (tr.halfW - 3) * k);
+      g.fillStyle = '#ffd23a';
+      g.beginPath();
+      g.arc(x, y, 5, 0, Math.PI * 2);
+      g.fill();
+    }
+    // start/finish: a red bar across the road, and an arrow just after it for the direction of travel
+    tr.sample(0, q);
+    const s = (road / 2 + 5) / sc;
+    const [ax, ay] = P(q.x - q.rx * s, q.z - q.rz * s), [bx, by] = P(q.x + q.rx * s, q.z + q.rz * s);
+    g.strokeStyle = '#ff4545';
+    g.lineWidth = 6;
+    g.lineCap = 'butt';
+    g.beginPath();
+    g.moveTo(ax, ay);
+    g.lineTo(bx, by);
+    g.stroke();
+    const [x0, y0] = at(Math.min(90, L * 0.04)), [x1, y1] = at(Math.min(90, L * 0.04) + 6);
+    const a = Math.atan2(y1 - y0, x1 - x0);
+    g.save();
+    g.translate(x0, y0);
+    g.rotate(a);
+    g.fillStyle = '#f4f1e8';
+    g.strokeStyle = '#07080f';
+    g.lineWidth = 2;
+    g.beginPath();
+    g.moveTo(8, 0);
+    g.lineTo(-6, -7);
+    g.lineTo(-2, 0);
+    g.lineTo(-6, 7);
+    g.closePath();
+    g.fill();
+    g.stroke();
+    g.restore();
+    // labels sit off the road on the side facing away from the middle of the circuit, kept inside the canvas
+    g.font = '700 12px "Chakra Petch", sans-serif';
+    g.textAlign = 'center';
+    g.textBaseline = 'middle';
+    const label = (d, text, color) => {
+      tr.sample(d, q);
+      let [nx, ny] = [q.rx, -q.rz];
+      if ((q.x - b.cx) * q.rx + (q.z - b.cz) * q.rz < 0) [nx, ny] = [-nx, -ny];
+      const [x, y] = P(q.x, q.z);
+      const w = g.measureText(text).width + 12, h = 20, off = road / 2 + 10;
+      const cx = clamp(x + nx * (off + (w / 2) * Math.abs(nx)), w / 2 + 2, W - w / 2 - 2);
+      const cy = clamp(y + ny * (off + (h / 2) * Math.abs(ny)), h / 2 + 2, H - h / 2 - 2);
+      g.fillStyle = 'rgba(7,8,15,.85)';
+      g.beginPath();
+      if (g.roundRect) g.roundRect(cx - w / 2, cy - h / 2, w, h, 6);
+      else g.rect(cx - w / 2, cy - h / 2, w, h);
+      g.fill();
+      g.fillStyle = color;
+      g.fillText(text, cx, cy + 1);
+    };
+    label(0, 'START / FINISH', '#ff8a8a');
+    if (pit) label(pit.d(0), 'PIT ENTRY', '#ffd23a');
+    for (const [d0, d1] of tr.tunnels || []) label((d0 + d1) / 2, 'TUNNEL', '#36e2ff');
+  }
+
+  // ---------- Formula 1 standings ----------
+  // The championship so far: a calendar strip (winners' colours, the next round, rounds to come) over the drivers' or constructors' table.
+  // `season` is the one in progress, or the one the results screen just finished; Back returns to the `from` screen.
+  showStandings(season, from) {
+    if (!season) return;
+    this.stand = { season, from, tab: this.stand?.tab || 'drivers' };
+    $(from).classList.add('hidden');
+    this.renderStandingsScreen();
+    $('f1st').classList.remove('hidden');
+    $('f1st').scrollTop = 0;
+  }
+
+  renderStandingsScreen() {
+    const { season: f, tab } = this.stand;
+    const st = this.league.f1Standings(f);
+    const hex = (c) => '#' + c.toString(16).padStart(6, '0');
+    const n = f.calendar.length;
+    $('stLab').textContent = f.idx >= n ? `Final standings · ${n} rounds` : f.idx ? `After round ${f.idx} of ${n}` : `Before round 1 of ${n}`;
+    document.querySelectorAll('#f1st .sttabs .opt').forEach((b) => {
+      b.classList.toggle('sel', b.dataset.tab === tab);
+      b.setAttribute('aria-pressed', b.dataset.tab === tab);
+    });
+    $('stCal').innerHTML = f.calendar.map((id, i) => {
+      const gp = GPS.find((g) => g.id === id), r = f.results[i];
+      if (!r) return `<li class="${i === f.idx ? 'next' : 'todo'}" aria-label="Round ${i + 1}: ${gp.name}${i === f.idx ? ', next' : ''}"><b>${gp.code}</b><i></i></li>`;
+      const w = r.order && st.drivers.find((d) => d.id === r.order[0]);
+      const who = w ? `won by ${w.id === 'me' ? 'you' : w.name}, ${w.team.name}` : 'result not recorded';
+      return `<li class="done${w ? '' : ' nr'}" aria-label="Round ${i + 1}: ${gp.name}, ${who}" title="${gp.name}: ${who}"><b>${gp.code}</b><i${w ? ` style="background:${hex(w.team.dot ?? w.team.body)}"` : ''}></i></li>`;
+    }).join('');
+    // form chips: a win in gold, the rest of the podium in light gold, points in grey, outside the points outlined
+    const chip = (p) => (p ? `<span class="${p === 1 ? 'p1' : p <= 3 ? 'pod' : p <= F1_POINTS.length ? '' : 'out'}">P${p}</span>` : '<span class="nr" title="Not recorded">–</span>');
+    const rows = tab === 'teams'
+      ? st.teams.map((t) => ({ ...t, color: hex(t.color) }))
+      : st.drivers.map((d) => ({ ...d, me: d.id === 'me', color: hex(d.team.dot ?? d.team.body), name: d.id === 'me' ? 'You' : d.name, sub: d.team.name }));
+    $('stCol').textContent = tab === 'teams' ? 'Constructor' : 'Driver';
+    $('stBody').innerHTML = rows.map((r, i) => `<tr${r.me ? ' class="me"' : ''} style="--tc:${r.color};--tcb:${r.color}24;--tce:${r.color}80">
+      <td>${i + 1}</td><td><span class="nm"><i></i><span>${r.name}${r.sub ? `<small> · ${r.sub}</small>` : ''}</span></span></td><td><span class="form">${r.form.map(chip).join('')}</span></td>
+      <td>${r.wins}</td><td>${r.podiums}</td><td>${r.pts}</td></tr>`).join('');
+    // a long calendar scrolls: bring the next round into view
+    const cal = $('stCal'), next = cal.querySelector('.next');
+    cal.scrollLeft = next ? next.offsetLeft - (cal.clientWidth - next.offsetWidth) / 2 : cal.scrollWidth;
+    const lost = f.results.filter((r) => !r.order).length;
+    $('stNote').textContent = lost ? `${lost === 1 ? 'Round 1 was' : `Rounds 1–${lost} were`} raced before results were saved per round, so ${lost === 1 ? 'it shows' : 'they show'} as – in form and only ${lost === 1 ? 'its win counts' : 'their wins count'} toward podiums.` : '';
+  }
+
+  // time trial: alone on a track, against the saved ghost of the best lap there (if any)
+  async startTrial(mapId) {
+    if (this.loading) return;
+    const S = this.settings;
+    ['menu', 'chal'].forEach((i) => $(i).classList.add('hidden'));
+    if (this.map.id !== mapId) await this.loadMap(mapId);
+    const ghost = await this.ghosts.load(mapId);
+    this.startRace({ trial: true, laps: 3, mode: 'speed', skin: S.skin, diff: S.diff, cup: false, rivals: [], ghost });
   }
 
   async startCupRace() {
@@ -1466,17 +1884,33 @@ class Game {
     const L = this.league;
     const cup = L.cup;
     const def = L.cupDef();
+    // the cup in progress: races run (track and the player's finish), the next race, the ones still to come, and the points so far
+    const races = cup ? cup.tracks.map((id, i) => {
+      if (i === cup.idx) return `<li class="crace next"><span>Next</span><b>${mapById(id).name}</b></li>`;
+      if (i > cup.idx) return `<li class="crace"><span>Race ${i + 1}</span><b>???</b></li>`;
+      const place = cup.places?.[i]; // cups started before places were recorded have none
+      return `<li class="crace done"><span>Race ${i + 1}</span><b>${mapById(id).name}${place ? ` · ${ordinal(place)}` : ''}</b></li>`;
+    }).join('') : '';
     $('cupResume').innerHTML = cup
-      ? `<div class="resume"><div><b>${def.icon} ${def.name}</b> in progress · Race ${cup.idx + 1} of ${def.races} · ${CARS[cup.car].name}</div>
-         <div class="btns"><button class="go" id="cupContinue">Continue</button><button class="go sec" id="cupAbandon">Abandon</button></div></div>`
+      ? `<section class="cprog" aria-label="Tournament in progress"><div class="cl">
+          <div class="clab">In progress</div><h3>${def.name} · Race ${cup.idx + 1} of ${def.races}</h3>
+          <div class="csub">${CARS[cup.car].name} · ${MODES.find((m) => m.id === cup.mode)?.name || ''} · ${def.laps} laps</div>
+          <ol class="craces">${races}</ol>
+          <div class="cacts"><button id="cupContinue" type="button">Continue</button><button id="cupAbandon" type="button">Abandon</button></div></div>
+        <div class="cstand"><div class="clab">Standings</div><ol>${L.cupStandings().map((x, i) =>
+          `<li class="${x.id === 'me' ? 'me' : ''}"><i>${i + 1}</i><span>${x.id === 'me' ? 'You' : x.name}</span><b>${x.pts}</b></li>`).join('')}</ol></div></section>`
       : '';
+    const trophy = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 21h8M12 17v4M7 4h10v5a5 5 0 0 1-10 0z"/><path d="M17 5h3v2a3 3 0 0 1-3 3M7 5H4v2a3 3 0 0 0 3 3"/></svg>';
     $('cupList').innerHTML = CUPS.map((c) => {
       const w = L.d.cupWins[c.id] || 0;
-      return `<div class="cupcard${cup ? ' locked' : ''}" data-id="${c.id}"><div class="ci">${c.icon}</div><div class="cn">${c.name}</div>
-        <div class="cd">${c.desc}</div><div class="cm">${c.races} races · ${c.laps} laps · ${DIFFS[c.diff].name} AI</div>
-        <div class="cw">${w ? `Won ${w}×` : 'Not won yet'}</div></div>`;
+      return `<button type="button" class="cupcard${cup ? ' locked' : ''}" data-id="${c.id}" style="--c:${c.color}"${cup ? ' disabled' : ''}>
+        <span class="ctop"><span class="cico">${trophy}</span><span class="ctag">${cup?.id === c.id ? 'In progress' : w ? `Won ×${w}` : 'Not won yet'}</span></span>
+        <span class="cn">${c.name}</span><span class="cd">${c.desc}</span>
+        <span class="chips"><span>${c.races} races</span><span>${c.laps} laps</span><span>${DIFFS[c.diff].name}</span></span>
+        <span class="cfoot">${cup ? 'Finish the cup in progress first' : 'Start this cup'}</span></button>`;
     }).join('');
-    $('cupCar').textContent = `You'll drive the ${CARS[this.settings.skin].name} in ${MODES.find((m) => m.id === this.settings.mode).name} mode. Change these in the lobby.`;
+    // a new cup uses the lobby's car and mode; the one in progress shows its own above
+    $('cupCar').textContent = cup ? '' : `You'll drive the ${CARS[this.settings.skin].name} in ${MODES.find((m) => m.id === this.settings.mode).name} mode. Change these in the lobby.`;
     ['menu', 'board', 'result'].forEach((i) => $(i).classList.add('hidden'));
     $('cups').classList.remove('hidden');
   }
@@ -1484,27 +1918,38 @@ class Game {
   showBoard(tab = this.boardTab || 'drivers') {
     this.boardTab = tab;
     const L = this.league;
-    document.querySelectorAll('#board .tab').forEach((t) => t.classList.toggle('sel', t.dataset.tab === tab));
+    document.querySelectorAll('#board .tab').forEach((t) => {
+      t.classList.toggle('sel', t.dataset.tab === tab);
+      t.setAttribute('aria-pressed', t.dataset.tab === tab);
+    });
+    const who = (d) => (d.me ? `You · ${d.name}` : d.name);
     let html;
     if (tab === 'drivers') {
+      // the top three on a podium (2nd, 1st, 3rd), everyone else in the table
       const all = L.drivers();
-      const me = all.findIndex((d) => d.me);
-      html = `<div class="myrank">${L.name}: <b>${ordinal(me + 1)}</b> of ${all.length} drivers · ${all[me].career.pts} pts</div><table class="res board drivers"><thead><tr><th></th><th>Driver</th><th>Points</th><th>Races</th><th>Wins</th><th>Podiums</th><th>Cups</th></tr></thead><tbody>${all.map((d, i) =>
-        `<tr class="${d.me ? 'me' : ''}"><td class="pos">${i + 1}</td><td>${d.name}${d.me ? ' <small>(you)</small>' : ''}</td><td><b>${d.career.pts}</b></td><td>${d.career.races}</td><td>${d.career.wins}</td><td>${d.career.podiums}</td><td>${d.career.cups ? '🏆 ' + d.career.cups : '-'}</td></tr>`).join('')}</tbody></table>`;
+      const medal = ['#ffd23a', '#d7dae5', '#e0a84a'], height = [190, 160, 140];
+      html = `<div class="lbpod">${[1, 0, 2].map((i) => all[i] && `<div class="${all[i].me ? 'me' : ''}" style="--m:${medal[i]};--h:${height[i]}px"><b>${i + 1}</b>
+          <span class="nm">${who(all[i])}</span><span class="st">${all[i].career.pts} pts · ${all[i].career.wins} wins</span></div>`).join('')}</div>
+        <div class="lbpanel"><table class="lbt"><thead><tr><th>Rank</th><th>Driver</th><th>Points</th><th>Wins</th><th>Podiums</th><th>Races</th><th>Cups</th></tr></thead><tbody>${all.slice(3).map((d, i) =>
+          `<tr class="${d.me ? 'me' : ''}"><td>${i + 4}</td><td>${who(d)}</td><td>${d.career.pts}</td><td>${d.career.wins}</td><td>${d.career.podiums}</td><td>${d.career.races}</td><td>${d.career.cups || '-'}</td></tr>`).join('')}</tbody></table></div>`;
     } else {
-      html = MAPS.map((m) => {
-        const recs = L.records(m.id);
-        return `<h3>${m.name}</h3>` + (recs.length
-          ? `<table class="res board"><tbody>${recs.map((x, i) => `<tr class="${x.id === 'me' ? 'me' : ''}"><td class="pos">${i + 1}</td><td>${x.name}</td><td>${CARS.find((c) => c.id === x.car)?.name || ''}</td><td><b>${formatTime(x.time)}</b></td></tr>`).join('')}</tbody></table>`
-          : '<div class="empty">No laps recorded yet. Race here to set the first record.</div>');
-      }).join('') + F1_MAPS.filter((m) => L.records(m.id).length).map((m) => `<h3>${m.f1.flag} ${m.name}</h3><table class="res board"><tbody>${L.records(m.id).map((x, i) =>
-        `<tr class="${x.id === 'me' ? 'me' : ''}"><td class="pos">${i + 1}</td><td>${x.name}</td><td>${TEAMS.find((t) => t.id === x.car)?.name || ''}</td><td><b>${formatTime(x.time)}</b></td></tr>`).join('')}</tbody></table>`).join('');
+      // one card per track: its tint, the record holder and car, the best lap
+      const card = (name, tint, top, car) => `<div class="lbrec${top ? (top.id === 'me' ? ' me' : '') : ' none'}"><i style="background:${tint}"></i>
+        <span class="tr"><b>${name}</b><span>${top ? `${top.id === 'me' ? 'You' : top.name} · ${car}` : 'No record yet: race here to set one'}</span></span>
+        <span class="lap"><b>${formatTime(top?.time)}</b><span>Best lap</span></span></div>`;
+      html = `<div class="lbrecs">${MAPS.map((m) => {
+        const top = L.records(m.id)[0];
+        return card(m.name, MAP_TINT[m.id] || '#888', top, CARS.find((c) => c.id === top?.car)?.name || '');
+      }).join('')}${F1_MAPS.filter((m) => L.records(m.id).length).map((m) => {
+        const top = L.records(m.id)[0];
+        return card(`${m.f1.flag} ${m.name}`, '#ff5a5a', top, TEAMS.find((t) => t.id === top.car)?.name || '');
+      }).join('')}</div>`;
     }
     const body = $('boardBody');
     body.innerHTML = html;
-    const row = body.querySelector('tr.me');
-    body.scrollTop = tab === 'drivers' && row ? row.offsetTop - body.clientHeight / 2 : 0;
-    ['menu', 'result', 'cups', 'f1s'].forEach((i) => $(i).classList.add('hidden'));
+    body.scrollTop = 0;
+    $('board').scrollTop = 0;
+    ['menu', 'result', 'cups', 'f1s', 'f1w', 'f1st', 'lg'].forEach((i) => $(i).classList.add('hidden'));
     $('board').classList.remove('hidden');
   }
 
@@ -2051,9 +2496,10 @@ class Game {
   }
 
   // ---------- Player events → messages / sounds / effects ----------
-  handleEvents(P) {
+  handleEvents(P, dt) {
     const st = P.stats;
     st.top = Math.max(st.top, P.speedKmh);
+    if (P.drifting && this.state === 'race') st.driftM += Math.abs(P.s) * dt; // metres drifted, for the daily challenges
     for (const e of P.events) {
       switch (e.type) {
         case 'driftStart': st.drift++; break;
@@ -2129,7 +2575,7 @@ class Game {
       fin: r.finished,
       tag: r.retired ? 'DNF' : r.pit ? 'PIT' : r.car && r.car.fuel <= 0 ? 'OUT' : r.car && Math.max(r.car.wing, r.car.engine, r.car.susp) > 0.5 ? 'DMG'
         : r.isRemote && r.gone ? 'OUT' : r.isRemote && r.lag > LAGGING && !r.finished ? 'LAG' : '',
-      color: '#' + (r.model.userData.skin.dot ?? r.model.userData.skin.body).toString(16).padStart(6, '0'),
+      color: carDot(r),
     }));
     const lapNow = clamp(P.lapsDone + 1, 1, laps);
     this.hud.update({
@@ -2271,10 +2717,15 @@ class Game {
 
   updateCamera(dt) {
     const cam = this.camera;
+    // the garage frames the car in the space beside (or above) its panel
+    const frame = this.state === 'menu' && this.garage.isOpen ? this.garage.carFrame() : null;
+    if (frame) cam.setViewOffset(innerWidth, innerHeight, frame.x, frame.y, innerWidth, innerHeight);
+    else if (cam.view?.enabled) cam.clearViewOffset();
     if (cam.userData.fixed) return;
     const st = this.state;
     let target = this.player;
     if (st === 'menu') {
+      if (frame) this.demoT = 0; // hold on the garage's car
       this.demoT += dt;
       if (this.demoT > 9) { this.demoT = 0; this.demoTarget = (this.demoTarget + 1) % this.racers.length; this.demoCut = true; }
       target = this.racers[this.demoTarget];
@@ -2290,7 +2741,8 @@ class Game {
       // fireworks: pull back and look up into the sky where the shells burst
       const c = shown && (shown.isPlayer ? this.celeb : shown.celeb);
       const sky = c?.kind === 'fireworks' && c.phase === 'go';
-      const R = sky ? 30 : 11;
+      // the garage pulls in close, but not so close that a portrait phone crops the car
+      const R = sky ? 30 : frame ? (cam.aspect < 1 ? 14 : 8.5) : 11;
       const want = new THREE.Vector3(tx + Math.sin(a) * R, ty + (sky ? 5 : 3.2 + Math.sin(this.time * 0.4) * 1.2), tz + Math.cos(a) * R);
       // a new subject far across the map (the winner's celebration, then back): cut rather than fly over
       const cut = this.demoCut || this.camPos.distanceTo(want) > 80;

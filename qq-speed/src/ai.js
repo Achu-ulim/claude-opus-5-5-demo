@@ -65,7 +65,7 @@ export class AICar {
     const look = 18 + this.s * 1.25;
     const cAhead = tr.curvAhead(d, look);
     // Cornering limit (including drift); higher skill carries more speed
-    const A = (16 + 30 * this.skill) * this.cornerK;
+    const A = (16 + 30 * this.skill) * this.cornerK * (this.cornerGrip ?? 1); // cornerGrip: the F1 tyre compound
     const vCorner = Math.sqrt(A / Math.max(Math.abs(cAhead), 1e-4));
     let vt = Math.min(vmaxBase, vCorner + (this.nitroTime > 0 ? 6 : 0));
     let spinning = false;

@@ -1,5 +1,8 @@
 import * as THREE from 'three';
 import { mulberry32 } from './util.js';
+import cqLogo from './brands/cq.jpg';
+import gadlockLogo from './brands/gadlock.png';
+import sellamquickLogo from './brands/sellamquick.png';
 
 export let MAX_ANISO = 8;
 export function setMaxAniso(v) { MAX_ANISO = v; }
@@ -533,7 +536,30 @@ function outlined(g, w, h, text, font, fill, stroke, size, maxW, y) {
   g.fillText(text, w / 2, y ?? h / 2 + s * 0.35);
 }
 
+// Sponsors that supplied logo artwork: the logo, on the white it was made for, over a band in the brand colour.
+// Images decode asynchronously; brandTexture repaints once they have.
+function logoBoard(src, accent, fill) {
+  const img = new Image();
+  img.src = src;
+  const paint = (g, w, h) => {
+    g.fillStyle = '#ffffff';
+    g.fillRect(0, 0, w, h);
+    g.fillStyle = accent;
+    g.fillRect(0, h * 0.88, w, h * 0.12);
+    if (!img.naturalWidth) return;
+    const k = Math.min((w * fill) / img.naturalWidth, (h * 0.72) / img.naturalHeight);
+    const iw = img.naturalWidth * k, ih = img.naturalHeight * k;
+    g.imageSmoothingQuality = 'high';
+    g.drawImage(img, (w - iw) / 2, (h * 0.88 - ih) / 2, iw, ih);
+  };
+  paint.img = img;
+  return paint;
+}
+
 const BRANDS = {
+  cq: logoBoard(cqLogo, '#5a3de6', 0.5),
+  gadlock: logoBoard(gadlockLogo, '#55b462', 0.84),
+  sellamquick: logoBoard(sellamquickLogo, '#5ac463', 0.6),
   // The long P: its top stroke runs over the rest of the word
   pirelli(g, w, h) {
     g.fillStyle = '#000000';
@@ -744,7 +770,14 @@ export function brandTexture(id, w = 512, h = 256) {
   return cached(`brand-${id}-${w}x${h}`, () => {
     const [c, g] = mk(w, h);
     paintBrand(g, id, 0, 0, w, h);
-    return toTex(c, { repeat: false });
+    const t = toTex(c, { repeat: false });
+    const img = BRANDS[id].img;
+    if (img && !img.naturalWidth)
+      img.decode().then(() => {
+        paintBrand(g, id, 0, 0, w, h);
+        t.needsUpdate = true;
+      }, () => {});
+    return t;
   });
 }
 

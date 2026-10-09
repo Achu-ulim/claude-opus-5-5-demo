@@ -247,7 +247,36 @@ export function carSpecs() {
 // ---------- Looks ----------
 // what a car looks like before the garage touches it, and a garage look laid over that
 export function defaultLook(car) {
-  return { paint: car.body, finish: 'gloss', accent: car.accent, rim: RIM_FOR_SPOKES[car.spokes] || 'star', rimColor: car.rim, tyre: 'street', caliper: car.caliper, glow: car.glow, stripes: !!car.stripes };
+  return { paint: car.body, finish: 'gloss', accent: car.accent, rim: RIM_FOR_SPOKES[car.spokes] || 'star', rimColor: car.rim, tyre: 'street', caliper: car.caliper, glow: car.glow, stripes: !!car.stripes, number: null };
+}
+// garage colours with a special meaning: underglow switched off, and rims that light up
+export const GLOW_OFF = 0x000000;
+export const NEON_RIM = 0x36e2ff;
+
+// a race number roundel: cream disc, dark digits (Bungee once the page font has loaded)
+const numberTextures = new Map();
+function numberTexture(n) {
+  const font = document.fonts?.check('64px Bungee') ? 'Bungee' : '"Arial Black", Impact, sans-serif';
+  const key = `${n}|${font}`;
+  if (!numberTextures.has(key)) {
+    const c = document.createElement('canvas');
+    c.width = c.height = 128;
+    const g = c.getContext('2d');
+    g.fillStyle = '#f4f1e8';
+    g.beginPath();
+    g.arc(64, 64, 62, 0, Math.PI * 2);
+    g.fill();
+    g.fillStyle = '#07080f';
+    g.font = `${n > 9 ? 56 : 72}px ${font}`;
+    g.textAlign = 'center';
+    g.textBaseline = 'middle';
+    g.fillText(String(n), 64, 68);
+    const t = new THREE.CanvasTexture(c);
+    t.colorSpace = THREE.SRGBColorSpace;
+    t.anisotropy = 4;
+    numberTextures.set(key, t);
+  }
+  return numberTextures.get(key);
 }
 export function resolveLook(car, look) { return { ...defaultLook(car), ...cleanLook(look) }; }
 
@@ -348,7 +377,7 @@ export function buildCar(car, { name = null, isPlayer = false, look = null } = {
   const panel = new THREE.MeshStandardMaterial({ color: 0x15171c, roughness: 0.7, side: THREE.DoubleSide });
   const wellM = new THREE.MeshStandardMaterial({ color: 0x0b0b0d, roughness: 0.95, side: THREE.DoubleSide });
   const tireM = new THREE.MeshStandardMaterial({ color: 0x1b1b1d, roughness: 0.88, side: THREE.DoubleSide });
-  const rimM = new THREE.MeshStandardMaterial({ color: L.rimColor, metalness: 0.92, roughness: 0.22 });
+  const rimM = new THREE.MeshStandardMaterial({ color: L.rimColor, metalness: 0.92, roughness: 0.22, ...(L.rimColor === NEON_RIM ? { emissive: NEON_RIM, emissiveIntensity: 1.4 } : {}) });
   const rotorM = new THREE.MeshStandardMaterial({ color: 0x80858d, metalness: 0.8, roughness: 0.4, side: THREE.DoubleSide });
   const headM = new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: 0xe8f4ff, emissiveIntensity: 3.5 });
   const tailM = new THREE.MeshStandardMaterial({ color: 0xff2030, emissive: 0xff1020, emissiveIntensity: 4 });
@@ -641,9 +670,20 @@ export function buildCar(car, { name = null, isPlayer = false, look = null } = {
     mirrored((s) => add(g, chrome, s * (xs + 0.015), sd.y, sd.z));
   }
 
-  // Side neon strips, tucked under the sills
+  // Side neon strips, tucked under the sills (none with the underglow off)
+  const glowOn = L.glow !== GLOW_OFF;
   const neonLen = zs1 - zs0 - 0.1;
-  mirrored((s) => box(0.03, 0.04, neonLen, neonM, s * (sideX(B, (zs0 + zs1) / 2, S.sill + 0.03) - 0.06), S.sill - 0.01, (zs0 + zs1) / 2));
+  if (glowOn) mirrored((s) => box(0.03, 0.04, neonLen, neonM, s * (sideX(B, (zs0 + zs1) / 2, S.sill + 0.03) - 0.06), S.sill - 0.01, (zs0 + zs1) / 2));
+
+  // Race number: a roundel on the roof (readable from the chase camera) and one on each door
+  if (L.number != null) {
+    const numM = new THREE.MeshStandardMaterial({ map: numberTexture(L.number), transparent: true, roughness: 0.45, polygonOffset: true, polygonOffsetFactor: -4 });
+    add(new THREE.CircleGeometry(0.27, 32).rotateX(-Math.PI / 2).rotateY(Math.PI), numM, 0, G.roofTop + 0.014, (C.c1[0] + C.c2[0]) / 2);
+    const zd = (zs0 + zs1) / 2, yd = S.sill + 0.25;
+    // just outside the widest point of the door around the disc, so a curved side never pokes through it
+    const xd = Math.max(sideX(B, zd, yd - 0.18), sideX(B, zd, yd), sideX(B, zd, yd + 0.18)) + 0.012;
+    mirrored((s) => add(new THREE.CircleGeometry(0.19, 32).rotateY(s * Math.PI / 2), numM, s * xd, yd, zd));
+  }
 
   // Exhaust pipes
   const exhausts = [];
@@ -663,6 +703,7 @@ export function buildCar(car, { name = null, isPlayer = false, look = null } = {
   const under = new THREE.Mesh(new THREE.PlaneGeometry(S.width + 1.2, S.len[1] - S.len[0] + 1), glowMat);
   under.rotation.x = -Math.PI / 2;
   under.position.y = 0.06;
+  under.visible = glowOn;
   group.add(under);
 
   // Wheels: rounded tyres, rims in the chosen style over the brake disc, the caliper fixed while the wheel spins

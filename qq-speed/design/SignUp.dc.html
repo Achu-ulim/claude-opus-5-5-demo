@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Create Account</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Bungee&amp;family=Chakra+Petch:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#07080F}
+button,input{font-family:inherit}
+button{cursor:pointer}
+button:focus-visible,input:focus-visible,a:focus-visible{outline:2px solid #36E2FF;outline-offset:2px}
+a{color:#FFD23A}a:hover{color:#FFE680}
+input::placeholder{color:#6E7190}
+</style>
+</helmet>
+<div style="position: relative; width: 1440px; height: 900px; overflow: hidden; background: #07080F; color: #F4F1E8; font-family: 'Chakra Petch', sans-serif; display: grid; grid-template-columns: 1fr 1fr">
+  <div aria-hidden="true" style="position: absolute; left: -20%; right: 50%; top: 60%; bottom: -10%; transform: perspective(420px) rotateX(62deg); transform-origin: top center; background-image: linear-gradient(rgba(54,226,255,0.22) 1px, transparent 1px), linear-gradient(90deg, rgba(54,226,255,0.22) 1px, transparent 1px); background-size: 64px 64px"></div>
+  <div aria-hidden="true" style="position: absolute; left: 0; width: 50%; top: 60%; height: 1px; background: #FFD23A; opacity: 0.5; box-shadow: 0 0 24px 4px #FFD23A"></div>
+
+  <section style="position: relative; padding: 72px 80px; display: flex; flex-direction: column; gap: 28px">
+    <div style="display: flex; align-items: center; gap: 14px">
+      <svg viewBox="0 0 100 140" width="30" height="42" aria-hidden="true"><path d="M64 4 L18 78 L46 78 L30 136 L86 56 L57 56 L78 4 Z" fill="#FFD23A"></path></svg>
+      <div style="font-family: 'Bungee', sans-serif; font-size: 30px; transform: skewX(-10deg)">DRIFT<span style="color: #FFD23A">BOLT</span></div>
+    </div>
+    <h1 style="margin: 0; font-family: 'Bungee', sans-serif; font-weight: 400; font-size: 60px; line-height: 1">YOUR GARAGE.<br>EVERY DEVICE.</h1>
+    <div style="display: flex; flex-direction: column; gap: 14px; max-width: 460px">
+      <sc-for list="{{perks}}" as="p" hint-placeholder-count="3">
+        <div style="display: flex; align-items: center; gap: 14px; font-size: 17px; color: #D6D8E6"><span style="flex: none; width: 36px; height: 36px; border-radius: 10px; display: flex; align-items: center; justify-content: center; background: rgba(255,210,58,0.14); color: #FFD23A"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5L20 7"></path></svg></span>{{p}}</div>
+      </sc-for>
+    </div>
+  </section>
+
+  <section style="position: relative; display: flex; align-items: center; justify-content: center; padding: 48px">
+    <form style="width: 100%; max-width: 460px; display: flex; flex-direction: column; gap: 20px; padding: 36px; border-radius: 24px; background: rgba(13,15,26,0.94); border: 1px solid rgba(255,255,255,0.12); box-shadow: 0 30px 80px rgba(0,0,0,0.5); box-sizing: border-box">
+      <div style="display: flex; flex-direction: column; gap: 6px">
+        <h2 style="margin: 0; font-family: 'Bungee', sans-serif; font-weight: 400; font-size: 30px">CREATE ACCOUNT</h2>
+        <p style="margin: 0; font-size: 15px; color: #A3A6BF">No password. Just pick a name and add your email.</p>
+      </div>
+
+      <div style="display: flex; flex-direction: column; gap: 8px">
+        <label for="su-user" style="font-size: 12px; font-weight: 700; letter-spacing: 3px; color: #A3A6BF">USERNAME</label>
+        <div style="position: relative">
+          <input id="su-user" value="{{user}}" onChange="{{setUser}}" maxlength="16" autocomplete="username" spellcheck="false" placeholder="NightRunner" style="{{userStyle}}">
+          <span style="position: absolute; right: 14px; top: 50%; transform: translateY(-50%); font-size: 13px; font-weight: 700; color: {{userColor}}">{{userTag}}</span>
+        </div>
+        <div style="font-size: 13px; color: {{userHintColor}}">{{userHint}}</div>
+      </div>
+
+      <div style="display: flex; flex-direction: column; gap: 8px">
+        <label for="su-mail" style="font-size: 12px; font-weight: 700; letter-spacing: 3px; color: #A3A6BF">EMAIL</label>
+        <input id="su-mail" type="email" value="{{mail}}" onChange="{{setMail}}" autocomplete="email" placeholder="you@example.com" style="{{mailStyle}}">
+        <div style="font-size: 13px; color: #8A8DA6">Only used to confirm it's you on a new device. Never shown to other players.</div>
+      </div>
+
+      <button type="button" disabled="{{disabled}}" style="{{btnStyle}}">CREATE ACCOUNT</button>
+
+      <div style="display: flex; justify-content: space-between; font-size: 14px; color: #A3A6BF">
+        <span>Have an account? <a href="LogIn.dc.html" style="font-weight: 700">Log in</a></span>
+        <a href="#" style="color: #A3A6BF">Play as guest</a>
+      </div>
+    </form>
+  </section>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":900}}'>
+class Component extends DCLogic {
+  constructor(props) { super(props); this.state = { user: 'NightRunner', mail: '' }; }
+  renderVals() {
+    const { user, mail } = this.state;
+    const taken = ['silentkoi', 'mira_falcon', 'turboleo'];
+    const okChars = /^[A-Za-z0-9_]{3,16}$/.test(user);
+    const isTaken = taken.includes(user.toLowerCase());
+    const userOk = okChars && !isTaken;
+    const mailOk = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(mail);
+    const field = (state) => 'width: 100%; height: 56px; box-sizing: border-box; padding: 0 110px 0 16px; border-radius: 14px; background: rgba(255,255,255,0.05); color: #F4F1E8; font-size: 18px; font-weight: 600; outline: none; border: 2px solid ' + (state === 'ok' ? '#7CFF9E' : state === 'bad' ? '#FF6B6B' : 'rgba(255,255,255,0.14)');
+    const ready = userOk && mailOk;
+    return {
+      perks: ['Keep your cars, cups and records on any device', 'Join online leagues and race nights', 'Get your name on the global leaderboard'],
+      user, mail,
+      setUser: (e) => this.setState({ user: e.target.value }),
+      setMail: (e) => this.setState({ mail: e.target.value }),
+      userStyle: field(user === '' ? '' : userOk ? 'ok' : 'bad'),
+      userTag: user === '' ? '' : userOk ? 'AVAILABLE' : isTaken ? 'TAKEN' : '',
+      userColor: userOk ? '#7CFF9E' : '#FF8A8A',
+      userHint: isTaken ? 'That name is taken. Try ' + user + '7 or ' + user + 'GT.' : '3–16 letters, numbers or _. This is how other racers see you.',
+      userHintColor: isTaken || (user && !okChars) ? '#FF8A8A' : '#8A8DA6',
+      mailStyle: field(mail === '' ? '' : mailOk ? 'ok' : 'bad').replace('padding: 0 110px 0 16px', 'padding: 0 16px'),
+      disabled: !ready,
+      btnStyle: 'height: 60px; border: 0; border-radius: 16px; font-family: Bungee, sans-serif; font-size: 20px; letter-spacing: 2px; ' + (ready ? 'background: #FFD23A; color: #07080F; box-shadow: 0 5px 0 #A67C00; cursor: pointer' : 'background: rgba(255,210,58,0.25); color: rgba(7,8,15,0.6); cursor: not-allowed')
+    };
+  }
+}
+</script>
+</body>
+</html>

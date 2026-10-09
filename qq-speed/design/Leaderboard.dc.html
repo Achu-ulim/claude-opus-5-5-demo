@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Leaderboard</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Bungee&amp;family=Chakra+Petch:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#07080F}
+button{font-family:inherit;cursor:pointer}
+button:focus-visible{outline:2px solid #36E2FF;outline-offset:2px}
+</style>
+</helmet>
+<div style="position: relative; width: 1440px; height: 900px; overflow: hidden; background: #07080F; color: #F4F1E8; font-family: 'Chakra Petch', sans-serif">
+  <div style="position: relative; height: 100%; box-sizing: border-box; padding: 40px 64px; display: flex; flex-direction: column; gap: 24px">
+    <header style="display: flex; align-items: center; justify-content: space-between; gap: 16px">
+      <div style="display: flex; align-items: center; gap: 16px">
+        <button aria-label="Back to lobby" style="width: 48px; height: 48px; border-radius: 24px; border: 1px solid rgba(255,255,255,0.14); background: rgba(13,15,26,0.85); color: #F4F1E8; display: flex; align-items: center; justify-content: center"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 5l-7 7 7 7"></path></svg></button>
+        <h1 style="margin: 0; font-family: 'Bungee', sans-serif; font-weight: 400; font-size: 44px">LEADERBOARD</h1>
+      </div>
+      <div style="display: flex; gap: 4px; padding: 4px; border-radius: 14px; background: rgba(255,255,255,0.06)">
+        <sc-for list="{{tabs}}" as="t" hint-placeholder-count="2">
+          <button onClick="{{t.pick}}" aria-pressed="{{t.pressed}}" style="{{t.style}}">{{t.label}}</button>
+        </sc-for>
+      </div>
+    </header>
+
+    <sc-if value="{{showDrivers}}" hint-placeholder-val="{{ true }}">
+      <div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 20px; align-items: end">
+        <sc-for list="{{podium}}" as="p" hint-placeholder-count="3">
+          <div style="{{p.style}}">
+            <div style="font-family: 'Bungee', sans-serif; font-size: 44px; color: {{p.color}}">{{p.pos}}</div>
+            <div style="font-size: 20px; font-weight: 700">{{p.name}}</div>
+            <div style="font-size: 14px; color: #A3A6BF">{{p.pts}} pts · {{p.wins}} wins</div>
+          </div>
+        </sc-for>
+      </div>
+      <div style="flex: 1; display: flex; flex-direction: column; gap: 4px; padding: 16px 20px; border-radius: 20px; background: rgba(13,15,26,0.9); border: 1px solid rgba(255,255,255,0.12)">
+        <div style="display: grid; grid-template-columns: 70px 1fr 120px 100px 100px 100px; padding: 0 14px 6px; font-size: 11px; font-weight: 700; letter-spacing: 2px; color: #A3A6BF"><span>RANK</span><span>DRIVER</span><span>POINTS</span><span>WINS</span><span>PODIUMS</span><span>RACES</span></div>
+        <sc-for list="{{rows}}" as="r" hint-placeholder-count="6">
+          <div style="{{r.style}}"><span style="font-family: 'Bungee', sans-serif">{{r.rank}}</span><span style="font-weight: 600">{{r.name}}</span><span style="font-weight: 700">{{r.pts}}</span><span>{{r.wins}}</span><span>{{r.pods}}</span><span style="color: #A3A6BF">{{r.races}}</span></div>
+        </sc-for>
+      </div>
+    </sc-if>
+
+    <sc-if value="{{showRecords}}" hint-placeholder-val="{{ false }}">
+      <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px">
+        <sc-for list="{{records}}" as="r" hint-placeholder-count="7">
+          <div style="display: flex; align-items: center; gap: 16px; padding: 18px 20px; border-radius: 16px; background: rgba(13,15,26,0.9); border: 1px solid rgba(255,255,255,0.12)">
+            <span style="width: 12px; height: 48px; border-radius: 6px; background: {{r.tint}}"></span>
+            <div style="flex: 1; display: flex; flex-direction: column; gap: 2px"><b style="font-size: 18px">{{r.track}}</b><span style="font-size: 13px; color: #A3A6BF">{{r.holder}}</span></div>
+            <div style="text-align: right"><div style="font-family: 'Bungee', sans-serif; font-size: 22px">{{r.lap}}</div><div style="font-size: 12px; color: #A3A6BF">BEST LAP</div></div>
+          </div>
+        </sc-for>
+      </div>
+    </sc-if>
+
+    <div style="display: flex; justify-content: space-between; align-items: center; font-size: 14px; color: #A3A6BF">
+      <span>Rivals are a generated bank of drivers; they race in your tournaments and quick races.</span>
+      <button style="min-height: 44px; padding: 0 18px; border-radius: 12px; border: 1px solid rgba(255,90,90,0.6); background: transparent; color: #FF8A8A; font-size: 14px; font-weight: 700">New rival bank</button>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":900}}'>
+class Component extends DCLogic {
+  constructor(props) { super(props); this.state = { tab: 0 }; }
+  renderVals() {
+    const tab = this.state.tab;
+    const D = [['SilentKoi', 182, 14, 31, 48], ['You · NightRunner', 164, 11, 27, 40, true], ['Mira_Falcon', 151, 9, 25, 47], ['TurboLeo', 120, 6, 19, 45], ['HanaRS', 98, 4, 14, 44], ['Comet42', 77, 2, 9, 46], ['VortexZen', 61, 1, 7, 43]];
+    const medal = ['#FFD23A', '#D7DAE5', '#E0A84A'];
+    const order = [1, 0, 2];
+    return {
+      showDrivers: tab === 0,
+      showRecords: tab === 1,
+      tabs: ['Drivers', 'Track Records'].map((label, i) => ({
+        label, pressed: String(tab === i),
+        style: 'min-height: 44px; padding: 0 22px; border: 0; border-radius: 10px; font-size: 15px; font-weight: 700; ' + (tab === i ? 'background: #FFD23A; color: #07080F' : 'background: transparent; color: #C9CBDB'),
+        pick: () => this.setState({ tab: i })
+      })),
+      podium: order.map((i) => ({
+        pos: String(i + 1), name: D[i][0], pts: D[i][1], wins: D[i][2], color: medal[i],
+        style: 'display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 20px; border-radius: 20px; text-align: center; background: rgba(13,15,26,0.9); border: 2px solid ' + medal[i] + '; min-height: ' + [190, 160, 140][i] + 'px; justify-content: flex-end; box-sizing: border-box'
+      })),
+      rows: D.slice(3).map((d, k) => ({
+        rank: String(k + 4), name: d[0], pts: d[1], wins: d[2], pods: d[3], races: d[4],
+        style: 'display: grid; grid-template-columns: 70px 1fr 120px 100px 100px 100px; align-items: center; min-height: 48px; padding: 0 14px; border-radius: 12px; font-size: 15px'
+      })).concat([{ rank: '2', name: D[1][0], pts: D[1][1], wins: D[1][2], pods: D[1][3], races: D[1][4], style: 'display: grid; grid-template-columns: 70px 1fr 120px 100px 100px 100px; align-items: center; min-height: 52px; margin-top: auto; padding: 0 14px; border-radius: 12px; font-size: 15px; background: rgba(255,210,58,0.14); border: 1px solid rgba(255,210,58,0.5)' }]),
+      records: [['City 11', '#4A8CFF', '0:38.92', 'SilentKoi · Street GT'], ['Aegean Romance', '#2EC4B6', '0:44.10', 'You · Ferrari'], ["Pharaoh's Pyramid", '#E0A84A', '0:47.55', 'Mira_Falcon · Porsche'], ['Snow Adventure', '#CFE6FF', '0:51.03', 'TurboLeo · Audi'], ['Neon Tokyo', '#FF3DA6', '0:41.27', 'You · Ferrari'], ['Harbor Bay', '#E0574A', '0:45.88', 'HanaRS · McLaren'], ['Dune Metropolis', '#E0884A', '0:49.61', 'SilentKoi · Koenigsegg']]
+        .map(([track, tint, lap, holder]) => ({ track, tint, lap, holder }))
+    };
+  }
+}
+</script>
+</body>
+</html>

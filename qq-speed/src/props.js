@@ -22,8 +22,14 @@ function geo(key, fn) {
   return GEOS.get(key);
 }
 
-// Whether a point is far enough from the track centerline
-export function isFree(track, x, z, r) { return !track.nearest(x, z, track.halfW + r); }
+// Ground kept clear for the featured billboards, so later scenery leaves them in view (only for the track they were placed on)
+const RESERVED = { track: null, spots: [] };
+
+// Whether a point is far enough from the track centerline (and from the featured billboards)
+export function isFree(track, x, z, r) {
+  if (track.nearest(x, z, track.halfW + r)) return false;
+  return RESERVED.track !== track || RESERVED.spots.every(([sx, sz, sr]) => (sx - x) ** 2 + (sz - z) ** 2 > (sr + r) ** 2);
+}
 
 function crowdTexture() {
   return geo('crowdTex', () => {
@@ -138,9 +144,10 @@ function addLamp(b, x, y, z, faceRot) {
 // Billboards (facing the track)
 function addBillboard(parent, b, x, y, z, rot, tex, w = 12, h = 6, lift = 6) {
   const post = geo('bbPost', () => { const g = new THREE.BoxGeometry(0.5, 1, 0.5); g.translate(0, 0.5, 0); return g; });
+  const t = Math.max(1, w / 14);
   for (const sx of [-w * 0.32, w * 0.32]) {
     const ox = Math.cos(rot) * sx, oz = -Math.sin(rot) * sx;
-    b.add(post, std(0x444a55, { metalness: 0.5 }), M(x + ox, y, z + oz, rot, 1, lift, 1));
+    b.add(post, std(0x444a55, { metalness: 0.5 }), M(x + ox, y, z + oz, rot, t, lift, t));
   }
   const m = new THREE.Mesh(new THREE.PlaneGeometry(w, h), new THREE.MeshStandardMaterial({ map: tex, emissiveMap: tex, emissive: 0xffffff, emissiveIntensity: 0.45, roughness: 0.5, side: THREE.DoubleSide }));
   m.position.set(x, y + lift + h / 2, z);
@@ -153,6 +160,29 @@ function addBillboard(parent, b, x, y, z, rot, tex, w = 12, h = 6, lift = 6) {
   back.position.z -= Math.cos(rot) * 0.2;
   back.rotation.y = rot;
   parent.add(back);
+}
+
+// Sponsor gantry over the track: a 3:1 banner on two legs, the logo on both faces
+function addGantry(parent, b, s, legs, legLat, groundAt, tex) {
+  const w = legLat * 2 + 1.2, h = w / 3, bottom = s.y + 7.5, top = bottom + h;
+  const leg = geo('gantryLeg', () => { const g = new THREE.BoxGeometry(1.2, 1, 1.2); g.translate(0, 0.5, 0); return g; });
+  for (const [x, z] of legs) {
+    const gy = groundAt(x, z);
+    b.add(leg, std(0x444a55, { metalness: 0.5 }), M(x, gy, z, s.hd, 1, top + 0.4 - gy, 1));
+  }
+  const frame = new THREE.Mesh(new THREE.BoxGeometry(w + 0.4, h + 0.4, 0.8), std(0x2b2f38));
+  frame.position.set(s.x, bottom + h / 2, s.z);
+  frame.rotation.y = s.hd;
+  frame.castShadow = true;
+  parent.add(frame);
+  const mat = new THREE.MeshStandardMaterial({ map: tex, emissiveMap: tex, emissive: 0xffffff, emissiveIntensity: 0.45, roughness: 0.5 });
+  for (const f of [-1, 1]) {
+    // f = -1 faces the oncoming cars
+    const m = new THREE.Mesh(new THREE.PlaneGeometry(w, h), mat);
+    m.position.set(s.x + s.tx * f * 0.42, bottom + h / 2, s.z + s.tz * f * 0.42);
+    m.rotation.y = s.hd + (f < 0 ? Math.PI : 0);
+    parent.add(m);
+  }
 }
 
 // Grandstand
@@ -610,10 +640,89 @@ const inPits = (ctx, s, side) => ctx.pit && side > 0 && ctx.pit.u(s.d) < 440;
 export function buildProps(mapId, ctx) {
   CROWD.length = 0;
   SPOTS.length = 0;
+  featuredBillboards(ctx);
   const gate = ctx.map?.f1 ? gpProps(ctx) : { city: cityProps, aegean: aegeanProps, egypt: egyptProps, snow: snowProps, neon: neonProps, bay: bayProps, dune: duneProps }[mapId](ctx);
   ctx.crowd = buildCrowd(ctx);
   ctx.crowdSpots = SPOTS.slice();
   return gate;
+}
+
+// Featured sponsors get bigger boards where drivers are looking. GadLock, the headline sponsor, spans the start
+// straight on a gantry on every map, so every car drives at it from the grid and under it every lap; then the three
+// take turns in the run-off at each of the hardest braking zones, square to the approach so the board fills the windscreen.
+const FEATURED = ['cq', 'gadlock', 'sellamquick'];
+const HEADLINE = 'gadlock';
+function featuredBillboards(ctx) {
+  const { track, batch, groundAt, parent, map } = ctx;
+  const hw = track.halfW, W = 16, H = 8;
+  RESERVED.track = track;
+  RESERVED.spots = [];
+  // each map starts the rotation on a different sponsor
+  let n = [...(map?.id || '')].reduce((a, ch) => a + ch.charCodeAt(0), 0);
+  const tryPut = (x, z, roadY, from, id = FEATURED[n % FEATURED.length], w = W, h = H) => {
+    const gy = groundAt(x, z);
+    if (!isFree(track, x, z, w / 2 + 1)) return false;
+    if (map?.water && gy < map.water.y + 0.5) return false;
+    // turn the face toward the drivers, and keep the board clear above the road
+    addBillboard(parent, batch, x, gy, z, Math.atan2(from.x - x, from.z - z), TX.brandTexture(id, 1024, 512), w, h, Math.max(5, roadY + 4 - gy));
+    RESERVED.spots.push([x, z, w / 2 + 2]);
+    return true;
+  };
+
+  // headline gantry: the first straight, level stretch past the gate (and past the pit exit) with room for both legs
+  const L = track.length, s = {}, probe = {};
+  const legLat = hw + 3;
+  const straight = (d) => {
+    for (let k = -20; k <= 20; k += 5) {
+      track.sample(d + k, probe);
+      if (track.inTunnel(probe.d) || track.bridge[probe.i] || Math.abs(track.curv[probe.i]) > 0.006) return false;
+    }
+    // no other part of the track runs through or over it
+    let alone = true;
+    track.sample(d, s);
+    track.forEachNear(s.x, s.z, hw + 6, (i) => { if (Math.min(Math.abs(i * track.ds - s.d), L - Math.abs(i * track.ds - s.d)) > 60) alone = false; });
+    return alone;
+  };
+  for (let d = ctx.pit ? 150 : 110; d < L - 60; d += 10) {
+    if (!straight(d)) continue;
+    track.sample(d, s);
+    const legs = [-1, 1].map((k) => [s.x + s.rx * k * legLat, s.z + s.rz * k * legLat]);
+    if (!legs.every(([x, z]) => isFree(track, x, z, 1.5) && !(map?.water && groundAt(x, z) < map.water.y + 0.5))) continue;
+    addGantry(parent, batch, s, legs, legLat, groundAt, TX.brandTexture(HEADLINE, 1024, 342));
+    for (const [x, z] of legs) RESERVED.spots.push([x, z, 2]);
+    break;
+  }
+
+  // braking zones: the sharpest corners, at least 150 m apart and clear of the start
+  const N = track.N, ds = track.ds;
+  const peaks = [];
+  for (let i = 0; i < N; i++) {
+    const c = Math.abs(track.curv[i]);
+    if (c < 0.012) continue;
+    let top = true;
+    for (let k = -6; k <= 6 && top; k++) if (Math.abs(track.curv[(i + k + N) % N]) > c) top = false;
+    if (top) peaks.push(i);
+  }
+  peaks.sort((a, b) => Math.abs(track.curv[b]) - Math.abs(track.curv[a]));
+  const gap = (a, b) => Math.min(Math.abs(a - b), track.length - Math.abs(a - b));
+  const want = clamp(Math.round(track.length / 700), 3, 5);
+  const used = [0];
+  for (const i of peaks) {
+    if (used.length > want) break;
+    // corner entry: back from the apex to where the turn begins
+    const peak = Math.abs(track.curv[i]);
+    let e = i;
+    for (let k = 0; k < 40 && Math.abs(track.curv[(e - 1 + N) % N]) > peak * 0.35; k++) e = (e - 1 + N) % N;
+    const de = e * ds;
+    if (used.some((u) => gap(u, de) < 150) || track.inTunnel(de) || track.bridge[e]) continue;
+    if (ctx.pit && ctx.pit.u(de) < 440) continue;
+    // run-off: carry on straight from the entry until clear of the road
+    const s = track.sample(de - 15, {}), from = track.sample(de - 70, {});
+    for (let k = hw + 8; k < 90; k += 2) {
+      const x = s.x + s.tx * k, z = s.z + s.tz * k;
+      if (tryPut(x, z, s.y, from)) { used.push(de); n++; break; }
+    }
+  }
 }
 
 function alongTrack(track, step, fn, offset = 0) {

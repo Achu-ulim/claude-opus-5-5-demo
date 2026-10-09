@@ -18,13 +18,15 @@ export const MAX_SPEED = 90; // m/s, above the 86 m/s every boost combined is ca
 export const CAR_EVENTS = ['banana', 'bananaHit', 'missile', 'hit', 'wreck', 'celeb'];
 export const CELEBRATIONS = ['burnout', 'donuts', 'fireworks', 'driver'];
 
-// Names end up in innerHTML and on canvas name tags: keep them short and plain (same rule as league.js)
-export function cleanName(s) {
-  return String(s || '').replace(/[<>&"'`]/g, '').replace(/\s+/g, ' ').trim().slice(0, 16);
+// Names end up in innerHTML and on canvas name tags: keep them short and plain (same rule as league.js).
+// League names use the same rule with more room.
+export function cleanName(s, max = 16) {
+  return String(s || '').replace(/[<>&"'`]/g, '').replace(/\s+/g, ' ').trim().slice(0, max);
 }
 
 // ---------- Car looks (the garage) ----------
-// Paint, rims, tyres and trim a player picks for a car. Looks only: they never change how a car drives.
+// Paint, rims, tyres, trim and a race number a player picks for a car. Looks only: they never change how a car drives.
+// A glow of 0 (black) means the underglow is off.
 export const FINISHES = ['gloss', 'metallic', 'matte', 'pearl', 'chrome'];
 export const RIM_STYLES = ['star', 'six', 'split', 'mesh', 'turbine', 'dish'];
 export const TYRE_STYLES = ['street', 'redline', 'whitewall', 'letters'];
@@ -39,11 +41,41 @@ export function cleanLook(l) {
   if (RIM_STYLES.includes(l.rim)) out.rim = l.rim;
   if (TYRE_STYLES.includes(l.tyre)) out.tyre = l.tyre;
   if (typeof l.stripes === 'boolean') out.stripes = l.stripes;
+  // race number on the roof and doors; looks from older games have none, which shows no number
+  if (Number.isInteger(l.number) && l.number >= 0 && l.number <= 99) out.number = l.number;
   return out;
 }
 
 export function normCode(s) {
   return String(s || '').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, CODE_LEN);
+}
+
+// ---------- Accounts ----------
+// A username is 3-16 letters, digits or _, unique ignoring case. The server also turns down reserved and offensive ones.
+export const USERNAME_RE = /^[A-Za-z0-9_]{3,16}$/;
+export const EMAIL_MAX = 254;
+export const EMAIL_RE = /^[^\s@]+@[^\s@.]+(\.[^\s@.]+)+$/;
+export const LOGIN_CODE_LEN = 6;
+export const RESEND_GAP = 60; // seconds between emailed codes
+
+// ---------- Leagues ----------
+// A league is a season of races on a weekly race night, addressed by an invite code like L-7QM4 (room-code characters).
+export const LEAGUE_CODE_LEN = 4;
+export const LEAGUE_NAME_LEN = 32;
+export const LEAGUE_LOBBY_OPEN = 15 * 60_000; // a race night's room opens this long before the start
+// what each format allows, and its points for 1st, 2nd, …
+export const LEAGUE_FORMATS = {
+  f1: { rounds: [6, 12, 24], players: [6, 8, 11], points: [25, 18, 15, 12, 10, 8, 6, 4, 2, 1] },
+  arcade: { rounds: [4, 8, 12], players: [4, 6], points: [10, 7, 5, 3, 2, 1] },
+};
+// quick chat: the only messages members can post to a league's feed
+export const LEAGUE_CHAT = ['GG', 'Rematch?', 'See you on race night', 'Nice lap', 'Good luck!', "I'm in"];
+
+// "L-7QM4", "l 7qm4" or "7QM4" → "L-7QM4"; anything else → ''
+export function normLeagueCode(s) {
+  let c = String(s || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+  if (c.length === LEAGUE_CODE_LEN + 1 && c[0] === 'L') c = c.slice(1);
+  return c.length === LEAGUE_CODE_LEN && [...c].every((ch) => CODE_CHARS.includes(ch)) ? 'L-' + c : '';
 }
 
 // ---------- Car state snapshots ----------

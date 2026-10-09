@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Driftbolt Lobby (Phone)</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Bungee&amp;family=Chakra+Petch:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#07080F}
+button{font-family:inherit;cursor:pointer}
+button:focus-visible{outline:2px solid #36E2FF;outline-offset:2px}
+</style>
+</helmet>
+<div style="position: relative; width: 390px; height: 844px; box-sizing: border-box; background: #07080F; color: #F4F1E8; font-family: 'Chakra Petch', sans-serif; overflow: hidden; display: flex; flex-direction: column">
+
+  <div aria-hidden="true" style="position: absolute; inset: 0; pointer-events: none">
+    <div style="position: absolute; left: 0; right: 0; top: 300px; height: 1px; background: {{accent}}; opacity: 0.55; box-shadow: 0 0 20px 3px {{accent}}"></div>
+    <div style="position: absolute; left: -40%; right: -40%; top: 300px; height: 300px; transform: perspective(300px) rotateX(62deg); transform-origin: top center; background-image: linear-gradient(rgba(54,226,255,0.3) 1px, transparent 1px), linear-gradient(90deg, rgba(54,226,255,0.3) 1px, transparent 1px); background-size: 44px 44px"></div>
+  </div>
+
+  <header style="position: relative; display: flex; align-items: center; justify-content: space-between; padding: 16px 16px 8px">
+    <div style="display: flex; align-items: center; gap: 8px">
+      <svg viewBox="140 50 236 420" width="16" height="28" aria-hidden="true"><path d="M318 64 156 290h94l-50 162 162-240h-94z" fill="#FFD23A" stroke="#F4F1E8" stroke-width="14" stroke-linejoin="round"></path></svg>
+      <div style="font-family: 'Bungee', sans-serif; font-size: 22px; line-height: 1">DRIFTBOLT</div>
+    </div>
+    <button style="height: 44px; padding: 0 14px; border-radius: 22px; border: 1px solid rgba(255,255,255,0.14); background: rgba(17,19,31,0.85); color: #F4F1E8; font-size: 14px; font-weight: 600; display: flex; align-items: center; gap: 8px"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="8" r="4"></circle><path d="M4 21c1-4 4-6 8-6s7 2 8 6"></path></svg>NightRunner</button>
+  </header>
+
+  <section aria-label="Car" style="position: relative; display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 8px 16px 0; text-align: center">
+    <div style="font-size: 11px; font-weight: 700; letter-spacing: 2px; color: #36E2FF">{{carClass}}</div>
+    <h1 style="margin: 0; font-family: 'Bungee', sans-serif; font-size: 40px; line-height: 1">{{carName}}</h1>
+    <div style="display: flex; align-items: center; justify-content: space-between; width: 100%; height: 150px">
+      <button onClick="{{prevCar}}" aria-label="Previous car" style="width: 44px; height: 44px; border-radius: 22px; border: 1px solid rgba(255,255,255,0.2); background: rgba(13,15,26,0.85); color: #F4F1E8; display: flex; align-items: center; justify-content: center; flex: none"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 5l-7 7 7 7"></path></svg></button>
+      <svg viewBox="0 0 520 170" width="250" height="100" aria-hidden="true"><ellipse cx="260" cy="150" rx="230" ry="16" fill="#000" opacity="0.55"></ellipse><path d="M40 120 C40 100 60 92 96 88 L170 60 C210 44 300 42 350 58 L420 84 C462 90 486 100 488 122 L484 132 L40 132 Z" fill="{{carColor}}"></path><path d="M182 64 C220 50 300 50 340 62 L384 84 L160 84 Z" fill="#07080F" opacity="0.8"></path><circle cx="130" cy="132" r="26" fill="#07080F" stroke="#3A3D52" stroke-width="6"></circle><circle cx="400" cy="132" r="26" fill="#07080F" stroke="#3A3D52" stroke-width="6"></circle></svg>
+      <button onClick="{{nextCar}}" aria-label="Next car" style="width: 44px; height: 44px; border-radius: 22px; border: 1px solid rgba(255,255,255,0.2); background: rgba(13,15,26,0.85); color: #F4F1E8; display: flex; align-items: center; justify-content: center; flex: none"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 5l7 7-7 7"></path></svg></button>
+    </div>
+    <div style="display: flex; gap: 5px">
+      <sc-for list="{{cars}}" as="c" hint-placeholder-count="10">
+        <span style="{{c.style}}"></span>
+      </sc-for>
+    </div>
+  </section>
+
+  <div style="position: relative; flex: 1 1 auto; display: flex; flex-direction: column; gap: 14px; padding: 18px 16px 0; margin-top: 18px; background: rgba(10,11,20,0.94); border-top: 1px solid rgba(255,255,255,0.1); border-radius: 22px 22px 0 0">
+    <div style="display: flex; flex-direction: column; gap: 8px">
+      <h2 style="margin: 0; font-size: 12px; font-weight: 700; letter-spacing: 3px; color: #A3A6BF">TRACK</h2>
+      <div style="display: flex; gap: 8px; overflow-x: auto; margin: 0 -16px; padding: 0 16px">
+        <sc-for list="{{tracks}}" as="t" hint-placeholder-count="7">
+          <button onClick="{{t.pick}}" aria-pressed="{{t.pressed}}" style="{{t.style}}"><span style="width: 8px; height: 8px; border-radius: 4px; background: {{t.tint}}"></span>{{t.name}}</button>
+        </sc-for>
+      </div>
+    </div>
+    <div style="display: flex; flex-direction: column; gap: 8px">
+      <h2 style="margin: 0; font-size: 12px; font-weight: 700; letter-spacing: 3px; color: #A3A6BF">MODE</h2>
+      <div style="display: flex; gap: 4px; padding: 4px; border-radius: 12px; background: rgba(255,255,255,0.05)">
+        <sc-for list="{{modes}}" as="o" hint-placeholder-count="2">
+          <button onClick="{{o.pick}}" aria-pressed="{{o.pressed}}" style="{{o.style}}">{{o.label}}</button>
+        </sc-for>
+      </div>
+    </div>
+    <div style="display: flex; justify-content: space-between; align-items: center; font-size: 14px; color: #C9CBDB">
+      <span>2 laps · Skilled · Balanced</span>
+      <button style="min-height: 44px; padding: 0 4px; border: 0; background: transparent; color: #FFD23A; font-size: 14px; font-weight: 700; letter-spacing: 1px">SETTINGS</button>
+    </div>
+
+    <div style="margin-top: auto; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; padding-bottom: 24px">
+      <button style="grid-column: 1 / -1; height: 64px; border: 0; border-radius: 16px; background: {{accent}}; color: #07080F; font-family: 'Bungee', sans-serif; font-size: 24px; letter-spacing: 2px; box-shadow: 0 5px 0 #A67C00; display: flex; align-items: center; justify-content: center; gap: 12px"><svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M7 4l13 8-13 8z"></path></svg>QUICK RACE</button>
+      <button style="height: 52px; border-radius: 14px; border: 2px solid #B48CFF; background: transparent; color: #F4F1E8; font-size: 14px; font-weight: 700; letter-spacing: 1px; box-shadow: 0 4px 0 #4B1FA0">TOURNAMENT</button>
+      <button style="height: 52px; border-radius: 14px; border: 2px solid #FF5A5A; background: transparent; color: #F4F1E8; font-size: 14px; font-weight: 700; letter-spacing: 1px; box-shadow: 0 4px 0 #8A1C1C">FORMULA 1</button>
+      <button style="height: 52px; border-radius: 14px; border: 2px solid #36E2FF; background: transparent; color: #F4F1E8; font-size: 14px; font-weight: 700; letter-spacing: 1px; box-shadow: 0 4px 0 #0B6A80">ONLINE</button>
+      <button style="height: 52px; border-radius: 14px; border: 2px solid rgba(255,255,255,0.3); background: transparent; color: #F4F1E8; font-size: 14px; font-weight: 700; letter-spacing: 1px; box-shadow: 0 4px 0 #2A2C3C">LEADERBOARD</button>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"accent":{"editor":"color","default":"#FFD23A","options":["#FFD23A","#36E2FF","#FF3DA6","#7CFF6B"]},"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.state = { track: 4, car: 5, mode: 0 };
+  }
+  renderVals() {
+    const accent = this.props.accent ?? '#FFD23A';
+    const S = this.state;
+    const TRACKS = [['City 11', '#4A8CFF'], ['Aegean Romance', '#2EC4B6'], ["Pharaoh's Pyramid", '#E0A84A'], ['Snow Adventure', '#CFE6FF'], ['Neon Tokyo', '#FF3DA6'], ['Harbor Bay', '#5B95E0'], ['Dune Metropolis', '#E0884A']];
+    const CARS = [['Metro Sedan', 'SEDAN', '#5B95E0'], ['Street GT', 'SPORTS CAR', '#2EC4B6'], ['McLaren', 'SUPERCAR', '#FF8A00'], ['Audi', 'SUPERCAR', '#D7DAE5'], ['Bugatti', 'HYPERCAR', '#3A6BFF'], ['Ferrari', 'SUPERCAR', '#FF3B3B'], ['Lamborghini', 'SUPERCAR', '#B6FF3B'], ['Porsche', 'SPORTS CAR', '#F4F1E8'], ['Koenigsegg', 'HYPERCAR', '#FFD23A'], ['Pagani', 'HYPERCAR', '#B48CFF']];
+    const car = CARS[S.car];
+    return {
+      accent,
+      carName: car[0].toUpperCase(),
+      carClass: car[1],
+      carColor: car[2],
+      cars: CARS.map((c, i) => ({ style: 'display: block; width: ' + (S.car === i ? 22 : 8) + 'px; height: 8px; border-radius: 4px; background: ' + (S.car === i ? accent : 'rgba(255,255,255,0.25)') })),
+      prevCar: () => this.setState({ car: (S.car + CARS.length - 1) % CARS.length }),
+      nextCar: () => this.setState({ car: (S.car + 1) % CARS.length }),
+      tracks: TRACKS.map(([name, tint], i) => {
+        const on = S.track === i;
+        return {
+          name, tint, pressed: String(on),
+          style: 'flex: none; display: flex; align-items: center; gap: 8px; height: 44px; padding: 0 14px; border-radius: 22px; font-size: 14px; font-weight: 600; white-space: nowrap; ' +
+            (on ? 'background: ' + accent + '; color: #07080F; border: 1px solid ' + accent : 'background: rgba(255,255,255,0.05); color: #F4F1E8; border: 1px solid rgba(255,255,255,0.14)'),
+          pick: () => this.setState({ track: i })
+        };
+      }),
+      modes: ['Speed Race', 'Item Race'].map((label, i) => ({
+        label, pressed: String(S.mode === i),
+        style: 'flex: 1; height: 44px; border: 0; border-radius: 9px; font-size: 14px; font-weight: 700; ' + (S.mode === i ? 'background: ' + accent + '; color: #07080F' : 'background: transparent; color: #C9CBDB'),
+        pick: () => this.setState({ mode: i })
+      }))
+    };
+  }
+}
+</script>
+</body>
+</html>

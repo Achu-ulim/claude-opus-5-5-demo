@@ -23,7 +23,9 @@ self.addEventListener('activate', (e) => {
 
 self.addEventListener('fetch', (e) => {
   const req = e.request;
-  if (req.method !== 'GET' || new URL(req.url).origin !== self.location.origin) return;
+  const url = new URL(req.url);
+  // the game's own files only: the online server's answers (accounts, leagues, health) always come from the network
+  if (req.method !== 'GET' || url.origin !== self.location.origin || /^\/(auth|league|ws|health)(\/|$)/.test(url.pathname)) return;
   // cache first: instant start, works offline; updates arrive through a new service worker version
   if (req.mode === 'navigate') {
     e.respondWith(caches.match('./').then((r) => r || fetch(req)));

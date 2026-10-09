@@ -1,0 +1,5 @@
+# Local dev settings for `npm run preview` (wrangler dev). Copy to .dev.vars, which git ignores.
+# Signs account sessions. Any string of 16+ characters will do locally; production uses the AUTH_SECRET secret.
+AUTH_SECRET=local-dev-only-not-a-real-secret
+# Log login codes to the terminal instead of emailing them (only works on localhost)
+EMAIL_PROVIDER=console

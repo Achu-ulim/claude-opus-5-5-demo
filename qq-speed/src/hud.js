@@ -1,5 +1,6 @@
 import { formatTime } from './util.js';
 import { PIT, pitLat } from './pitlane.js';
+import { COMPOUNDS } from './racesim.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -91,6 +92,9 @@ export class HUD {
     this.set('csTyre', $('cs-tyre').style, pct(1 - c.tyre), 'width');
     this.set('csTyreV', $('cs-tyrev'), pct(1 - c.tyre));
     this.set('csTyreC', $('cs-tyre'), 'fill ' + health(c.tyre), 'className');
+    // the label names the compound fitted, in its colour
+    this.set('csCmp', $('cs-cmp'), { soft: 'SOFT', medium: 'MED', hard: 'HARD' }[c.compound] || 'TYRES');
+    this.set('csCmpC', $('cs-cmp').style, COMPOUNDS[c.compound]?.color || '', 'color');
     for (const k of ['wing', 'engine', 'susp']) this.set('cs' + k, $('cs-' + k), 'part ' + health(c[k]), 'className');
     this.set('csBox', $('cs-box'), box && !pit ? 'cs-box' : 'cs-box hidden', 'className');
     this.set('csBoxT', $('cs-box'), toEntry != null ? `BOX · ${Math.round(toEntry / 10) * 10} m` : 'BOX THIS LAP');

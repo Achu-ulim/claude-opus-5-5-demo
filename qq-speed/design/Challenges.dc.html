@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Daily Challenges</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Bungee&amp;family=Chakra+Petch:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#07080F}
+button{font-family:inherit;cursor:pointer}
+</style>
+</helmet>
+<div style="position: relative; width: 1440px; height: 900px; overflow: hidden; background: #07080F; color: #F4F1E8; font-family: 'Chakra Petch', sans-serif">
+  <div style="position: relative; height: 100%; box-sizing: border-box; padding: 40px 64px; display: flex; flex-direction: column; gap: 24px">
+    <header style="display: flex; align-items: center; justify-content: space-between">
+      <div style="display: flex; align-items: center; gap: 16px">
+        <button aria-label="Back to lobby" style="width: 48px; height: 48px; border-radius: 24px; border: 1px solid rgba(255,255,255,0.14); background: rgba(13,15,26,0.85); color: #F4F1E8; display: flex; align-items: center; justify-content: center"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 5l-7 7 7 7"></path></svg></button>
+        <h1 style="margin: 0; font-family: 'Bungee', sans-serif; font-weight: 400; font-size: 44px">DAILY CHALLENGES</h1>
+      </div>
+      <div style="display: flex; align-items: center; gap: 12px">
+        <div style="display: flex; align-items: center; gap: 10px; height: 48px; padding: 0 18px; border-radius: 24px; background: rgba(255,138,0,0.14); border: 1px solid rgba(255,138,0,0.5); font-weight: 700"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#FF8A00" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 22c4 0 7-3 7-7 0-4-3-6-4-10-2 2-3 4-3 6-1-1-2-2-2-4-3 2-5 5-5 8 0 4 3 7 7 7z"></path></svg>5-DAY STREAK</div>
+        <div style="height: 48px; padding: 0 18px; border-radius: 24px; display: flex; align-items: center; background: rgba(13,15,26,0.85); border: 1px solid rgba(255,255,255,0.14); color: #A3A6BF; font-weight: 600">New in <b style="color: #F4F1E8; margin-left: 6px">07:42:10</b></div>
+      </div>
+    </header>
+
+    <div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 18px">
+      <sc-for list="{{daily}}" as="d" hint-placeholder-count="3">
+        <div style="{{d.style}}">
+          <div style="display: flex; justify-content: space-between; align-items: center"><span style="font-size: 12px; font-weight: 700; letter-spacing: 2px; color: {{d.color}}">{{d.tag}}</span><span style="font-size: 13px; color: #A3A6BF">{{d.track}}</span></div>
+          <div style="font-size: 22px; font-weight: 700; line-height: 1.2">{{d.title}}</div>
+          <div style="display: flex; flex-direction: column; gap: 6px">
+            <div style="height: 8px; border-radius: 4px; background: rgba(255,255,255,0.1); overflow: hidden"><div style="{{d.bar}}"></div></div>
+            <div style="display: flex; justify-content: space-between; font-size: 13px"><span style="color: #C9CBDB">{{d.progress}}</span><span style="font-weight: 700; color: {{d.color}}">{{d.reward}}</span></div>
+          </div>
+        </div>
+      </sc-for>
+    </div>
+
+    <div style="flex: 1; display: grid; grid-template-columns: 1fr 1fr; gap: 18px; min-height: 0">
+      <section aria-label="Ghost time trial" style="display: flex; flex-direction: column; gap: 14px; padding: 22px; border-radius: 20px; background: rgba(13,15,26,0.9); border: 2px solid #36E2FF">
+        <div style="font-size: 12px; font-weight: 700; letter-spacing: 3px; color: #36E2FF">TIME TRIAL · GHOST RACE</div>
+        <div style="font-family: 'Bungee', sans-serif; font-size: 30px; line-height: 1.1">BEAT SILENTKOI ON CITY 11</div>
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px">
+          <div style="padding: 14px; border-radius: 14px; background: rgba(54,226,255,0.1)"><div style="font-size: 11px; font-weight: 700; letter-spacing: 2px; color: #A3A6BF">GHOST LAP</div><div style="font-family: 'Bungee', sans-serif; font-size: 26px; color: #36E2FF">0:38.92</div></div>
+          <div style="padding: 14px; border-radius: 14px; background: rgba(255,255,255,0.05)"><div style="font-size: 11px; font-weight: 700; letter-spacing: 2px; color: #A3A6BF">YOUR BEST</div><div style="font-family: 'Bungee', sans-serif; font-size: 26px">0:39.40</div></div>
+        </div>
+        <div style="font-size: 14px; line-height: 1.5; color: #C9CBDB">Race alone against a see-through replay of the record lap. Your own best lap is saved as a ghost you can share with a link.</div>
+        <button style="margin-top: auto; align-self: flex-start; height: 56px; padding: 0 32px; border: 0; border-radius: 14px; background: #36E2FF; color: #07080F; font-family: 'Bungee', sans-serif; font-size: 18px; letter-spacing: 2px; box-shadow: 0 5px 0 #0B6A80">RACE THE GHOST</button>
+      </section>
+
+      <section aria-label="Achievements" style="display: flex; flex-direction: column; gap: 12px; padding: 22px; border-radius: 20px; background: rgba(13,15,26,0.9); border: 1px solid rgba(255,255,255,0.12)">
+        <div style="display: flex; justify-content: space-between; font-size: 12px; font-weight: 700; letter-spacing: 3px; color: #A3A6BF"><span>ACHIEVEMENTS</span><span>9 / 24</span></div>
+        <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px">
+          <sc-for list="{{achievements}}" as="a" hint-placeholder-count="6">
+            <div style="{{a.style}}">
+              <div style="width: 40px; height: 40px; border-radius: 12px; flex: none; display: flex; align-items: center; justify-content: center; background: {{a.badge}}; color: #07080F"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 2l3 7h7l-5.5 4.5 2 7.5L12 16.5 5.5 21l2-7.5L2 9h7z"></path></svg></div>
+              <div style="display: flex; flex-direction: column; min-width: 0"><b style="font-size: 15px">{{a.name}}</b><span style="font-size: 12px; color: #A3A6BF">{{a.desc}}</span></div>
+            </div>
+          </sc-for>
+        </div>
+      </section>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":900}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const D = [
+      ['EASY', '#7CFF9E', 'Neon Tokyo', 'Drift 2,000 m in one race', 1, '2,000 / 2,000 m · done', 'CLAIMED'],
+      ['MEDIUM', '#FFD23A', 'Any track', 'Land 5 Perfect mini boosts', 0.6, '3 / 5', '+150 XP'],
+      ['HARD', '#FF5A5A', 'Snow Adventure', 'Win on Legend without using nitro', 0, 'Not started', 'Violet paint']
+    ];
+    const A = [['Rocket Start', 'Nail a launch boost', '#FFD23A', 1], ['Drift King', '10 km of drifting', '#FFD23A', 1], ['Double Trouble', 'Chain a double boost', '#FFD23A', 1], ['Podium Regular', '25 podium finishes', '#FFD23A', 1], ['World Tour', 'Win on all 7 tracks', '#3A3D52', 0], ['Legend', 'Win the Legend Cup', '#3A3D52', 0]];
+    return {
+      daily: D.map(([tag, color, track, title, p, progress, reward]) => ({
+        tag, color, track, title, progress, reward,
+        bar: 'height: 100%; width: ' + Math.round(p * 100) + '%; background: ' + color,
+        style: 'display: flex; flex-direction: column; gap: 14px; padding: 20px; border-radius: 18px; background: rgba(13,15,26,0.9); border: 1px solid ' + (p === 1 ? 'rgba(124,255,158,0.5)' : 'rgba(255,255,255,0.12)')
+      })),
+      achievements: A.map(([name, desc, badge, got]) => ({
+        name, desc, badge,
+        style: 'display: flex; align-items: center; gap: 12px; padding: 10px 12px; border-radius: 12px; background: rgba(255,255,255,0.04); opacity: ' + (got ? 1 : 0.55)
+      }))
+    };
+  }
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Garage</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Bungee&amp;family=Chakra+Petch:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#07080F}
+button{font-family:inherit;cursor:pointer}
+button:focus-visible{outline:2px solid #36E2FF;outline-offset:2px}
+</style>
+</helmet>
+<div style="position: relative; width: 1440px; height: 900px; overflow: hidden; background: #07080F; color: #F4F1E8; font-family: 'Chakra Petch', sans-serif">
+  <div aria-hidden="true" style="position: absolute; left: -20%; right: 25%; top: 60%; bottom: -10%; transform: perspective(420px) rotateX(62deg); transform-origin: top center; background-image: linear-gradient(rgba(255,255,255,0.12) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.12) 1px, transparent 1px); background-size: 64px 64px"></div>
+
+  <div style="position: relative; height: 100%; box-sizing: border-box; padding: 40px 64px; display: grid; grid-template-columns: 1fr 420px; gap: 32px">
+    <div style="display: flex; flex-direction: column; gap: 16px">
+      <header style="display: flex; align-items: center; gap: 16px">
+        <button aria-label="Back to lobby" style="width: 48px; height: 48px; border-radius: 24px; border: 1px solid rgba(255,255,255,0.14); background: rgba(13,15,26,0.85); color: #F4F1E8; display: flex; align-items: center; justify-content: center"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 5l-7 7 7 7"></path></svg></button>
+        <h1 style="margin: 0; font-family: 'Bungee', sans-serif; font-weight: 400; font-size: 44px">GARAGE</h1>
+      </header>
+      <div>
+        <div style="font-size: 12px; font-weight: 700; letter-spacing: 3px; color: #36E2FF">SUPERCAR</div>
+        <div style="font-family: 'Bungee', sans-serif; font-size: 64px; line-height: 1">FERRARI</div>
+      </div>
+      <div style="position: relative; flex: 1; display: flex; align-items: center; justify-content: center">
+        <div aria-hidden="true" style="position: absolute; bottom: 70px; width: 620px; height: 60px; border-radius: 50%; background: {{glow}}; opacity: 0.55; filter: blur(30px)"></div>
+        <svg viewBox="0 0 520 170" width="760" height="250" aria-hidden="true" style="position: relative"><path d="M40 120 C40 100 60 92 96 88 L170 60 C210 44 300 42 350 58 L420 84 C462 90 486 100 488 122 L484 132 L40 132 Z" fill="{{paint}}"></path><path d="M182 64 C220 50 300 50 340 62 L384 84 L160 84 Z" fill="#07080F" opacity="0.8"></path><path d="M60 110 L470 110" stroke="{{stripe}}" stroke-width="8" opacity="{{stripeOn}}"></path><circle cx="130" cy="132" r="26" fill="#07080F" stroke="{{rim}}" stroke-width="7"></circle><circle cx="400" cy="132" r="26" fill="#07080F" stroke="{{rim}}" stroke-width="7"></circle><circle cx="130" cy="132" r="8" fill="{{rim}}"></circle><circle cx="400" cy="132" r="8" fill="{{rim}}"></circle><text x="290" y="104" fill="#07080F" font-family="Bungee" font-size="26" text-anchor="middle">{{number}}</text></svg>
+      </div>
+      <div style="display: flex; gap: 12px">
+        <button style="height: 60px; padding: 0 36px; border: 0; border-radius: 16px; background: #FFD23A; color: #07080F; font-family: 'Bungee', sans-serif; font-size: 20px; letter-spacing: 2px; box-shadow: 0 6px 0 #A67C00">SAVE LOOK</button>
+        <button style="height: 60px; padding: 0 24px; border-radius: 16px; border: 2px solid rgba(255,255,255,0.3); background: rgba(13,15,26,0.85); color: #F4F1E8; font-size: 15px; font-weight: 700; letter-spacing: 2px; box-shadow: 0 5px 0 #2A2C3C">RANDOMIZE</button>
+      </div>
+    </div>
+
+    <section aria-label="Customize" style="display: flex; flex-direction: column; gap: 18px; padding: 22px; border-radius: 20px; background: rgba(13,15,26,0.9); border: 1px solid rgba(255,255,255,0.12)">
+      <sc-for list="{{groups}}" as="g" hint-placeholder-count="3">
+        <div style="display: flex; flex-direction: column; gap: 10px">
+          <div style="display: flex; justify-content: space-between; font-size: 12px; font-weight: 700; letter-spacing: 3px; color: #A3A6BF"><span>{{g.label}}</span><span style="letter-spacing: 0; color: #F4F1E8">{{g.current}}</span></div>
+          <div style="display: flex; flex-wrap: wrap; gap: 10px">
+            <sc-for list="{{g.opts}}" as="o" hint-placeholder-count="6">
+              <button onClick="{{o.pick}}" aria-label="{{o.name}}" aria-pressed="{{o.pressed}}" style="{{o.style}}"><sc-if value="{{o.locked}}" hint-placeholder-val="{{ false }}"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#F4F1E8" stroke-width="2.5" stroke-linecap="round" aria-hidden="true"><rect x="5" y="11" width="14" height="10" rx="2"></rect><path d="M8 11V7a4 4 0 0 1 8 0v4"></path></svg></sc-if></button>
+            </sc-for>
+          </div>
+        </div>
+      </sc-for>
+      <div style="display: flex; flex-direction: column; gap: 10px">
+        <div style="font-size: 12px; font-weight: 700; letter-spacing: 3px; color: #A3A6BF">RACING STRIPE</div>
+        <div style="display: flex; gap: 4px; padding: 4px; border-radius: 12px; background: rgba(255,255,255,0.05)">
+          <sc-for list="{{stripes}}" as="s" hint-placeholder-count="2">
+            <button onClick="{{s.pick}}" aria-pressed="{{s.pressed}}" style="{{s.style}}">{{s.label}}</button>
+          </sc-for>
+        </div>
+      </div>
+      <div style="display: flex; flex-direction: column; gap: 10px">
+        <label for="num" style="font-size: 12px; font-weight: 700; letter-spacing: 3px; color: #A3A6BF">RACE NUMBER</label>
+        <input id="num" value="27" maxlength="2" style="height: 48px; border-radius: 12px; border: 1px solid rgba(255,255,255,0.16); background: rgba(255,255,255,0.05); color: #F4F1E8; font-family: 'Bungee', sans-serif; font-size: 22px; padding: 0 14px">
+      </div>
+      <div style="margin-top: auto; padding: 12px 14px; border-radius: 12px; background: rgba(255,210,58,0.1); font-size: 13px; line-height: 1.45; color: #E8E2C8"><b style="color: #FFD23A">Locked finishes</b> unlock from daily challenges and cup wins. Your look shows in online races too.</div>
+    </section>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":900}}'>
+class Component extends DCLogic {
+  constructor(props) { super(props); this.state = { paint: 0, rim: 0, glow: 1, stripe: 1 }; }
+  renderVals() {
+    const S = this.state;
+    const PAINT = [['Rosso', '#FF3B3B'], ['Bolt Yellow', '#FFD23A'], ['Ice', '#D7DAE5'], ['Midnight', '#2B3A8C'], ['Lime', '#B6FF3B'], ['Violet', '#B48CFF'], ['Chrome', '#C0C6D6', 1], ['Gold', '#E0B23A', 1]];
+    const RIM = [['Gunmetal', '#3A3D52'], ['Silver', '#C9CBDB'], ['Black', '#15161F'], ['Bronze', '#B07A3A'], ['Neon', '#36E2FF', 1]];
+    const GLOW = [['Off', '#07080F'], ['Cyan', '#36E2FF'], ['Pink', '#FF3DA6'], ['Yellow', '#FFD23A'], ['Green', '#7CFF6B', 1]];
+    const swatch = (list, key) => list.map(([name, c, locked], i) => ({
+      name: name + (locked ? ' (locked)' : ''), pressed: String(S[key] === i), locked: !!locked,
+      style: 'width: 44px; height: 44px; border-radius: 22px; display: flex; align-items: center; justify-content: center; background: ' + c + '; opacity: ' + (locked ? 0.45 : 1) + '; border: 3px solid ' + (S[key] === i ? '#F4F1E8' : 'rgba(255,255,255,0.15)') + '; box-shadow: ' + (S[key] === i ? '0 0 0 3px #07080F inset' : 'none'),
+      pick: () => { if (!locked) this.setState({ [key]: i }); }
+    }));
+    const paint = PAINT[S.paint][1];
+    return {
+      paint,
+      rim: RIM[S.rim][1],
+      glow: GLOW[S.glow][1],
+      stripe: S.paint === 1 ? '#07080F' : '#F4F1E8',
+      stripeOn: S.stripe ? 0.9 : 0,
+      number: '27',
+      groups: [
+        { label: 'PAINT', current: PAINT[S.paint][0], opts: swatch(PAINT, 'paint') },
+        { label: 'RIMS', current: RIM[S.rim][0], opts: swatch(RIM, 'rim') },
+        { label: 'UNDERGLOW', current: GLOW[S.glow][0], opts: swatch(GLOW, 'glow') }
+      ],
+      stripes: ['None', 'Center'].map((label, i) => ({
+        label, pressed: String(S.stripe === i),
+        style: 'flex: 1; min-height: 44px; border: 0; border-radius: 9px; font-size: 14px; font-weight: 700; ' + (S.stripe === i ? 'background: #FFD23A; color: #07080F' : 'background: transparent; color: #C9CBDB'),
+        pick: () => this.setState({ stripe: i })
+      }))
+    };
+  }
+}
+</script>
+</body>
+</html>

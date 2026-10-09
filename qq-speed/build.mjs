@@ -11,6 +11,8 @@ const res = await esbuild.build({
   write: false,
   legalComments: 'none',
   logLevel: 'warning',
+  // sponsor logos (src/brands) are inlined into the bundle
+  loader: { '.png': 'dataurl', '.jpg': 'dataurl' },
   // online play server: wss://… or "/" for the page's own host; unset, local builds use port 8787 and others have no online play
   define: { __MP_URL__: JSON.stringify(process.env.MP_URL || '') },
 });
@@ -21,6 +23,9 @@ fs.writeFileSync('dist/index.html', html);
 
 // PWA files: copy public/ as-is, then stamp the service worker with a hash of this build so each deploy busts the offline cache
 fs.cpSync('public', 'dist', { recursive: true });
-const hash = crypto.createHash('sha1').update(html).update(fs.readFileSync('public/manifest.webmanifest')).digest('hex').slice(0, 10);
+const h = crypto.createHash('sha1').update(html).update(fs.readFileSync('public/manifest.webmanifest'));
+// the icons are cached too: a new icon set alone must also roll the version
+for (const f of fs.readdirSync('public/icons').sort()) h.update(fs.readFileSync('public/icons/' + f));
+const hash = h.digest('hex').slice(0, 10);
 fs.writeFileSync('dist/sw.js', fs.readFileSync('public/sw.js', 'utf8').replaceAll('__VERSION__', hash));
 console.log('dist/index.html', (html.length / 1024).toFixed(0) + ' KB', '· sw', hash);

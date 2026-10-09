@@ -5,6 +5,24 @@ import { clamp, lerp, wrapAngle } from './util.js';
 const FUEL_LAPS = 2.4; // a full tank at racing pace
 const TYRE_LAPS = 3.2; // a fresh set, driven cleanly
 const RELEASE_SPEED = 30;
+const WORN = 0.7; // tyre wear at which a stop is called
+
+// Tyre compounds: grip scales handling (and a rival's cornering speed), wear scales how fast a set goes off. Mediums are the baseline.
+export const COMPOUNDS = {
+  soft: { name: 'Soft', grip: 1.06, wear: 1.4, color: '#ff4545' },
+  medium: { name: 'Medium', grip: 1, wear: 1, color: '#ffd23a' },
+  hard: { name: 'Hard', grip: 0.95, wear: 0.7, color: '#f4f1e8' },
+};
+// laps a fresh set lasts before it's worn enough to pit for
+export const tyreLaps = (k) => (WORN * TYRE_LAPS) / COMPOUNDS[k].wear;
+
+// a rival's starting set: softs for sprints, harder sets the longer the race, with some variety down the grid
+export function pickCompound(laps, rnd) {
+  const r = rnd();
+  if (laps <= 2) return r < 0.7 ? 'soft' : 'medium';
+  if (laps <= 3) return r < 0.4 ? 'soft' : r < 0.85 ? 'medium' : 'hard';
+  return r < 0.15 ? 'soft' : r < 0.6 ? 'medium' : 'hard';
+}
 
 export class RaceSim {
   constructor(game, pit, crew) {
@@ -16,8 +34,9 @@ export class RaceSim {
   }
 
   setup(racers) {
+    const tyres = this.g.race.tyres || {};
     for (const r of racers) {
-      r.car = { fuel: 1, tyre: 0, wing: 0, engine: 0, susp: 0, pull: Math.random() < 0.5 ? -1 : 1 };
+      r.car = { fuel: 1, tyre: 0, compound: COMPOUNDS[tyres[r.id]] ? tyres[r.id] : 'medium', wing: 0, engine: 0, susp: 0, pull: Math.random() < 0.5 ? -1 : 1 };
       r.baseT = { ...r.T };
       r.pit = null;
       r.box = false;
@@ -27,9 +46,9 @@ export class RaceSim {
     }
   }
 
-  // how worn tyres, damage and an empty tank change the car
+  // how the tyre compound and its wear, damage and an empty tank change the car
   perf(c) {
-    const grip = (c.tyre < 0.6 ? 1 - c.tyre * 0.12 : 0.928 - (c.tyre - 0.6) * 0.8) * (1 - c.wing * 0.25);
+    const grip = (c.tyre < 0.6 ? 1 - c.tyre * 0.12 : 0.928 - (c.tyre - 0.6) * 0.8) * (1 - c.wing * 0.25) * COMPOUNDS[c.compound].grip;
     const empty = c.fuel <= 0;
     return {
       vmax: (1 - c.engine * 0.22) * (c.tyre >= 1 ? 0.55 : 1) * (empty ? 0.22 : 1),
@@ -48,6 +67,7 @@ export class RaceSim {
       const B = r.baseT;
       r.T = { ...B, vmax: B.vmax * p.vmax, vmaxNitro: B.vmaxNitro * p.vmax, accel: B.accel * p.accel, nitroAccel: B.nitroAccel * p.accel, grip: B.grip * p.grip, turnRate: B.turnRate * p.turn };
       r.gripMul = p.grip * p.turn;
+      r.cornerGrip = COMPOUNDS[r.car.compound].grip; // rivals corner faster on softer tyres
       r.steerPull = p.pull;
       if (r.isPlayer && r.car.fuel <= 0) r.nitroTime = 0;
     }
@@ -85,7 +105,7 @@ export class RaceSim {
       const nitro = r.nitroTime > 0;
       if (g.state === 'race') {
         c.fuel = Math.max(0, c.fuel - (ds / (FUEL_LAPS * this.L)) * (nitro ? 2.2 : 1) * (r.isPlayer && r.throttle <= 0 ? 0.4 : 1));
-        c.tyre = Math.min(1, c.tyre + (ds / (TYRE_LAPS * this.L)) * (r.drifting ? 3 : 1) * (1 + c.susp * 0.6));
+        c.tyre = Math.min(1, c.tyre + (ds / (TYRE_LAPS * this.L)) * COMPOUNDS[c.compound].wear * (r.drifting ? 3 : 1) * (1 + c.susp * 0.6));
       }
       // engine smoke when badly damaged
       if (c.engine > 0.5 && Math.random() < dt * 14) {
@@ -113,7 +133,7 @@ export class RaceSim {
     const c = r.car;
     const lapsPerSec = r.T.vmax / this.L;
     c.fuel = Math.max(0, c.fuel - (lapsPerSec / FUEL_LAPS) * dt);
-    c.tyre = Math.min(1, c.tyre + (lapsPerSec / TYRE_LAPS) * 6 * dt);
+    c.tyre = Math.min(1, c.tyre + (lapsPerSec / TYRE_LAPS) * COMPOUNDS[c.compound].wear * 6 * dt);
   }
 
   // Rivals are not perfect either: in corners they lock up or run wide into the wall. The odds go up with
@@ -170,7 +190,7 @@ export class RaceSim {
     const left = this.remaining(r);
     if (left < 0.35) return false;
     const fuelNeed = left / FUEL_LAPS;
-    return c.fuel < fuelNeed * 1.02 + 0.08 || (c.tyre > 0.7 && left > 0.6) || c.wing > 0.55 || c.engine > 0.55 || c.susp > 0.6;
+    return c.fuel < fuelNeed * 1.02 + 0.08 || (c.tyre > WORN && left > 0.6) || c.wing > 0.55 || c.engine > 0.55 || c.susp > 0.6;
   }
 
   radio(r) {
@@ -191,16 +211,18 @@ export class RaceSim {
     if (r.isPlayer) this.g.hud.message('Pit lane', '#27c7ff', true);
   }
 
-  // work plan for the stop: what gets done and how long the car sits
+  // work plan for the stop: what gets done and how long the car sits.
+  // New tyres are the softest set that lasts to the flag, or hards when none will.
   plan(r) {
     const c = r.car;
     const left = this.remaining(r);
     const tyres = c.tyre > 0.25;
+    const compound = ['soft', 'medium', 'hard'].find((k) => tyreLaps(k) >= left) || 'hard';
     const fuelTo = Math.min(1, Math.max(c.fuel, (left / FUEL_LAPS) * 1.08 + 0.05));
     const fuelT = (fuelTo - c.fuel) * 6.5;
     const repairT = (c.wing + c.engine + c.susp) * 5;
     const time = 1.4 + Math.max(tyres ? 2.2 : 0, fuelT, repairT);
-    return { tyres, fuelFrom: c.fuel, fuelTo, from: { wing: c.wing, engine: c.engine, susp: c.susp, tyre: c.tyre }, time };
+    return { tyres, compound, fuelFrom: c.fuel, fuelTo, from: { wing: c.wing, engine: c.engine, susp: c.susp, tyre: c.tyre, compound: c.compound }, time };
   }
 
   drive(r, dt) {
@@ -228,14 +250,17 @@ export class RaceSim {
       c.wing = lerp(w.from.wing, 0, k);
       c.engine = lerp(w.from.engine, 0, k);
       c.susp = lerp(w.from.susp, 0, k);
-      if (w.tyres) c.tyre = k > 0.8 ? 0 : w.from.tyre;
+      if (w.tyres) {
+        c.tyre = k > 0.8 ? 0 : w.from.tyre;
+        c.compound = k > 0.8 ? w.compound : w.from.compound;
+      }
       if (k >= 1) {
         this.crew.setWorking(r.team ?? 0, false);
         r.stops++;
         r.warned = {};
         this.visual(r);
         p.phase = 'out';
-        if (r.isPlayer) g.hud.message(`Stop ${w.time.toFixed(1)}s: go, go, go!`, '#6dff9e');
+        if (r.isPlayer) g.hud.message(`Stop ${w.time.toFixed(1)}s${w.tyres ? `, ${COMPOUNDS[w.compound].name.toLowerCase()}s on` : ''}: go, go, go!`, '#6dff9e');
         if (r.isPlayer) g.excite(0.4);
       }
     } else {

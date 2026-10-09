@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Log In</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Bungee&amp;family=Chakra+Petch:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#07080F}
+button,input{font-family:inherit}
+button{cursor:pointer}
+a{color:#FFD23A}a:hover{color:#FFE680}
+input::placeholder{color:#6E7190}
+</style>
+</helmet>
+<div style="position: relative; width: 1440px; height: 900px; overflow: hidden; background: #07080F; color: #F4F1E8; font-family: 'Chakra Petch', sans-serif; display: flex; align-items: center; justify-content: center">
+  <div aria-hidden="true" style="position: absolute; left: -20%; right: -20%; top: 62%; bottom: -10%; transform: perspective(420px) rotateX(62deg); transform-origin: top center; background-image: linear-gradient(rgba(54,226,255,0.2) 1px, transparent 1px), linear-gradient(90deg, rgba(54,226,255,0.2) 1px, transparent 1px); background-size: 64px 64px"></div>
+  <div aria-hidden="true" style="position: absolute; left: 0; right: 0; top: 62%; height: 1px; background: #FFD23A; opacity: 0.5; box-shadow: 0 0 24px 4px #FFD23A"></div>
+
+  <div style="position: relative; width: 480px; display: flex; flex-direction: column; align-items: center; gap: 28px">
+    <div style="display: flex; align-items: center; gap: 14px">
+      <svg viewBox="0 0 100 140" width="34" height="48" aria-hidden="true"><path d="M64 4 L18 78 L46 78 L30 136 L86 56 L57 56 L78 4 Z" fill="#FFD23A"></path></svg>
+      <div style="font-family: 'Bungee', sans-serif; font-size: 40px; transform: skewX(-10deg)">DRIFT<span style="color: #FFD23A">BOLT</span></div>
+    </div>
+
+    <form style="width: 100%; display: flex; flex-direction: column; gap: 18px; padding: 32px; border-radius: 24px; background: rgba(13,15,26,0.94); border: 1px solid rgba(255,255,255,0.12); box-shadow: 0 30px 80px rgba(0,0,0,0.5); box-sizing: border-box">
+      <h1 style="margin: 0; font-family: 'Bungee', sans-serif; font-weight: 400; font-size: 30px; text-align: center">WELCOME BACK</h1>
+
+      <div style="display: flex; flex-direction: column; gap: 8px">
+        <div style="font-size: 12px; font-weight: 700; letter-spacing: 3px; color: #A3A6BF">ON THIS DEVICE</div>
+        <div style="display: flex; gap: 10px">
+          <button type="button" style="flex: 1; display: flex; align-items: center; gap: 12px; padding: 12px 14px; border-radius: 14px; border: 2px solid #FFD23A; background: rgba(255,210,58,0.1); color: #F4F1E8; text-align: left">
+            <span style="width: 40px; height: 40px; border-radius: 20px; background: #FF3B3B; color: #07080F; display: flex; align-items: center; justify-content: center; font-family: 'Bungee', sans-serif">N</span>
+            <span style="display: flex; flex-direction: column"><b>NightRunner</b><span style="font-size: 12px; color: #A3A6BF">Level 12 · tap to race</span></span>
+          </button>
+          <button type="button" style="flex: 1; display: flex; align-items: center; gap: 12px; padding: 12px 14px; border-radius: 14px; border: 2px solid rgba(255,255,255,0.12); background: rgba(255,255,255,0.03); color: #F4F1E8; text-align: left">
+            <span style="width: 40px; height: 40px; border-radius: 20px; background: #36E2FF; color: #07080F; display: flex; align-items: center; justify-content: center; font-family: 'Bungee', sans-serif">K</span>
+            <span style="display: flex; flex-direction: column"><b>KidBrother</b><span style="font-size: 12px; color: #A3A6BF">Level 3</span></span>
+          </button>
+        </div>
+      </div>
+
+      <div style="display: flex; align-items: center; gap: 12px; font-size: 12px; font-weight: 700; letter-spacing: 2px; color: #6E7190"><span style="flex: 1; height: 1px; background: rgba(255,255,255,0.1)"></span>OR<span style="flex: 1; height: 1px; background: rgba(255,255,255,0.1)"></span></div>
+
+      <div style="display: flex; flex-direction: column; gap: 8px">
+        <label for="li-user" style="font-size: 12px; font-weight: 700; letter-spacing: 3px; color: #A3A6BF">USERNAME</label>
+        <input id="li-user" autocomplete="username" spellcheck="false" placeholder="Your username" style="height: 56px; padding: 0 16px; border-radius: 14px; border: 2px solid rgba(255,255,255,0.14); background: rgba(255,255,255,0.05); color: #F4F1E8; font-size: 18px; font-weight: 600">
+        <div style="font-size: 13px; color: #8A8DA6">First time on this device? We'll email you a 6-digit code.</div>
+      </div>
+
+      <a href="Verify.dc.html" style="height: 60px; display: flex; align-items: center; justify-content: center; border-radius: 16px; background: #FFD23A; color: #07080F; font-family: 'Bungee', sans-serif; font-size: 20px; letter-spacing: 2px; text-decoration: none; box-shadow: 0 5px 0 #A67C00">LET'S RACE</a>
+
+      <div style="text-align: center; font-size: 14px; color: #A3A6BF">New here? <a href="SignUp.dc.html" style="font-weight: 700">Create an account</a></div>
+    </form>
+    <a href="#" style="font-size: 14px; color: #A3A6BF">Play as guest</a>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":900}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

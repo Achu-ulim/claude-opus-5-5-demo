@@ -158,6 +158,9 @@ export const MAPS = [
   },
 ];
 
+// each track's colour in menus and lists
+export const MAP_TINT = { city: '#4a8cff', aegean: '#2ec4b6', egypt: '#e0a84a', snow: '#cfe6ff', neon: '#ff3da6', bay: '#e0574a', dune: '#e0884a' };
+
 export const MODES = [
   { id: 'speed', name: 'Speed Race', desc: 'Drift charge, mini boosts, double boosts: pure skill' },
   { id: 'item', name: 'Item Race', desc: 'Missiles, bananas, angels, magnets, nitro' },
