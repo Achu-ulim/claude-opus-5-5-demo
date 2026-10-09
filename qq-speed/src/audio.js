@@ -24,6 +24,8 @@ export class GameAudio {
     this.musicOn = true;
     this.sfxOn = true;
     this.muted = false; // everything off: engines, effects and music
+    this.sfxVol = 1; // player's volume settings, 0..1
+    this.musicVol = 1;
     this.song = 0;
     this.nextNoteTime = 0;
     this.step = 0;
@@ -43,10 +45,10 @@ export class GameAudio {
     comp.ratio.value = 4;
     this.master.connect(comp).connect(ctx.destination);
     this.sfx = ctx.createGain();
-    this.sfx.gain.value = 0.9;
+    this.sfx.gain.value = 0.9 * this.sfxVol;
     this.sfx.connect(this.master);
     this.music = ctx.createGain();
-    this.music.gain.value = 0.32;
+    this.music.gain.value = this.musicOn ? 0.32 * this.musicVol : 0;
     this.music.connect(this.master);
 
     // Noise buffer
@@ -527,9 +529,17 @@ export class GameAudio {
     if (this.master) this.master.gain.setTargetAtTime(on ? 0 : 0.8, this.ctx.currentTime, 0.04);
   }
 
+  setVolumes(sfx, music) {
+    this.sfxVol = sfx;
+    this.musicVol = music;
+    if (!this.ctx) return;
+    this.sfx.gain.setTargetAtTime(0.9 * sfx, this.ctx.currentTime, 0.05);
+    this.music.gain.setTargetAtTime(this.musicOn ? 0.32 * music : 0, this.ctx.currentTime, 0.05);
+  }
+
   toggleMusic() {
     this.musicOn = !this.musicOn;
-    if (this.music) this.music.gain.setTargetAtTime(this.musicOn ? 0.32 : 0, this.ctx.currentTime, 0.1);
+    if (this.music) this.music.gain.setTargetAtTime(this.musicOn ? 0.32 * this.musicVol : 0, this.ctx.currentTime, 0.1);
     if (this.musicOn && this.ctx) this.nextNoteTime = this.ctx.currentTime + 0.1;
     return this.musicOn;
   }
