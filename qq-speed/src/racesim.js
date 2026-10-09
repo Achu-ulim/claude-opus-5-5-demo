@@ -288,7 +288,7 @@ export class RaceSim {
     r.lat = this.track.halfW - 3;
     if (r.isPlayer) { r.h = r.m = s.hd; r.hint = s.i; r.d = s.d; }
     else { r.latV = 0; r.dist = p.dist0 + PIT.exit; }
-    r.ghost = 1.5;
+    r.immune = 1.5; // merging back into traffic
   }
 
   // player asks for a stop (B key / BOX button); ask again to cancel

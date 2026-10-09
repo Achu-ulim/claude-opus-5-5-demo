@@ -157,13 +157,26 @@ function addBillboard(parent, b, x, y, z, rot, tex, w = 12, h = 6, lift = 6) {
 
 // Grandstand
 function addGrandstand(parent, b, s, side, len, hw, groundAt, color = 0x2e6fd6, track = null) {
+  // the stand is straight and the track may bend toward it: set it back until its front row clears the road from end to end
+  let back = 0;
+  if (track) {
+    const clear = (e) => {
+      for (let t = -len / 2; t <= len / 2; t += 2) {
+        const off = side * (hw + 3.7 + e);
+        if (track.nearest(s.x + s.tx * t + s.rx * off, s.z + s.tz * t + s.rz * off, hw + 2.2)) return false;
+      }
+      return true;
+    };
+    while (back < 24 && !clear(back)) back += 0.5;
+    if (back >= 24) return false;
+  }
   if (track) {
     // No other track section may run through the grandstand footprint
     const tmp = {};
     let blocked = false;
     for (let k = -len / 2; k <= len / 2 && !blocked; k += 8) {
       const q = track.sample(s.d + k, tmp);
-      for (const lat of [hw + 5, hw + 14]) {
+      for (const lat of [hw + 5 + back, hw + 14 + back]) {
         const x = q.x + q.rx * side * lat, z = q.z + q.rz * side * lat;
         track.forEachNear(x, z, hw + 4, (j) => {
           const di = Math.abs(j - q.i);
@@ -195,7 +208,7 @@ function addGrandstand(parent, b, s, side, len, hw, groundAt, color = 0x2e6fd6, 
     col.position.set(i, (steps * 0.75 + 5.4) / 2, steps * 1.6 + 0.5);
     grp.add(col);
   }
-  const lat = side * (hw + 4.5);
+  const lat = side * (hw + 4.5 + back);
   const x = s.x + s.rx * lat, z = s.z + s.rz * lat;
   grp.position.set(x, groundAt(x, z), z);
   grp.rotation.y = s.hd + (side > 0 ? -Math.PI / 2 : Math.PI / 2);

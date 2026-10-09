@@ -645,6 +645,7 @@ class Game {
       r.stats = { drift: 0, small: 0, perfect: 0, double: 0, nitro: 0, crash: 0, top: 0, land: 0, takedown: 0 };
       r.wreck = 0;
       r.ghost = 0;
+      r.immune = 0;
       r.retired = false;
       if (r.isPlayer) {
         r.lapsDone = -1;
@@ -690,6 +691,7 @@ class Game {
       r.stats = { drift: 0, small: 0, perfect: 0, double: 0, nitro: 0, crash: 0, top: 0, land: 0, takedown: 0 };
       r.wreck = 0;
       r.ghost = 0;
+      r.immune = 0;
       r.retired = false;
       this.scene.add(r.model);
       this.racers.push(r);
@@ -898,6 +900,7 @@ class Game {
         if (r.retired) r.lat = damp(r.lat, Math.sign(r.lat || 1) * (this.track.halfW - 2.5), 1.5, DT);
       }
       this.collide();
+      this.collide(true);
     }
     this.sim?.post(dt);
     this.updateWrecks(dt);
@@ -1017,6 +1020,7 @@ class Game {
     Object.assign(P, keepLap);
     P.h = P.m = s.hd;
     P.s = 12;
+    P.immune = Math.max(P.immune || 0, 1.5);
     if (!quiet) this.hud.message('Reset', '#ffffff', true);
   }
 
@@ -1369,11 +1373,13 @@ class Game {
     for (const r of this.racers) {
       if (r.isPlayer || r.isRemote) continue;
       r.block = null;
-      let best = 22;
+      let best = Infinity;
       for (const o of this.racers) {
-        if (o === r || o.retired || o.pit || o.ghost > 0 || r.pit) continue;
+        if (o === r || o.pit || o.ghost > 0 || r.pit) continue;
         const gap = (((o.d - r.d) % L) + L) % L;
-        if (gap > 0.5 && gap < best && Math.abs(o.lat - r.lat) < 2.9) {
+        // a much slower car ahead (a wreck, a retired or stopped car) is spotted from further away
+        const reach = 22 + Math.max(0, r.s - o.s) * 1.2;
+        if (gap > 0.5 && gap < reach && gap < best && Math.abs(o.lat - r.lat) < 2.9) {
           best = gap;
           r.block = o;
           r.blockGap = gap;
@@ -1392,14 +1398,16 @@ class Game {
     return [cx - fx * seg, cz - fz * seg, fx * 2 * seg, fz * 2 * seg, sz.halfW];
   }
 
-  collide() {
+  // Cars are solid: bodies that touch are pushed apart and trade speed, so they bump, shove and jam rather than overlap.
+  // settle = true is a second, positions-only pass: in a pile-up, separating one pair can push another together
+  collide(settle = false) {
     const rs = this.racers;
     const fp = rs.map((r) => this.footprint(r));
     for (let i = 0; i < rs.length; i++)
       for (let j = i + 1; j < rs.length; j++) {
         const a = rs[i], b = rs[j];
-        if (a.ghost > 0 || b.ghost > 0 || a.pit || b.pit) continue; // wrecked, just respawned or in the pit lane: no contact
-        if (a.isRemote && b.isRemote) continue; // two other players: their own games sort that out
+        // the pit lane is a lane of its own; an online car that has stopped answering isn't really there
+        if (a.ghost > 0 || b.ghost > 0 || a.pit || b.pit) continue;
         if ((b.x - a.x) ** 2 + (b.z - a.z) ** 2 > 64 || Math.abs(a.y - b.y) > 2.5) continue;
         // nose to tail or side by side: bodies touch when their capsules do
         const A = fp[i], B = fp[j];
@@ -1411,17 +1419,29 @@ class Game {
         if (d < 1e-3) { dx = b.x - a.x; dz = b.z - a.z; d = Math.hypot(dx, dz); if (d < 1e-3) { dx = 1; dz = 0; d = 1; } }
         const nx = dx / d, nz = dz / d;
         const over = R - gap;
-        this.pushRacer(a, -nx * over * 0.5, -nz * over * 0.5);
-        this.pushRacer(b, nx * over * 0.5, nz * over * 0.5);
-        // Velocity exchange (simplified)
-        const va = this.vel(a), vb = this.vel(b);
-        const rel = (vb[0] - va[0]) * nx + (vb[1] - va[1]) * nz;
+        // each car moves out by half the overlap; another player's car is moved by its own game, so this one takes all of it
+        // (two other players both slide apart on screen while their games settle it)
+        const ka = b.isRemote && !a.isRemote ? 1 : a.isRemote && !b.isRemote ? 0 : 0.5;
+        this.pushRacer(a, -nx * over * ka, -nz * over * ka);
+        this.pushRacer(b, nx * over * (1 - ka), nz * over * (1 - ka));
+        if (settle || (a.isRemote && b.isRemote)) continue;
+        // Velocity exchange (simplified): along the contact normal both end up at the same speed
+        let va = this.vel(a), vb = this.vel(b);
+        let rel = (vb[0] - va[0]) * nx + (vb[1] - va[1]) * nz;
         if (rel < 0) {
           // a hard enough hit wrecks the car on the receiving end; rivals need a bigger hit to take out the player
           const pa = va[0] * nx + va[1] * nz, pb = -(vb[0] * nx + vb[1] * nz);
           const [att, vic] = pa >= pb ? [a, b] : [b, a];
-          // no takedowns in the scramble off the grid; online every car is a player's, so all get the player's margin
-          if (this.state === 'race' && this.raceTime > 4 && -rel > (vic.isPlayer || vic.isRemote ? TAKEDOWN_SPEED * 1.4 : TAKEDOWN_SPEED)) { this.takedown(att, vic, -rel); continue; }
+          // no takedowns in the scramble off the grid, nor of a car that was only just wrecked or respawned;
+          // online every car is a player's, so all get the player's margin
+          if (this.state === 'race' && this.raceTime > 4 && !(vic.immune > 0) && -rel > (vic.isPlayer || vic.isRemote ? TAKEDOWN_SPEED * 1.4 : TAKEDOWN_SPEED)) {
+            this.takedown(att, vic, -rel);
+            // the wreck is still a car in the way: the hit below shoves it on and costs the attacker speed
+            va = this.vel(a);
+            vb = this.vel(b);
+            rel = (vb[0] - va[0]) * nx + (vb[1] - va[1]) * nz;
+            if (rel >= 0) continue;
+          }
           const imp = -rel * 0.5;
           if (this.sim && imp > 1.5) { this.sim.damage(att, imp * 0.02, 'wing'); this.sim.damage(vic, imp * 0.012, 'susp'); }
           this.kick(a, -nx * imp, -nz * imp);
@@ -1437,10 +1457,7 @@ class Game {
 
   takedown(att, vic, closing = 0) {
     // online, each game only decides about its own car: the other player's game wrecks theirs and tells the room
-    if (vic.isRemote) {
-      if (att.isPlayer) att.ghost = Math.max(att.ghost, 0.5);
-      return;
-    }
+    if (vic.isRemote) return;
     if (vic.shield > 0) {
       vic.shield = 0;
       this.sfx('shield', vic);
@@ -1454,12 +1471,12 @@ class Game {
       return this.retire(vic);
     }
     vic.wreck = 2.2;
-    vic.ghost = 3.6;
+    vic.immune = 3.6; // can't be wrecked again while it smokes and gets going: still solid, though
     if (this.sim) {
       this.sim.damage(vic, 0.35, 'wing'); this.sim.damage(vic, 0.3, 'susp'); this.sim.damage(vic, 0.12, 'engine');
       this.sim.damage(att, 0.14, 'wing');
     }
-    att.ghost = 0.5;
+    att.immune = Math.max(att.immune || 0, 0.5);
     vic.spin = 2.2;
     vic.s *= 0.15;
     vic.airborne = true;
@@ -1488,7 +1505,7 @@ class Game {
     if (r.retired || !this.sim) return;
     r.retired = true;
     r.retiredAt = this.raceTime;
-    r.ghost = 1e9;
+    r.immune = 1e9; // a stopped car the others have to drive around
     r.spin = 1.4;
     r.s *= 0.45;
     r.box = false;
@@ -1566,7 +1583,7 @@ class Game {
     $('celebrate').classList.add('hidden');
     if (!kind) { this.celeb = null; return; } // skipped: results follow as usual
     const P = this.player;
-    P.ghost = 1e9;
+    P.immune = 1e9; // the others drive around the celebration rather than through it
     this.celeb = { phase: 'stop', kind, t: 0 };
     this.audio.play('click');
   }
@@ -1706,6 +1723,7 @@ class Game {
   updateWrecks(dt) {
     for (const r of this.racers) {
       if (r.ghost > 0) r.ghost -= dt;
+      if (r.immune > 0) r.immune -= dt;
       if (!(r.wreck > 0)) continue;
       r.wreck -= dt;
       if (Math.random() < dt * 30) this.fx.smoke.emit(r.x, r.y + 1, r.z, (Math.random() - 0.5) * 2, 2 + Math.random() * 2, (Math.random() - 0.5) * 2, 1.2, 1.6, 4, 0.18, 0.18, 0.2, 0.7);
@@ -1722,7 +1740,7 @@ class Game {
   }
 
   pushRacer(r, px, pz) {
-    if (r.isRemote) return; // moved by its own player's game
+    if (r.isRemote) return r.nudge(px, pz); // only on screen: its own player's game moves it for real
     r.x += px;
     r.z += pz;
     if (r.isPlayer) return;
@@ -1736,8 +1754,16 @@ class Game {
     if (r.isRemote) return;
     if (r.isPlayer) {
       const cx = Math.sin(r.m) * r.s + vx, cz = Math.cos(r.m) * r.s + vz;
-      const ns = Math.hypot(cx, cz);
-      if (r.s >= 0 && ns > 0.5) { r.s = ns; r.m = Math.atan2(cx, cz); }
+      const fwd = cx * Math.sin(r.h) + cz * Math.cos(r.h);
+      if (fwd >= 0) {
+        // still going forward: at the new speed, in the new direction (a side hit slides the car)
+        r.s = Math.hypot(cx, cz);
+        if (r.s > 0.5) r.m = Math.atan2(cx, cz);
+      } else {
+        // shoved backwards (or stopped dead by a car in front): rolling back along the nose
+        r.s = Math.max(fwd, -r.T.reverseMax);
+        r.m = r.h;
+      }
       return;
     }
     const s = this.track.sample(r.dist, {});

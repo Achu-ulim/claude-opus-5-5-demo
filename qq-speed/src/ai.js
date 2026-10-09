@@ -70,9 +70,11 @@ export class AICar {
     let vt = Math.min(vmaxBase, vCorner + (this.nitroTime > 0 ? 6 : 0));
     let spinning = false;
     if (this.spin > 0) { this.spin -= dt; vt = 5; spinning = true; }
-    // a car ahead in this lane: don't drive into it while still lined up behind
+    // a car ahead in this lane: don't drive into it while still lined up behind.
+    // Closing fast (on a wreck or a stopped car) the braking starts early enough to stop short of it at 30 m/s²
     const b = this.block, hw = tr.halfW - 2.2;
-    const blocked = b && !spinning && Math.abs(this.lat - b.lat) < 2.3 && this.blockGap < 11;
+    const close = b ? Math.max(0, this.s - b.s) : 0;
+    const blocked = b && !spinning && Math.abs(this.lat - b.lat) < 2.3 && this.blockGap < Math.max(11, 6.5 + (close * close) / 50);
     if (blocked) vt = Math.min(vt, Math.max(0, b.s - (this.blockGap < 6.5 ? 1.5 : 0)));
     if (!active || raceTime < this.startDelay) vt = 0;
     const before = this.s;
@@ -99,7 +101,7 @@ export class AICar {
     const inside = -Math.sign(cAhead) * clamp(Math.abs(cAhead) * 45, 0, 1) * hw * 0.8;
     let target = clamp(inside + this.personal * hw * 0.8, -hw, hw);
     // pull out to pass: the side it's already leaning to, unless the wall is there
-    if (b && !spinning && this.blockGap < 20) {
+    if (b && !spinning && this.blockGap < 20 + close * 0.8) {
       let side = this.lat >= b.lat ? 1 : -1;
       if (Math.abs(b.lat + side * 3.3) > hw) side = -side;
       target = clamp(b.lat + side * 3.3, -hw, hw);

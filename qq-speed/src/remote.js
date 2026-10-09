@@ -96,6 +96,15 @@ export class RemoteCar {
     };
   }
 
+  // pushed out of another car on this screen; the offset fades like any other correction, while the car's own
+  // game (which sees the same contact) moves it for real
+  nudge(dx, dz) {
+    this.x += dx;
+    this.z += dz;
+    this.err.x += dx;
+    this.err.z += dz;
+  }
+
   // once per frame, now = server time (ms)
   update(dt, now) {
     const p = this.snap;
@@ -162,5 +171,24 @@ export class RemoteCar {
     updateFlames(u, this.nitroTime > 0, this.boost);
     brakeLights(u, this.braking, sp);
     u.shield.visible = this.shield > 0;
+    this.fade(this.lag > LAGGING);
+  }
+
+  // a racer whose updates have stopped isn't solid (it may really be somewhere else): show it see-through until they're back
+  fade(on) {
+    if (on === !!this.faded) return;
+    this.faded = on;
+    this.model.traverse((o) => {
+      if (!o.isMesh) return;
+      for (const m of Array.isArray(o.material) ? o.material : [o.material]) {
+        if (m.userData.fadeKeep === undefined) m.userData.fadeKeep = { transparent: m.transparent, opacity: m.opacity, depthWrite: m.depthWrite };
+        const k = m.userData.fadeKeep;
+        if (k.transparent) continue; // flames, glow and the shield are see-through already
+        m.transparent = on;
+        m.opacity = on ? 0.3 : k.opacity;
+        m.depthWrite = on ? false : k.depthWrite;
+        m.needsUpdate = true;
+      }
+    });
   }
 }

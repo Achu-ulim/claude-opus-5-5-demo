@@ -118,7 +118,7 @@ export function buildGround(track, cfg) {
   const slope = 0.55;
   const flat = flatR + cell * 0.7;
   for (let k = 0; k < track.N; k++) {
-    const px = track.px[k], pz = track.pz[k], ty = track.py[k] - 0.6;
+    const px = track.px[k], pz = track.pz[k], rx = track.rx[k], rz = track.rz[k], sb = Math.sin(track.bank[k]);
     const fill = !track.bridge[k];
     const i0 = Math.max(0, Math.floor((px - R - x0) / cell)), i1 = Math.min(seg, Math.ceil((px + R - x0) / cell));
     const j0 = Math.max(0, Math.floor((pz - R - z0) / cell)), j1 = Math.min(seg, Math.ceil((pz + R - z0) / cell));
@@ -127,6 +127,8 @@ export function buildGround(track, cfg) {
         const dx = x0 + i * cell - px, dz = z0 + j * cell - pz;
         const dist = Math.sqrt(dx * dx + dz * dz);
         if (dist > R) continue;
+        // just under the road surface beside this point: on banked corners the inside edge sits below the centerline
+        const ty = track.py[k] + clamp(dx * rx + dz * rz, -track.halfW, track.halfW) * sb - 0.6;
         const kk = Math.max(0, dist - flat) * slope;
         const id = j * n + i;
         if (ty + kk < hi[id]) hi[id] = ty + kk;

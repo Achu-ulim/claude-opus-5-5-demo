@@ -37,7 +37,9 @@ function ribbon(track, pit, u0, u1, latFn, width, y, mat) {
     const lc = latFn(u);
     for (const o of [-width / 2, width / 2]) {
       const lat = lc + o;
-      pos.push(s.x + s.rx * lat, s.y + track.halfW * Math.sin(s.bank) + y, s.z + s.rz * lat);
+      // where the tapers lie on the track, follow its banking instead of floating at the edge's height
+      const h = Math.min(lat, track.halfW) * Math.sin(s.bank);
+      pos.push(s.x + s.rx * lat, s.y + h + y, s.z + s.rz * lat);
     }
     if (k > 0) { const a = (k - 1) * 2; idx.push(a, a + 2, a + 1, a + 1, a + 2, a + 3); }
   }
@@ -97,8 +99,10 @@ export function buildPitLane(ctx, pit, teams) {
     const { p, hd } = onTrack(u, lane(u), 0);
     const q = track.sample(pit.d(u), {});
     for (const o of [-4.6, 4.6]) {
-      const post = new THREE.Mesh(new THREE.BoxGeometry(0.3, 6.2, 0.3), postM);
       const lat = lane(u) + o;
+      // where the lane still overlaps the track, the gantry hangs from its outer post: no post standing in the road
+      if (lat < hw + 0.6) continue;
+      const post = new THREE.Mesh(new THREE.BoxGeometry(0.3, 6.2, 0.3), postM);
       post.position.set(q.x + q.rx * lat, p.y + 3.1, q.z + q.rz * lat);
       parent.add(post);
     }
@@ -151,7 +155,10 @@ export function buildPitLane(ctx, pit, teams) {
     return m;
   };
   const entryBeam = beam(0xffa030);
-  entryBeam.position.copy(onTrack(6, lane(6), 0).p);
+  // at the first spot where the lane has left the track, so racing cars never drive through the beam's foot
+  let ub = 6;
+  while (lane(ub) < hw + 2.8 && ub < PIT.taperIn) ub += 2;
+  entryBeam.position.copy(onTrack(ub, lane(ub), 0).p);
   const boxBeam = beam(0x27c7ff);
   boxBeam.visible = false;
   // chevrons painted on the track, leading from the racing line into the entry
