@@ -1,11 +1,26 @@
+// Driftbolt on Cloudflare: one Worker serves the game (dist/) and runs the online play server (server/src/index.js).
+// Local: npm run preview (http://localhost:8787) · Deploy: npm run deploy
 {
   "$schema": "node_modules/wrangler/config-schema.json",
-  "name": "qqcar",
+  "name": "driftbolt",
+  "main": "server/src/index.js",
   "compatibility_date": "2026-09-21",
-  "observability": {
-    "enabled": true
+  "observability": { "enabled": true },
+  // the game is rebuilt before every deploy and dev session; MP_URL=/ points it at the server on its own host
+  "build": { "command": "MP_URL=/ node build.mjs", "watch_dir": ["src", "public"] },
+  // files in dist/ are served as they are; anything else (/ws, /health) reaches the Worker
+  "assets": { "directory": "dist" },
+  "durable_objects": {
+    "bindings": [
+      { "name": "ROOMS", "class_name": "Room" },
+      { "name": "MATCHMAKER", "class_name": "Matchmaker" }
+    ]
   },
-  "assets": {
-    "directory": "dist"
+  // SQLite-backed Durable Objects are the ones available on the Workers Free plan
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["Room", "Matchmaker"] }],
+  "vars": {
+    // other pages allowed to connect (the game served by this Worker always is); * = one host label or a port.
+    // The Netlify copy of the game and its deploy previews, plus local dev
+    "ALLOWED_ORIGINS": "https://driftbolt.netlify.app,https://*--driftbolt.netlify.app,http://localhost:*,http://127.0.0.1:*"
   }
 }

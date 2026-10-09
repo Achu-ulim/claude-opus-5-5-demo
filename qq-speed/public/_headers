@@ -1,0 +1,7 @@
+# Read by both hosts (Netlify and Cloudflare Workers assets); never served as a file.
+# The service worker must always be revalidated, or players stay pinned to an old build
+/sw.js
+  Cache-Control: no-cache
+
+/manifest.webmanifest
+  Content-Type: application/manifest+json

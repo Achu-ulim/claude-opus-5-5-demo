@@ -5,16 +5,7 @@
 
 [build.environment]
   NODE_VERSION = "22"
-  # Online play server, printed by `npm run mp:deploy`. Without it the Online screen says online play isn't set up.
-  # MP_URL = "wss://driftbolt-mp.<your-subdomain>.workers.dev"
+  # Online play server: the Cloudflare Worker that also hosts the game (`npm run deploy`). Without it, no Online button.
+  MP_URL = "wss://driftbolt.driftbolt.workers.dev"
 
-# The service worker must always be revalidated, or players stay pinned to an old build
-[[headers]]
-  for = "/sw.js"
-  [headers.values]
-    Cache-Control = "no-cache"
-
-[[headers]]
-  for = "/manifest.webmanifest"
-  [headers.values]
-    Content-Type = "application/manifest+json"
+# Response headers live in public/_headers, which Netlify and Cloudflare both read

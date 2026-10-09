@@ -1,4 +1,4 @@
-// Driftbolt multiplayer server (Cloudflare Workers + Durable Objects).
+// Driftbolt multiplayer server (Cloudflare Workers + Durable Objects). The same Worker serves the game's files (wrangler.jsonc).
 // The Worker only routes: each room is one Durable Object that owns its lobby, start clock and results,
 // and a single Matchmaker object keeps the list of public rooms for Quick Match.
 // Cars are simulated by their own clients; the room relays their snapshots and referees laps and the finishing order.
@@ -40,10 +40,12 @@ const matchmaker = (env) => env.MATCHMAKER.get(env.MATCHMAKER.idFromName('global
 export default {
   async fetch(req, env) {
     const url = new URL(req.url);
-    if (url.pathname === '/' || url.pathname === '/health') return new Response('Driftbolt multiplayer server: ok\n', { headers: { 'content-type': 'text/plain' } });
+    // the game's own files are served before the Worker runs, so only server paths get here
+    if (url.pathname === '/health') return new Response('Driftbolt multiplayer server: ok\n', { headers: { 'content-type': 'text/plain' } });
     if (url.pathname !== '/ws') return new Response('Not found\n', { status: 404 });
     if (req.headers.get('Upgrade') !== 'websocket') return new Response('Expected a WebSocket upgrade\n', { status: 426 });
-    if (!originOk(req.headers.get('Origin'), env.ALLOWED_ORIGINS)) return new Response('Origin not allowed\n', { status: 403 });
+    const origin = req.headers.get('Origin');
+    if (origin !== url.origin && !originOk(origin, env.ALLOWED_ORIGINS)) return new Response('Origin not allowed\n', { status: 403 });
     const action = url.searchParams.get('action');
     let code;
     if (action === 'create') code = newCode();

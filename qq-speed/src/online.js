@@ -20,11 +20,13 @@ const ERRORS = {
   offline: 'Online play isn\'t set up for this copy of the game.',
 };
 
-// the build sets __MP_URL__ (see build.mjs); local dev falls back to `npm run mp:dev` on port 8787
+// the build sets __MP_URL__ (see build.mjs): a server address, or "/" for the server on this page's own host
+// (the Cloudflare Worker serves both). Unset, local dev falls back to `npm run preview` on port 8787
 function serverUrl() {
   const q = new URLSearchParams(location.search).get('mp');
   if (q && LOCAL) return q;
   const built = typeof __MP_URL__ !== 'undefined' ? __MP_URL__ : '';
+  if (built.startsWith('/')) return new URL(built, location.href).href.replace(/\/+$/, '');
   return built || (LOCAL ? `ws://${location.hostname}:8787` : '');
 }
 
