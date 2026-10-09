@@ -53,6 +53,8 @@ const STEER = [
   { id: 'swipe', name: 'Swipe' },
   { id: 'buttons', name: 'Buttons' },
 ];
+// lobby track list: one dot per track in its signature color
+const MAP_TINT = { city: '#4a8cff', aegean: '#2ec4b6', egypt: '#e0a84a', snow: '#cfe6ff', neon: '#ff3da6', bay: '#e0574a', dune: '#e0884a' };
 const DT = 1 / 120;
 const TAKEDOWN_SPEED = 11; // m/s closing speed (~40 km/h) that wrecks the car on the receiving end
 const FATAL_SPEED = 20; // Grand Prix: a car-to-car hit this hard (~72 km/h closing) retires the car
@@ -164,7 +166,7 @@ const MOUNTAINS = {
 
 class Game {
   constructor() {
-    this.settings = Object.assign({ map: 'city', mode: 'speed', skin: 0, laps: 2, diff: 1, quality: IS_TOUCH ? 'mid' : 'high', song: 0, steer: 'tilt' }, this.load());
+    this.settings = Object.assign({ map: 'city', mode: 'speed', skin: 0, laps: 2, diff: 1, quality: IS_TOUCH ? 'mid' : 'high', song: 0, steer: 'tilt', sens: 50, muted: false, sfxVol: 100, musicVol: 100 }, this.load());
     if (!LAPS.includes(this.settings.laps)) this.settings.laps = 3;
     if (!(this.settings.skin >= 0 && this.settings.skin < CARS.length)) this.settings.skin = 0;
     this.canvas = $('gl');
@@ -182,6 +184,7 @@ class Game {
 
     this.audio = new GameAudio();
     this.input = new Input();
+    this.applyPrefs();
     this.hud = new HUD();
     this.fx = this.makeFx();
     this.scene.add(this.fx.smoke.points, this.fx.glow.points, this.fx.skids.mesh);
@@ -282,12 +285,12 @@ class Game {
   buildMenu() {
     const S = this.settings;
     const mapsEl = $('maps');
-    mapsEl.innerHTML = MAPS.map((m) => `<div class="map" data-id="${m.id}"><div class="nm">${m.name}</div><div class="tg">${m.tag}</div></div>`).join('');
+    mapsEl.innerHTML = MAPS.map((m, i) => `<button type="button" class="map" data-id="${m.id}"><span class="mn">${String(i + 1).padStart(2, '0')}</span><span class="nm">${m.name}<span class="tg">${m.tag}</span></span><span class="md" style="background:${MAP_TINT[m.id] || '#888'}"></span></button>`).join('');
     const opts = (el, list, key, label, sub) => {
-      el.innerHTML = list.map((it, i) => `<div class="opt" data-i="${i}">${label(it)}${sub ? `<small>${sub(it)}</small>` : ''}</div>`).join('');
+      el.innerHTML = list.map((it, i) => `<button type="button" class="opt" data-i="${i}">${label(it)}${sub ? `<small>${sub(it)}</small>` : ''}</button>`).join('');
     };
     opts($('modes'), MODES, 'mode', (m) => m.name, (m) => m.desc);
-    opts($('laps'), LAPS, 'laps', (l) => `${l} lap${l > 1 ? 's' : ''}`);
+    opts($('laps'), LAPS, 'laps', (l) => `${l}`);
     opts($('diff'), DIFFS, 'diff', (d) => d.name);
     opts($('quality'), QUALITY, 'quality', (q) => q.name);
     opts($('steer'), STEER, 'steer', (x) => x.name);
@@ -296,7 +299,8 @@ class Game {
     try { thumbs = renderCarThumbs(); } catch { /* previews are optional */ }
     this.carThumbs = thumbs;
     const specs = carSpecs();
-    $('skins').innerHTML = CARS.map((c, i) => `<div class="carcard" data-i="${i}">${thumbs[i] ? `<img src="${thumbs[i]}" alt="${c.name}">` : `<div class="swatch" style="background:#${c.body.toString(16).padStart(6, '0')}"></div>`}<div class="cn">${c.name}</div><div class="cc">${c.cls}</div></div>`).join('');
+    // the live demo shows the car itself, so the lobby only needs a dot per car
+    $('skins').innerHTML = CARS.map((c, i) => `<button type="button" class="carcard" data-i="${i}" aria-label="${c.name}" title="${c.name}"></button>`).join('');
     const SPEC_ROWS = [['speed', 'Top Speed'], ['accel', '0-100 km/h'], ['handling', 'Handling'], ['drift', 'Drift'], ['nitro', 'Nitro']];
     const refresh = () => {
       mapsEl.querySelectorAll('.map').forEach((e) => e.classList.toggle('sel', e.dataset.id === S.map));
@@ -306,9 +310,17 @@ class Game {
       $('quality').querySelectorAll('.opt').forEach((e) => e.classList.toggle('sel', QUALITY[e.dataset.i].id === S.quality));
       $('steer').querySelectorAll('.opt').forEach((e) => e.classList.toggle('sel', STEER[e.dataset.i].id === S.steer));
       this.applySteer();
-      $('skins').querySelectorAll('.carcard').forEach((e) => e.classList.toggle('sel', +e.dataset.i === S.skin));
+      $('skins').querySelectorAll('.carcard').forEach((e) => {
+        e.classList.toggle('sel', +e.dataset.i === S.skin);
+        e.setAttribute('aria-pressed', String(+e.dataset.i === S.skin));
+      });
+      mapsEl.querySelectorAll('.map').forEach((e) => e.setAttribute('aria-pressed', String(e.dataset.id === S.map)));
+      $('trackPos').textContent = `${String(MAPS.findIndex((m) => m.id === S.map) + 1).padStart(2, '0')} / ${String(MAPS.length).padStart(2, '0')}`;
       const car = CARS[S.skin], sp = specs[S.skin];
-      $('carinfo').innerHTML = `<div class="cdesc"><b>${car.name}</b> · ${car.desc}</div>` + SPEC_ROWS.map(([k, label]) =>
+      $('carCls').textContent = car.cls;
+      $('carName').textContent = car.name;
+      $('carDesc').textContent = car.desc;
+      $('carinfo').innerHTML = SPEC_ROWS.map(([k, label]) =>
         `<div class="spec"><span class="sk">${label}</span><span class="sb"><i style="width:${Math.round(sp.bar[k] * 100)}%"></i></span><span class="sv">${sp.label[k]}</span></div>`).join('');
       this.save();
     };
@@ -336,6 +348,15 @@ class Game {
       if (S.steer === 'tilt') this.enableTilt();
     });
     bind('skins', (i) => { S.skin = i; if (this.state === 'menu') this.startDemo(); });
+    this.pickCar = (d) => {
+      S.skin = (S.skin + d + CARS.length) % CARS.length;
+      refresh();
+      this.audio.play('click');
+      if (this.state === 'menu') this.startDemo();
+    };
+    $('carPrev').addEventListener('click', () => this.pickCar(-1));
+    $('carNext').addEventListener('click', () => this.pickCar(1));
+    this.buildSettings();
     $('start').addEventListener('click', () => this.startRace());
     $('resume').addEventListener('click', () => this.togglePause());
     $('restart').addEventListener('click', () => { $('pause').classList.add('hidden'); this.startRace(this.race); });
@@ -431,6 +452,48 @@ class Game {
     document.body.classList.toggle('steer-swipe', m === 'swipe');
   }
 
+  // Settings modal: steering sensitivity and sound, from the lobby or the pause menu
+  buildSettings() {
+    const S = this.settings;
+    const sliders = [['sens', '%'], ['sfxVol', '%'], ['musicVol', '%']];
+    const refresh = () => {
+      for (const [k, u] of sliders) { $(k).value = S[k]; $(k + 'v').textContent = S[k] + u; }
+      $('mute').setAttribute('aria-checked', String(!!S.muted));
+      $('sfxRow').classList.toggle('off', !!S.muted);
+      $('musicRow').classList.toggle('off', !!S.muted);
+      $('sfxVol').disabled = $('musicVol').disabled = !!S.muted;
+    };
+    for (const [k] of sliders) {
+      $(k).addEventListener('input', () => { S[k] = +$(k).value; this.applyPrefs(); refresh(); });
+      $(k).addEventListener('change', () => this.save());
+    }
+    $('mute').addEventListener('click', () => {
+      S.muted = !S.muted;
+      this.applyPrefs();
+      refresh();
+      this.save();
+      this.audio.play('click');
+    });
+    const close = () => { $('settings').classList.add('hidden'); this.save(); };
+    this.openSettings = () => { this.audio.play('click'); refresh(); $('settings').classList.remove('hidden'); $('setClose').focus(); };
+    this.closeSettings = close;
+    $('setbtn').addEventListener('click', () => this.openSettings());
+    $('pauseSet').addEventListener('click', () => this.openSettings());
+    $('setClose').addEventListener('click', close);
+    $('setDone').addEventListener('click', close);
+    $('settings').addEventListener('click', (e) => { if (e.target === $('settings')) close(); });
+    // the game's key handler ignores keys typed into inputs, so the sliders need their own Escape
+    $('settings').addEventListener('keydown', (e) => { if (e.key === 'Escape') { e.stopPropagation(); close(); } });
+    refresh();
+  }
+
+  applyPrefs() {
+    const S = this.settings;
+    // 50% is the original feel; 10% softens steering to about 0.6x, 100% sharpens it to 1.5x
+    this.input.sens = 0.5 + S.sens / 100;
+    this.audio.setVolumes(S.muted ? 0 : S.sfxVol / 100, S.muted ? 0 : S.musicVol / 100);
+  }
+
   // to = 'online' returns to the online room instead of the lobby
   toMenu(to = 'menu') {
     this.endPodium();
@@ -457,6 +520,12 @@ class Game {
   }
 
   onKey(code) {
+    if (this.closeSettings && !$('settings').classList.contains('hidden')) {
+      if (code === 'Escape') this.closeSettings();
+      return;
+    }
+    const inLobby = this.state === 'menu' && !$('menu').classList.contains('hidden') && document.activeElement?.tagName !== 'INPUT';
+    if (inLobby && (code === 'ArrowLeft' || code === 'ArrowRight')) return this.pickCar?.(code === 'ArrowLeft' ? -1 : 1);
     if (code === 'Escape' || code === 'KeyP') {
       if (this.state === 'race' || this.state === 'countdown' || this.state === 'paused') this.togglePause();
     } else if (code === 'KeyC') this.cycleCamera();

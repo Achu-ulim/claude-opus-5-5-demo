@@ -6,11 +6,14 @@
 <meta name="apple-mobile-web-app-capable" content="yes" />
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
 <meta name="apple-mobile-web-app-title" content="Driftbolt" />
-<meta name="theme-color" content="#0a1430" />
+<meta name="theme-color" content="#07080f" />
 <link rel="manifest" href="manifest.webmanifest" />
 <link rel="icon" type="image/png" href="icons/favicon-64.png" />
 <link rel="apple-touch-icon" href="icons/apple-touch-icon.png" />
 <meta name="mobile-web-app-capable" content="yes" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bungee&family=Chakra+Petch:wght@400;600;700&display=swap" />
 <title>Driftbolt · 3D Arcade Racing</title>
 <meta name="description" content="3D racing in the browser: recreates QQ Speed's City 11, Aegean Romance, Pharaoh's Pyramid and Snow Adventure, with drift charging, mini boosts, double boosts, nitro and item races." />
 <style>
@@ -149,9 +152,7 @@ body.touch #gaugebox{top:calc(var(--pt) + 84px);bottom:auto;padding:6px 12px;gap
 body.touch #gauge{width:clamp(90px,26vw,220px);height:14px}
 body.touch #speedo{bottom:auto;top:236px;width:150px;height:150px;right:var(--pr)}
 body.touch #speedo .v{top:56px;font-size:34px}body.touch #speedo .u{top:96px}
-body.touch #items .hint,body.touch #keys,body.touch #bigrank,body.touch #songtip,body.touch #clinks,body.touch .keycard{display:none}
-.touchcard{display:none}
-body.touch .touchcard{display:block}
+body.touch #items .hint,body.touch #keys,body.touch #bigrank,body.touch #songtip,body.touch #clinks{display:none}
 /* phones (portrait, or landscape with little height): compact panels and a digital speed readout */
 @media (max-width:600px),(max-height:500px){
   body.touch #topc{top:var(--pt);gap:6px}
@@ -228,22 +229,167 @@ body.touch .touchcard{display:block}
 
 /* ---------- Menu ---------- */
 .screen{position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:safe center;overflow:auto;-webkit-overflow-scrolling:touch;touch-action:pan-y;padding:max(18px,env(safe-area-inset-top)) max(16px,env(safe-area-inset-right)) max(18px,env(safe-area-inset-bottom)) max(16px,env(safe-area-inset-left))}
-#menu{background:linear-gradient(180deg,rgba(8,20,55,.35),rgba(8,20,55,.78) 70%,rgba(8,20,55,.92))}
-.mlinks{display:flex;gap:18px;justify-content:center;margin-top:10px}
-.mlinks a{color:var(--muted);text-decoration:none;font-size:13px;display:inline-flex;align-items:center;gap:6px;transition:color .15s}
-.mlinks a:hover{color:#fff}
-.mlinks svg{width:14px;height:14px;fill:currentColor}
-#installbtn{cursor:pointer;font:700 13px var(--ui);color:#fff;background:linear-gradient(180deg,#4a8cff,#1d5fe0);border:none;border-radius:14px;padding:5px 12px}
-#iosinstall{font-size:12px;color:var(--muted)}
+/* lobby: neon arcade look; the live 3D demo shows through the middle column */
+#menu,#settings{--ink:#07080f;--ink2:rgba(13,15,26,.84);--edge:rgba(255,255,255,.12);--cream:#f4f1e8;--dim:#a3a6bf;--bolt:#ffd23a;--neon:#36e2ff;
+  --disp:"Bungee",var(--num);--body:"Chakra Petch",var(--ui)}
+#menu{justify-content:flex-start;color:var(--cream);font-family:var(--body);
+  background:radial-gradient(ellipse 46% 50% at 50% 54%,rgba(7,8,15,0),rgba(7,8,15,.5) 70%,rgba(7,8,15,.86))}
+body:has(#menu:not(.hidden)) #clinks{display:none}
+#menu button,#menu input{font-family:var(--body)}
+#menu button:focus-visible,#menu a:focus-visible,#menu input:focus-visible,#settings button:focus-visible,#settings input:focus-visible{outline:2px solid var(--neon);outline-offset:2px}
+#menu svg,#settings svg{fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+#menu svg .f,#menu svg.fill{fill:currentColor;stroke:none}
+.mwrap{width:min(1376px,100%);min-height:100%;display:flex;flex-direction:column;gap:18px}
+.mtop{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:12px 16px}
+.brand{display:flex;align-items:center;gap:12px}
+.brand .mark{width:26px;height:46px;stroke:none!important;flex:none}
+.logo{font-family:var(--disp);font-size:30px;line-height:1;letter-spacing:1px}
+.sub{margin-top:3px;font-size:12px;font-weight:600;letter-spacing:3px;color:var(--dim)}
+.mtools{display:flex;flex-wrap:wrap;align-items:center;gap:10px}
+.driver{display:flex;align-items:center;gap:10px;height:44px;padding:0 5px 0 16px;border-radius:22px;background:var(--ink2);border:1px solid var(--edge)}
+.driver label{font-size:12px;font-weight:700;letter-spacing:2px;color:var(--dim);text-transform:uppercase}
+.driver input{pointer-events:auto;user-select:text;-webkit-user-select:text;width:150px;background:transparent;border:0;color:var(--cream);font-size:16px;font-weight:600;outline:none}
+#menu .round,#menu .pill,.driver button{display:flex;align-items:center;justify-content:center;gap:8px;height:44px;border-radius:22px;border:1px solid var(--edge);background:var(--ink2);color:var(--cream);cursor:pointer;text-decoration:none;transition:border-color .15s,background .15s}
+#menu .round{width:44px;flex:none}
+#menu .round:hover,#menu .pill:hover,.driver button:hover{border-color:rgba(255,255,255,.35);background:rgba(30,33,50,.9)}
+#menu .pill{padding:0 18px;font-size:14px;font-weight:700;letter-spacing:1px;text-transform:uppercase}
+.driver button{width:34px;height:34px;border:0;background:rgba(255,255,255,.08)}
+#menu .round svg,#menu .pill svg,.driver button svg{width:18px;height:18px}
+#menu .round.big{width:52px;height:52px;border-radius:26px}
+#menu .round.big svg{width:22px;height:22px;stroke-width:2.5}
+
+.mmain{flex:1 1 auto;display:grid;grid-template-columns:300px minmax(0,1fr) 300px;gap:20px;align-items:stretch}
+.mpanel{display:flex;flex-direction:column;gap:8px;padding:18px;border-radius:20px;background:var(--ink2);border:1px solid var(--edge);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);min-width:0}
+.mpanel h3{display:flex;justify-content:space-between;align-items:baseline;margin-top:8px;font-size:12px;font-weight:700;letter-spacing:3px;color:var(--dim);text-transform:uppercase}
+.mpanel h3:first-child{margin-top:0}
+.mpanel h3 small{font-size:13px;letter-spacing:0}
+#menu .maps{display:flex;flex-direction:column;gap:4px}
+#menu .map{display:flex;align-items:center;gap:10px;min-height:44px;padding:6px 12px;border-radius:10px;border:1px solid transparent;background:transparent;color:var(--cream);text-align:left;cursor:pointer;transition:background .15s}
+#menu .map:hover{background:rgba(255,255,255,.06);transform:none}
+#menu .map.sel{background:rgba(255,255,255,.1);border-color:rgba(255,255,255,.22);box-shadow:none}
+#menu .map .mn{font-family:var(--disp);font-size:13px;width:26px;flex:none;color:#7c7f99}
+#menu .map.sel .mn{color:var(--bolt)}
+#menu .map .nm{flex:1;min-width:0;font-size:15px;font-weight:600;text-shadow:none}
+#menu .map .tg{display:none;font-size:12px;color:var(--dim);margin-top:2px;font-weight:400}
+#menu .map.sel .tg{display:block}
+#menu .map .md{width:10px;height:10px;border-radius:5px;flex:none}
+
+.stage{display:flex;flex-direction:column;justify-content:space-between;align-items:center;gap:16px;text-align:center;min-width:0}
+.carhead{display:flex;flex-direction:column;align-items:center;gap:8px;text-shadow:0 2px 12px rgba(0,0,0,.6)}
+.ccls{display:inline-flex;align-items:center;gap:8px;padding:6px 12px;border-radius:999px;border:1px solid rgba(54,226,255,.55);background:rgba(7,8,15,.55);color:var(--neon);font-size:12px;font-weight:700;letter-spacing:2px;text-transform:uppercase;text-shadow:none}
+.ccls::before{content:"";width:8px;height:8px;border-radius:4px;background:var(--neon)}
+.carhead h1{font-family:var(--disp);font-weight:400;font-size:clamp(40px,5.4vw,76px);line-height:1;letter-spacing:1px;text-transform:uppercase}
+.carhead p{max-width:470px;font-size:16px;line-height:1.45;color:#d6d8e6}
+.carfoot{width:100%;display:flex;flex-direction:column;align-items:center;gap:14px}
+.carnav{display:flex;align-items:center;gap:12px}
+.cardots{display:flex}
+#menu .cardots .carcard{width:20px;height:44px;padding:0;border:0;background:none;cursor:pointer;display:flex;align-items:center;justify-content:center;transform:none;box-shadow:none}
+#menu .cardots .carcard::before{content:"";width:10px;height:10px;border-radius:5px;background:rgba(255,255,255,.3);transition:width .2s,background .2s}
+#menu .cardots .carcard:hover::before{background:rgba(255,255,255,.6)}
+#menu .cardots .carcard.sel{width:36px}
+#menu .cardots .carcard.sel::before{width:28px;background:var(--bolt)}
+#carinfo{width:100%;max-width:580px;display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:12px;padding:14px 16px;border-radius:16px;background:var(--ink2);border:1px solid var(--edge);text-align:left}
+#carinfo .spec{display:flex;flex-direction:column;align-items:stretch;gap:6px;margin:0;font-size:11px}
+#carinfo .spec .sk{width:auto;font-weight:700;letter-spacing:1.2px;color:var(--dim);text-transform:uppercase;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#carinfo .spec .sb{flex:none;height:6px;border-radius:3px;background:rgba(255,255,255,.1)}
+#carinfo .spec .sb i{background:var(--bolt);border-radius:3px}
+#carinfo .spec .sv{width:auto;text-align:left;font-family:var(--body);font-style:normal;font-weight:600;font-size:12px;color:var(--cream)}
+
+.modes{display:flex;flex-direction:column;gap:8px}
+#menu .modes .opt{display:flex;flex-direction:column;align-items:flex-start;gap:3px;padding:12px 14px;border-radius:12px;text-align:left;font-size:16px;font-weight:700;color:var(--cream);background:rgba(255,255,255,.04);border:1px solid var(--edge);box-shadow:none}
+#menu .modes .opt small{font-size:13px;line-height:1.35;font-weight:400;color:var(--dim);opacity:1}
+#menu .modes .opt.sel{background:var(--bolt);border-color:var(--bolt);color:var(--ink)}
+#menu .modes .opt.sel small{color:#3a2e00}
+.seg{display:flex;gap:4px;padding:4px;border-radius:12px;background:rgba(255,255,255,.05)}
+#menu .seg .opt,#settings .seg .opt{flex:1;min-width:0;min-height:44px;padding:0 6px;display:flex;align-items:center;justify-content:center;border:0;border-radius:9px;background:transparent;color:#c9cbdb;font-size:14px;font-weight:700;box-shadow:none;white-space:nowrap}
+#menu .seg .opt:hover,#settings .seg .opt:hover{background:rgba(255,255,255,.08)}
+#menu .seg .opt.sel,#settings .seg .opt.sel{background:var(--bolt);color:var(--ink)}
+#menu .opt{font-family:var(--body);cursor:pointer}
+
+.menubtns{display:flex;flex-wrap:wrap;align-items:center;justify-content:center;gap:14px}
+#menu .menubtns .go{margin:0;display:flex;align-items:center;justify-content:center;gap:10px;height:64px;padding:0 26px;border-radius:16px;border:2px solid var(--c);background:var(--ink2);color:var(--cream);font-size:17px;font-weight:700;letter-spacing:2px;text-transform:uppercase;box-shadow:0 5px 0 var(--d)}
+#menu .menubtns .go svg{width:20px;height:20px;color:var(--c)}
+#menu .menubtns .go:active{transform:translateY(3px);box-shadow:0 2px 0 var(--d)}
+#menu .menubtns .go.cup{--c:#b48cff;--d:#4b1fa0}
+#menu .menubtns .go.f1{--c:#ff5a5a;--d:#8a1c1c}
+#menu .menubtns .go.online{--c:var(--neon);--d:#0b6a80}
+#menu .menubtns #start{--d:#a67c00;height:72px;padding:0 52px;border:0;border-radius:18px;background:var(--bolt);color:var(--ink);font-family:var(--disp);font-weight:400;font-size:28px;box-shadow:0 6px 0 var(--d),0 0 40px rgba(255,210,58,.35)}
+#menu .menubtns #start svg{width:26px;height:26px;color:var(--ink);fill:currentColor;stroke:none}
+.foot{display:flex;flex-wrap:wrap;justify-content:space-between;gap:6px 16px;font-size:12px;color:#8a8da6}
+.foot b{color:#c9cbdb}
+body.touch .khint{display:none}
+
+/* settings: a modal over the lobby or the pause menu */
+#settings{z-index:25;justify-content:safe center;background:rgba(4,5,10,.72);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);font-family:"Chakra Petch",var(--ui);color:#f4f1e8}
+.setbox{width:min(460px,100%);display:flex;flex-direction:column;gap:14px;padding:24px;border-radius:22px;background:#11131f;border:1px solid rgba(255,255,255,.14);box-shadow:0 24px 80px rgba(0,0,0,.6)}
+.sethead{display:flex;align-items:center;justify-content:space-between}
+.sethead h2{font-family:"Bungee",var(--num);font-weight:400;font-size:26px;letter-spacing:1px;text-transform:uppercase}
+#settings .round{width:44px;height:44px;border-radius:22px;border:1px solid rgba(255,255,255,.14);background:transparent;color:#f4f1e8;display:flex;align-items:center;justify-content:center;cursor:pointer}
+#settings .round svg{width:18px;height:18px;stroke-width:2.5}
+.setbox h3{margin-top:8px;font-size:12px;font-weight:700;letter-spacing:3px;color:#a3a6bf;text-transform:uppercase}
+.srange{display:flex;flex-direction:column;gap:6px;transition:opacity .15s}
+.srange.off{opacity:.4}
+.srow{display:flex;align-items:center;justify-content:space-between;gap:12px;font-size:15px;font-weight:600}
+.srow small{display:block;font-size:13px;font-weight:400;color:#8a8da6}
+.srow b{color:#ffd23a;font-weight:700}
+.sends{display:flex;justify-content:space-between;font-size:12px;color:#8a8da6}
+#settings input[type=range]{width:100%;height:28px;accent-color:#ffd23a;cursor:pointer;touch-action:manipulation}
+#settings .seg{margin-top:6px}
+#settings .note{line-height:1.5}
+.switch{flex:none;position:relative;width:60px;height:34px;border-radius:17px;padding:0;cursor:pointer;border:1px solid rgba(255,255,255,.2);background:rgba(255,255,255,.08);transition:background .15s}
+.switch i{position:absolute;top:3px;left:3px;width:26px;height:26px;border-radius:13px;background:#f4f1e8;transition:left .15s,background .15s}
+.switch[aria-checked=true]{background:#ffd23a;border-color:#ffd23a}
+.switch[aria-checked=true] i{left:29px;background:#07080f}
+#settings #setDone{margin-top:8px;padding:0;height:56px;border-radius:14px;background:#ffd23a;color:#07080f;font-family:"Bungee",var(--num);font-weight:400;font-size:18px;letter-spacing:2px;box-shadow:0 5px 0 #a67c00}
+
+/* tablets and phones: car on top, tracks scroll sideways, race buttons pinned to the bottom */
+@media (max-width:1000px){
+  .mmain{display:flex;flex-direction:column;gap:14px}
+  .stage{order:-1;min-height:min(52vh,420px)}
+  .ptrack .maps{flex-direction:row!important;overflow-x:auto;margin:0 -18px;padding:0 18px 4px;touch-action:pan-x}
+  #menu .map{flex:none;border-radius:22px;border-color:var(--edge);background:rgba(255,255,255,.04)}
+  #menu .map.sel{background:var(--bolt);border-color:var(--bolt);color:var(--ink)}
+  #menu .map.sel .mn{color:var(--ink)}
+  #menu .map .nm{white-space:nowrap}
+  #menu .map.sel .tg{display:none}
+  .pset{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:8px 16px}
+  .pset h3{margin:0}
+  .pset .modes{flex-direction:row}
+  #menu .pset .modes .opt{flex:1}
+  .menubtns{position:sticky;bottom:calc(-1 * max(18px,env(safe-area-inset-bottom)));z-index:3;margin:0 -16px;padding:12px 16px max(12px,env(safe-area-inset-bottom));
+    background:linear-gradient(180deg,rgba(7,8,15,0),rgba(7,8,15,.94) 30%)}
+}
+@media (max-width:600px){
+  .logo{font-size:22px}
+  .sub{display:none}
+  .brand .mark{width:16px;height:28px}
+  .driver label,#menu .pill span{display:none}
+  .driver{padding-left:14px}
+  .driver input{width:110px}
+  #menu .pill{width:44px;padding:0}
+  .carhead p{display:none}
+  .carhead h1{font-size:34px}
+  .stage{min-height:300px}
+  #carinfo{grid-template-columns:repeat(5,minmax(0,1fr));gap:8px;padding:10px 12px}
+  #carinfo .spec .sk{font-size:9px;letter-spacing:.5px;text-overflow:clip}
+  #carinfo .spec .sv{display:none}
+  .pset{display:flex}
+  #menu .pset .modes .opt small{display:none}
+  .menubtns{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  #menu .menubtns .go{height:52px;padding:0 8px;font-size:14px;letter-spacing:1px;box-shadow:0 4px 0 var(--d)}
+  #menu .menubtns #start{grid-column:1/-1;height:64px;font-size:24px}
+  #menu .menubtns #onlinebtn{grid-column:1/-1}
+  .foot{font-size:11px}
+}
+/* short landscape phones: keep the car visible, trim the copy */
+@media (max-height:500px){
+  .carhead p,.sub{display:none}
+  .stage{min-height:0}
+  .carhead h1{font-size:34px}
+}
 #toast{position:fixed;left:50%;bottom:max(16px,env(safe-area-inset-bottom));transform:translateX(-50%);z-index:60;display:flex;gap:12px;align-items:center;padding:10px 14px;font-size:13px;pointer-events:auto}
 #toast.hidden{display:none}
 #toast button{cursor:pointer;font:800 13px var(--ui);color:#fff;background:linear-gradient(180deg,#ffb13b,#ff7a00);border:none;border-radius:12px;padding:6px 12px}
-.logo{font-family:var(--num);font-style:italic;font-size:64px;line-height:1;letter-spacing:4px;
-  background:linear-gradient(180deg,#fff 10%,#ffe36b 45%,#ff8a00 80%);-webkit-background-clip:text;background-clip:text;color:transparent;
-  filter:drop-shadow(0 4px 0 #0b3fb0) drop-shadow(0 0 18px rgba(39,199,255,.6));transform:skewX(-8deg)}
-.logo .mark{height:1.1em;width:auto;vertical-align:-.2em;margin-right:.06em}
-.sub{margin:4px 0 12px;font-size:14px;color:#cfe3ff;letter-spacing:3px}
-.menu-grid{width:min(1100px,100%);display:grid;grid-template-columns:1.35fr 1fr;gap:16px}
 .card{padding:12px 16px}
 .card h3{font-size:14px;color:var(--cyan);letter-spacing:2px;margin-bottom:10px;font-weight:800}
 .opts{display:flex;flex-wrap:wrap;gap:8px}
@@ -291,14 +437,6 @@ body.touch .touchcard{display:block}
 .keylist{font-size:13px;line-height:1.9;color:#dce8ff}
 .keylist b{display:inline-block;min-width:26px;padding:0 6px;margin-right:6px;border-radius:5px;background:rgba(255,255,255,.14);border:1px solid rgba(255,255,255,.3);text-align:center;color:#fff}
 .tip{font-size:12px;color:var(--muted);line-height:1.6;margin-top:6px}
-.foot{margin-top:14px;font-size:11px;color:rgba(200,220,255,.6)}
-.driver{display:flex;align-items:center;gap:8px;padding:6px 8px 6px 14px;margin-bottom:12px;border-radius:24px}
-.driver label{font-size:12px;letter-spacing:2px;color:var(--cyan);font-weight:800;text-transform:uppercase}
-.driver input{pointer-events:auto;user-select:text;-webkit-user-select:text;width:170px;padding:6px 10px;border-radius:14px;border:1px solid rgba(255,255,255,.25);background:rgba(255,255,255,.08);color:#fff;font:700 15px var(--ui);outline:none}
-.driver input:focus{border-color:#ffd23a;box-shadow:0 0 10px rgba(255,210,58,.4)}
-.driver button{cursor:pointer;width:32px;height:32px;border-radius:50%;border:1px solid rgba(255,255,255,.25);background:rgba(255,255,255,.08);font-size:16px}
-.menubtns{display:flex;gap:14px;justify-content:center;flex-wrap:wrap}
-.menubtns .go{padding:12px 34px;font-size:20px;letter-spacing:3px}
 .go.cup{background:linear-gradient(180deg,#b06bff,#7b3df0);box-shadow:0 6px 0 #4b1fa0,0 0 30px rgba(160,90,255,.45)}
 .go.f1{background:linear-gradient(180deg,#ff4b3a,#c40d00);box-shadow:0 6px 0 #7a0800,0 0 30px rgba(225,6,0,.45)}
 .f1box{width:min(980px,100%);text-align:left}
@@ -450,20 +588,9 @@ body.online table.race th:nth-child(5),body.online table.race td:nth-child(5){di
   .roomacts .btns{flex-wrap:nowrap}
   .roomacts .btns .go{flex:1 1 0;min-width:0;padding:10px 6px;font-size:14px;letter-spacing:1px;white-space:nowrap}
 }
-/* small screens: tighter lobby, pinned start buttons, and tables that fit */
-@media (max-width:900px),(max-height:700px){
-  .menubtns{position:sticky;bottom:calc(-1 * max(18px,env(safe-area-inset-bottom)));z-index:3;width:calc(100% + 32px);margin:0 -16px;padding:12px 16px max(12px,env(safe-area-inset-bottom));
-    background:linear-gradient(180deg,rgba(8,20,55,0),rgba(8,20,55,.92) 40%)}
-  .menubtns .go{margin-top:0}
-}
+/* small screens: tables that fit */
 @media (max-width:600px),(max-height:500px){
-  .logo{font-size:40px;letter-spacing:2px}
-  .sub{font-size:11px;letter-spacing:1px;margin:4px 0 8px;text-align:center}
-  .driver input{width:140px}
-  .menubtns{gap:8px;flex-wrap:nowrap}
   .season{grid-template-columns:1fr}
-  .menubtns .go{flex:1 1 0;min-width:0;max-width:200px;white-space:nowrap;padding:10px 6px;font-size:14px;letter-spacing:0;box-shadow:0 4px 0 #b34a00}
-  .menubtns .go.cup{box-shadow:0 4px 0 #4b1fa0}.menubtns .go.sec{box-shadow:0 4px 0 #0b3a9a}.menubtns .go.online{box-shadow:0 4px 0 #075c40}
   .card{padding:10px 12px}
   .box{padding:14px 12px}
   .box h2{font-size:22px;margin-bottom:8px;letter-spacing:1px}
@@ -480,16 +607,6 @@ body.online table.race th:nth-child(5),body.online table.race td:nth-child(5){di
   .cupcard{padding:10px}
   .cupcard .ci{font-size:30px}
   .cupcard .cd{min-height:0}
-}
-/* lobby buttons: a two-column block on narrow phones; with Online showing, the leaderboard spans the bottom row */
-@media (max-width:520px){
-  .menubtns{display:grid;grid-template-columns:1fr 1fr}
-  .menubtns .go{max-width:none}
-  #onlinebtn:not(.hidden) ~ #boardbtn{grid-column:1/-1}
-}
-@media (max-height:500px){
-  .logo{font-size:32px}
-  .sub{display:none}
 }
 #loading{background:rgba(6,14,36,.85);z-index:20}
 #loading .bar{width:260px;height:6px;border-radius:3px;background:rgba(255,255,255,.15);overflow:hidden;margin-top:14px}
@@ -510,8 +627,6 @@ table.res td.pos{font-family:var(--num);font-style:italic;color:var(--yellow);fo
 .stat{padding:6px 12px;border-radius:8px;background:rgba(255,255,255,.08);font-size:12px;color:var(--muted)}
 .stat b{display:block;font-size:18px;color:#fff;font-family:var(--num);font-style:italic}
 @media (max-width:860px){
-  .menu-grid{grid-template-columns:1fr}
-  .logo{font-size:52px}
   #rank{width:150px;font-size:12px}
   #minimap{width:130px;height:130px}
   #gauge{width:200px}
@@ -584,51 +699,106 @@ table.res td.pos{font-family:var(--num);font-style:italic;color:var(--yellow);fo
 </div>
 
 <div id="menu" class="screen">
-  <div class="logo"><svg class="mark" viewBox="140 50 236 420" aria-hidden="true"><defs><linearGradient id="logoBolt" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff6b0"/><stop offset=".35" stop-color="#ffd23a"/><stop offset="1" stop-color="#ff7a00"/></linearGradient></defs><path d="M318 64 156 290h94l-50 162 162-240h-94z" fill="url(#logoBolt)" stroke="#fff" stroke-width="12" stroke-linejoin="round"/></svg>DRIFTBOLT</div>
-  <div class="sub">3D Arcade Racing · Drift · Charge · Mini Boost · Double Boost · Nitro</div>
-  <div class="driver glass"><label for="pname">Driver</label><input id="pname" maxlength="16" autocomplete="off" spellcheck="false"><button id="pdice" title="Random name" aria-label="Random name">🎲</button></div>
-  <div class="menu-grid">
-    <div class="glass card">
-      <h3>Select Track</h3>
+  <div class="mwrap">
+  <header class="mtop">
+    <div class="brand">
+      <svg class="mark" viewBox="140 50 236 420" aria-hidden="true"><path d="M318 64 156 290h94l-50 162 162-240h-94z" fill="#ffd23a" stroke="#f4f1e8" stroke-width="14" stroke-linejoin="round"/></svg>
+      <div><div class="logo">DRIFTBOLT</div><div class="sub">3D ARCADE RACING</div></div>
+    </div>
+    <div class="mtools">
+      <div class="driver"><label for="pname">Driver</label><input id="pname" maxlength="16" autocomplete="off" spellcheck="false"><button id="pdice" type="button" title="Random name" aria-label="Random name"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="4"/><circle cx="8.5" cy="8.5" r="1.2" class="f"/><circle cx="12" cy="12" r="1.2" class="f"/><circle cx="15.5" cy="15.5" r="1.2" class="f"/></svg></button></div>
+      <button class="pill" id="boardbtn" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 21h8M12 17v4M7 4h10v5a5 5 0 0 1-10 0z"/><path d="M17 5h3v2a3 3 0 0 1-3 3M7 5H4v2a3 3 0 0 0 3 3"/></svg><span>Leaderboard</span></button>
+      <button class="pill hidden" id="installbtn" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12M7 10l5 5 5-5M5 21h14"/></svg><span>Install</span></button>
+      <button class="round" id="setbtn" type="button" title="Settings" aria-label="Settings"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg></button>
+      <a class="round" href="https://x.com/agbama_achu" target="_blank" rel="noopener noreferrer" title="Follow the author on X" aria-label="Follow the author on X"><svg viewBox="0 0 24 24" aria-hidden="true" class="fill"><path d="M18.901 1.153h3.68l-8.04 9.19L24 22.846h-7.406l-5.8-7.584-6.638 7.584H.474l8.6-9.83L0 1.154h7.594l5.243 6.932ZM17.61 20.644h2.039L6.486 3.24H4.298Z"/></svg></a>
+    </div>
+  </header>
+
+  <div class="mmain">
+    <section class="mpanel ptrack" aria-label="Track">
+      <h3>Track <small id="trackPos"></small></h3>
       <div class="maps" id="maps"></div>
-      <h3 style="margin-top:14px">Race Mode</h3>
-      <div class="opts" id="modes"></div>
-      <div class="optrow">
-        <div><h3>Laps</h3><div class="opts" id="laps"></div></div>
-        <div><h3>Opponents</h3><div class="opts" id="diff"></div></div>
-        <div><h3>Graphics</h3><div class="opts" id="quality"></div></div>
-        <div id="steerGroup" class="hidden"><h3>Steering</h3><div class="opts" id="steer"></div><div class="note" id="steerNote"></div></div>
+    </section>
+
+    <section class="stage" aria-label="Car">
+      <div class="carhead">
+        <div class="ccls" id="carCls"></div>
+        <h1 id="carName"></h1>
+        <p id="carDesc"></p>
       </div>
-    </div>
-    <div class="glass card">
-      <h3>Select Car</h3>
-      <div class="cars" id="skins"></div>
-      <div id="carinfo"></div>
-    </div>
-    <div class="glass card touchcard" style="grid-column:1/-1">
-      <h3>Touch Controls</h3>
-      <div class="tip">Steer with <b>Tilt</b> (lean the device), <b>Swipe</b> (drag on the left half of the screen) or on-screen <b>Buttons</b>. The car accelerates by itself.
-        Hold <b>Drift</b> while steering to slide and fill the charge bar, tap <b>Nitro</b> to spend it, and tap <b>Boost</b> the moment the car straightens after a drift.
-        Tap the <b>pause</b> button at the top to pause or reset your car.</div>
-    </div>
-    <div class="glass card keycard" style="grid-column:1/-1">
-      <h3>Controls (PC client defaults)</h3>
-      <div class="keylist">
-        <b>↑</b>Accelerate&emsp;<b>↓</b>Brake/Reverse&emsp;<b>←</b><b>→</b>Steer&emsp;<b>Shift</b>+Direction Drift&emsp;<b>Ctrl</b> Nitro/Item&emsp;<b>Alt</b> Swap items&emsp;<b>W</b> Mini Boost&emsp;<b>R</b> Reset&emsp;<b>C</b> Camera&emsp;<b>M</b> Music&emsp;<b>PgUp/PgDn</b> Song&emsp;<b>Esc</b> Pause
+      <div class="carfoot">
+        <div class="carnav">
+          <button class="round big" id="carPrev" type="button" aria-label="Previous car"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg></button>
+          <div class="cardots" id="skins"></div>
+          <button class="round big" id="carNext" type="button" aria-label="Next car"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg></button>
+        </div>
+        <div id="carinfo"></div>
       </div>
-      <div class="tip">Tips: drifting fills the charge bar, and a full bar gives you 1 nitro (up to 2). After releasing Shift, tap ↑ the moment the car straightens to trigger a Mini Boost (the sooner the better; nail it for a “Perfect”).
-        Stack a Mini Boost with Nitro for a “Double Boost”. Press ↑ the instant “GO” appears for a rocket start, and tap ↑ as you land from a jump for a Landing Boost. Blue arrows are boost pads.</div>
-    </div>
+    </section>
+
+    <section class="mpanel pset" aria-label="Race settings">
+      <h3>Race Mode</h3>
+      <div class="modes" id="modes"></div>
+      <h3>Laps</h3>
+      <div class="seg" id="laps"></div>
+      <h3>Opponents</h3>
+      <div class="seg" id="diff"></div>
+      <h3>Graphics</h3>
+      <div class="seg" id="quality"></div>
+    </section>
   </div>
+
   <div class="menubtns">
-    <button class="go" id="start">Quick Race</button>
-    <button class="go online" id="onlinebtn">🌐 Online</button>
-    <button class="go cup" id="cupbtn">🏆 Tournament</button>
-    <button class="go f1" id="f1btn">🏁 Formula 1</button>
-    <button class="go sec" id="boardbtn">Leaderboard</button>
+    <button class="go" id="start" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 4l13 8-13 8z"/></svg>Quick Race</button>
+    <button class="go cup" id="cupbtn" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 21h8M12 17v4M7 4h10v5a5 5 0 0 1-10 0z"/></svg>Tournament</button>
+    <button class="go f1" id="f1btn" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 21V4M5 4h13l-3 4 3 4H5"/></svg>Formula 1</button>
+    <button class="go online" id="onlinebtn" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c3 3 3 15 0 18M12 3c-3 3-3 15 0 18"/></svg>Online</button>
   </div>
-  <div class="mlinks"><button id="installbtn" class="hidden" type="button">📲 Install app</button><span id="iosinstall" class="hidden">📲 Install: tap Share, then “Add to Home Screen”</span><a href="https://x.com/agbama_achu" target="_blank" rel="noopener noreferrer"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18.901 1.153h3.68l-8.04 9.19L24 22.846h-7.406l-5.8-7.584-6.638 7.584H.474l8.6-9.83L0 1.154h7.594l5.243 6.932ZM17.61 20.644h2.039L6.486 3.24H4.298Z"/></svg>Follow the author on X</a></div>
-  <div class="foot">Unofficial fan project and a tribute to QQ Speed. All models, textures and music are generated procedurally in real time.</div>
+
+  <footer class="foot">
+    <span>Unofficial fan project and a tribute to QQ Speed. Models, textures and music are generated in real time.</span>
+    <span id="iosinstall" class="hidden">Install: tap Share, then “Add to Home Screen”</span>
+    <span class="khint"><b>Enter</b> race · <b>← →</b> car · <b>Shift</b> drift · <b>Ctrl</b> nitro · <b>W</b> mini boost · <b>M</b> music · <b>Esc</b> pause</span>
+  </footer>
+  </div>
+</div>
+
+<div id="settings" class="screen hidden">
+  <div class="setbox" role="dialog" aria-modal="true" aria-labelledby="setTitle">
+    <div class="sethead">
+      <h2 id="setTitle">Settings</h2>
+      <button class="round" id="setClose" type="button" aria-label="Close settings"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+    </div>
+
+    <h3>Controls</h3>
+    <div class="srange">
+      <div class="srow"><label for="sens">Steering sensitivity</label><b id="sensv"></b></div>
+      <input id="sens" type="range" min="10" max="100" step="5">
+      <div class="sends"><span>Smooth</span><span>Twitchy</span></div>
+    </div>
+    <div id="steerGroup" class="hidden">
+      <div class="srow"><span>Steering</span></div>
+      <div class="seg" id="steer"></div>
+      <div class="note" id="steerNote"></div>
+      <div class="note">The car accelerates by itself. Hold <b>Drift</b> while steering to fill the charge bar, tap <b>Nitro</b> to spend it, and tap <b>Boost</b> the moment the car straightens after a drift.</div>
+    </div>
+
+    <h3>Sound</h3>
+    <div class="srow">
+      <div><span>Mute all sound</span><small>Music and effects</small></div>
+      <button class="switch" id="mute" type="button" role="switch" aria-checked="false" aria-label="Mute all sound"><i></i></button>
+    </div>
+    <div class="srange" id="sfxRow">
+      <div class="srow"><label for="sfxVol">Sound effects</label><b id="sfxVolv"></b></div>
+      <input id="sfxVol" type="range" min="0" max="100" step="5">
+    </div>
+    <div class="srange" id="musicRow">
+      <div class="srow"><label for="musicVol">Music</label><b id="musicVolv"></b></div>
+      <input id="musicVol" type="range" min="0" max="100" step="5">
+    </div>
+
+    <button class="go" id="setDone" type="button">Done</button>
+  </div>
 </div>
 
 <div id="podiumUi" class="glass hidden">
@@ -654,6 +824,7 @@ table.res td.pos{font-family:var(--num);font-style:italic;color:var(--yellow);fo
       <button class="go" id="resume">Resume</button>
       <button class="go sec" id="resetcar">Reset Car</button>
       <button class="go sec" id="restart">Restart</button>
+      <button class="go sec" id="pauseSet">Settings</button>
       <button class="go sec" id="quit">Back to Lobby</button>
     </div>
   </div>

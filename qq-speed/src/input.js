@@ -9,6 +9,7 @@ const TILT_FULL = 20; // degrees of lean for full steering lock: tilt all the wa
 export class Input {
   constructor() {
     this.steerMode = 'buttons'; // 'buttons' | 'tilt' | 'swipe'
+    this.sens = 1; // steering sensitivity from the settings, 0.6 (smooth) .. 1.5 (twitchy)
     this.tiltRaw = null;
     this.tiltZero = 0;
     this.swipeAxis = 0;
@@ -43,7 +44,8 @@ export class Input {
     const left = this.has('ArrowLeft') || t.left, right = this.has('ArrowRight') || t.right;
     // analog steering: + = left, like the digital (left - right); keys and buttons override motion steering
     const digital = (left ? 1 : 0) - (right ? 1 : 0);
-    const motion = digital !== 0 ? 0 : this.motionAxis();
+    // sensitivity scales tilt/swipe travel: less lean or drag reaches full lock when it is high
+    const motion = digital !== 0 ? 0 : Math.max(-1, Math.min(1, this.motionAxis() * this.sens));
     const steer = digital !== 0 ? digital : -motion;
     const inp = {
       up: this.has('ArrowUp') || t.up,
@@ -52,6 +54,7 @@ export class Input {
       right: steer < -0.3,
       steer,
       analog: digital === 0 && this.steerMode !== 'buttons',
+      sens: this.sens,
       shift: this.has('ShiftLeft', 'ShiftRight') || t.shift,
       upPressed: this.was('ArrowUp', 'TouchBoost'),
       wPressed: this.was('KeyW'),

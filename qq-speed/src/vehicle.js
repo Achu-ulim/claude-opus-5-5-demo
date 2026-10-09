@@ -148,7 +148,8 @@ export class PlayerCar {
     // analog from tilt/swipe (+ = left), or -1/0/1 from keys and buttons
     const steerT = inp.steer ?? (inp.left ? 1 : 0) - (inp.right ? 1 : 0);
     // tilt/swipe are already smooth and proportional, so the car follows them faster than keys
-    this.steer = damp(this.steer, steerT, inp.analog ? 20 : 12, dt);
+    // keys and buttons: the player's sensitivity setting sets how fast the wheel winds on
+    this.steer = damp(this.steer, steerT, inp.analog ? 20 : 12 * (inp.sens ?? 1), dt);
 
     // Boost states
     let vmax = T.vmax, acc = T.accel, kick = false;
