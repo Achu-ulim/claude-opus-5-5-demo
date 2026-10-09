@@ -1,4 +1,6 @@
 // All sound effects and background music are synthesized live with WebAudio; no external assets
+import { SONGS, Music } from './music.js';
+
 const NOTE = (n) => 440 * Math.pow(2, (n - 69) / 12);
 
 // Simulated gear shifts: RPM cycles between 0.35 and 1 in each of six gears (speedRatio = speed / nitro top speed)
@@ -10,13 +12,6 @@ function engineRpm(speedRatio) {
 }
 
 const TRAFFIC_VOICES = 4; // rivals heard at once (the nearest ones)
-
-const SONGS = [
-  { name: 'Speed City', bpm: 128, root: 57, prog: [[0, 3, 7], [-4, 0, 3], [3, 7, 10], [-2, 2, 5]], lead: [0, 7, 12, 7, 10, 7, 3, 7], bassPat: [1, 0, 1, 1, 0, 1, 1, 0], style: 0 },
-  { name: 'Aegean Breeze', bpm: 118, root: 62, prog: [[0, 4, 7], [-3, 0, 4], [5, 9, 12], [7, 11, 14]], lead: [12, 11, 7, 4, 7, 11, 12, 14], bassPat: [1, 0, 0, 1, 1, 0, 1, 0], style: 1 },
-  { name: "Pharaoh's Trial", bpm: 132, root: 55, prog: [[0, 3, 7], [1, 5, 8], [0, 3, 7], [-2, 1, 5]], lead: [0, 1, 4, 5, 7, 8, 7, 4], bassPat: [1, 1, 0, 1, 1, 0, 1, 1], style: 2 },
-  { name: 'Blizzard Rush', bpm: 140, root: 60, prog: [[0, 4, 7], [7, 11, 14], [9, 12, 16], [5, 9, 12]], lead: [7, 12, 16, 12, 14, 12, 11, 7], bassPat: [1, 0, 1, 0, 1, 1, 1, 0], style: 3 },
-];
 
 export class GameAudio {
   constructor() {
@@ -55,6 +50,8 @@ export class GameAudio {
     this.noise = ctx.createBuffer(1, len, ctx.sampleRate);
     const d = this.noise.getChannelData(0);
     for (let i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
+    this.musicEngine = new Music(ctx, this.music, this.noise);
+    this.musicEngine.setSong(SONGS[this.song]);
 
     // Engine: sawtooth + square, low-passed
     this.engGain = ctx.createGain();
@@ -429,7 +426,10 @@ export class GameAudio {
   setSong(i) {
     this.song = ((i % SONGS.length) + SONGS.length) % SONGS.length;
     this.step = 0;
-    if (this.ctx) this.nextNoteTime = this.ctx.currentTime + 0.1;
+    if (this.ctx) {
+      this.nextNoteTime = this.ctx.currentTime + 0.1;
+      this.musicEngine.setSong(SONGS[this.song]);
+    }
     return SONGS[this.song].name;
   }
 
@@ -455,72 +455,7 @@ export class GameAudio {
   }
 
   playStep(song, step, t, spb) {
-    const ctx = this.ctx;
-    const bar = Math.floor(step / 16) % 4;
-    const s16 = step % 16;
-    const chord = song.prog[bar];
-    const root = song.root;
-    // Kick
-    if (s16 % 4 === 0) {
-      const o = ctx.createOscillator();
-      const g = ctx.createGain();
-      o.frequency.setValueAtTime(150, t);
-      o.frequency.exponentialRampToValueAtTime(40, t + 0.12);
-      g.gain.setValueAtTime(0.9, t);
-      g.gain.exponentialRampToValueAtTime(0.001, t + 0.18);
-      o.connect(g).connect(this.music);
-      o.start(t);
-      o.stop(t + 0.2);
-    }
-    // Snare / clap
-    if (s16 === 4 || s16 === 12) this.musicNoise(t, 0.12, 1800, 0.35, 'bandpass');
-    // Hi-hat
-    if (s16 % 2 === 1 || song.style === 3) this.musicNoise(t, 0.03, 8000, s16 % 4 === 2 ? 0.18 : 0.1, 'highpass');
-    // Bass
-    const bi = Math.floor(s16 / 2);
-    if (s16 % 2 === 0 && song.bassPat[bi % 8]) {
-      const n = root - 24 + chord[0] + (bi % 4 === 3 ? 12 : 0);
-      this.musicTone(t, NOTE(n), spb * 1.8, 'sawtooth', 0.22, 600);
-    }
-    // Chord pad (every bar)
-    if (s16 === 0)
-      for (const c of chord) this.musicTone(t, NOTE(root + c), spb * 15, song.style === 1 ? 'triangle' : 'sawtooth', 0.045, 1400, true);
-    // Arpeggiated lead
-    if (s16 % 2 === 0) {
-      const li = (s16 / 2 + bar * 2) % song.lead.length;
-      const n = root + 12 + chord[0] + song.lead[li];
-      this.musicTone(t, NOTE(n), spb * 1.6, song.style === 2 ? 'triangle' : 'square', 0.06, 3000);
-    }
-  }
-
-  musicTone(t, f, dur, type, vol, cutoff, pad = false) {
-    const o = this.ctx.createOscillator();
-    o.type = type;
-    o.frequency.value = f;
-    const fl = this.ctx.createBiquadFilter();
-    fl.type = 'lowpass';
-    fl.frequency.value = cutoff;
-    const g = this.ctx.createGain();
-    g.gain.setValueAtTime(0.0001, t);
-    g.gain.exponentialRampToValueAtTime(vol, t + (pad ? 0.2 : 0.01));
-    g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
-    o.connect(fl).connect(g).connect(this.music);
-    o.start(t);
-    o.stop(t + dur + 0.05);
-  }
-
-  musicNoise(t, dur, f, vol, type) {
-    const s = this.ctx.createBufferSource();
-    s.buffer = this.noise;
-    const fl = this.ctx.createBiquadFilter();
-    fl.type = type;
-    fl.frequency.value = f;
-    const g = this.ctx.createGain();
-    g.gain.setValueAtTime(vol, t);
-    g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
-    s.connect(fl).connect(g).connect(this.music);
-    s.start(t, Math.random() * 1.5);
-    s.stop(t + dur + 0.02);
+    this.musicEngine.playStep(song, step, t, spb);
   }
 
   setVolumes(sfx, music) {
