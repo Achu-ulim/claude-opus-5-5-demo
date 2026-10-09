@@ -632,7 +632,10 @@ export function buildCar(car, { name = null, isPlayer = false } = {}) {
   shield.visible = false;
   group.add(shield);
 
-  group.userData = { root, wheels, flames, exhausts, flameMatOuter, under, glowMat, tag, shield, skin: car, isPlayer, tailM, rotorM, track: S.track, rearZ: -S.axles[0], size: { front: S.len[1], rear: -S.len[0], halfW: S.width / 2 } };
+  // driver's eye for the cockpit camera: left-hand seat, just under the roof, behind the top of the windshield
+  const [, wsTop] = S.cabin.pts;
+  const cockpit = { eye: new THREE.Vector3(0.3, wsTop[1] - 0.22, wsTop[0] - 0.45) };
+  group.userData = { root, wheels, flames, exhausts, flameMatOuter, under, glowMat, tag, shield, skin: car, isPlayer, tailM, rotorM, track: S.track, rearZ: -S.axles[0], size: { front: S.len[1], rear: -S.len[0], halfW: S.width / 2 }, cockpit };
   return group;
 }
 

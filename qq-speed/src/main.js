@@ -10,6 +10,7 @@ import { Track } from './track.js';
 import { buildSky, buildClouds, buildGround, buildWater, buildMountains, Batch, makeNoise } from './world.js';
 import { buildProps, isFree } from './props.js';
 import { buildCar, buildF1Car, CARS, carSpecs, renderCarThumbs, renderTeamThumbs } from './carModel.js';
+import { Cockpit } from './cockpit.js';
 import { F1_MAPS, GPS, TEAMS, teamTune } from './f1.js';
 import { PlayerCar, NO_INPUT } from './vehicle.js';
 import { AICar } from './ai.js';
@@ -190,7 +191,11 @@ class Game {
     this.scene.add(this.fx.smoke.points, this.fx.glow.points, this.fx.skids.mesh);
     this.state = 'menu';
     this.time = 0;
-    this.camMode = 0;
+    // 0 chase, 1 far, 2 low, 3 cockpit (F1 cars use their own onboard view). C cycles chase -> cockpit -> far -> low.
+    this.camMode = [0, 1, 2, 3].includes(this.settings.cam) ? this.settings.cam : 0;
+    this.scene.add(this.camera); // the cockpit rides on the camera
+    this.cockpit = new Cockpit(this.camera);
+    this.ck = { prevS: 0, acc: 0, slip: 0, steer: 0, vib: 0 };
     this.shake = 0;
     this.camPos = new THREE.Vector3(0, 50, 0);
     this.camLook = new THREE.Vector3();
@@ -209,6 +214,7 @@ class Game {
     this.confetti = new Confetti($('confetti'));
     this.setupQuality();
     this.buildMenu();
+    this.showCamMode(false);
     this.online = new Online(this);
     window.addEventListener('resize', () => this.resize());
     this.resize();
@@ -365,7 +371,8 @@ class Game {
     $('nextRace').addEventListener('click', () => (this.race?.season ? this.startF1Race() : this.startCupRace()));
     $('celebs').addEventListener('click', (e) => { const b = e.target.closest('.celeb'); if (b) this.celebrate(b.dataset.id); });
     $('celebSkip').addEventListener('click', () => this.celebrate(null));
-    $('cambtn').addEventListener('click', () => this.cycleCamera());
+    // blur after a click so Space (nitro) can't re-press the button
+    $('cambtn').addEventListener('click', (e) => { e.currentTarget.blur(); this.cycleCamera(); });
     $('pausebtn').addEventListener('click', () => { if (['race', 'countdown', 'paused'].includes(this.state)) this.togglePause(); });
     $('resetcar').addEventListener('click', () => {
       this.togglePause();
@@ -821,7 +828,7 @@ class Game {
     this.celeb = null;
     clearTimeout(this.celebT);
     $('celebrate').classList.add('hidden');
-    if (this.camMode === 3 && !race.f1) this.camMode = 0;
+    this.ck.prevS = 0;
     if (this.items) this.items.dispose();
     this.items = this.itemMode ? new ItemSystem(this.scene, this.track, this, mulberry32(Date.now() & 0xffff)) : null;
     this.hud.setItemMode(this.itemMode);
@@ -1297,6 +1304,8 @@ class Game {
     this.audio.silence();
     this.ejects = this.ejects.filter((e) => !top.includes(e.r));
     const title = this.map.f1.name.replace(/ GP$/, '').toUpperCase() + ' GRAND PRIX';
+    // hand the player's car back from the cockpit view before the ceremony decides who is on the steps
+    if (this.ckHidden) { this.ckHidden.visible = true; this.ckHidden = null; }
     this.podium = new Podium(this, top, title, onDone);
   }
 
@@ -2124,11 +2133,23 @@ class Game {
   }
 
   // ---------- Camera ----------
-  // Grands Prix add an onboard camera from the driver's eyes
+  // C and the HUD button cycle chase -> cockpit -> far -> low; the choice is saved with the other settings
   cycleCamera() {
-    this.camMode = (this.camMode + 1) % (this.race?.f1 ? 4 : 3);
-    const d = this.player?.model.userData.driver;
-    if (d) d.helmet.visible = d.visor.visible = this.camMode !== 3;
+    const order = [0, 3, 1, 2];
+    this.camMode = order[(order.indexOf(this.camMode) + 1) % order.length];
+    this.settings.cam = this.camMode;
+    this.save();
+    this.ck.prevS = this.player?.s ?? 0;
+    this.showCamMode(true);
+  }
+
+  // the HUD button names the active view; a short flash confirms a switch
+  showCamMode(flash) {
+    const name = ['Chase', 'Far', 'Low', 'Cockpit'][this.camMode];
+    $('camlbl').textContent = name;
+    $('cambtn').setAttribute('aria-label', `Camera: ${name}. Press C to switch`);
+    $('cambtn').title = `Camera: ${name} (C)`;
+    if (flash && ['race', 'countdown', 'finish'].includes(this.state)) this.hud.message(`${name.toUpperCase()} VIEW`, '#ffd23a', true);
   }
 
   snapCamera() {
@@ -2138,8 +2159,88 @@ class Game {
     this.camLook.set(P.x, P.y + 1, P.z);
   }
 
+  // First-person views. Returns 'f1' (onboard from the F1 driver's eyes), 'car' (cockpit of an arcade car) or
+  // null when a chase or orbit camera should run instead. Visual only: the car's physics never read any of this.
+  applyCockpit(dt) {
+    const cam = this.camera, P = this.player;
+    const d = P?.model.userData.driver;
+    const on = this.camMode === 3 && P && !cam.userData.fixed && ['race', 'countdown', 'finish'].includes(this.state)
+      && !this.resultShown && !P.retired && !(this.celeb && this.celeb.phase !== 'ask');
+    if (d) d.helmet.visible = d.visor.visible = !on;
+    // the arcade cockpit draws its own hood and hides the player's model; give it back whenever the view changes
+    const hide = on && !d ? P.model : null;
+    if (this.ckHidden && this.ckHidden !== hide) this.ckHidden.visible = true;
+    if (hide && this.ckHidden !== hide) { hide.visible = false; this.cockpit.setCar(hide); }
+    this.ckHidden = hide;
+    if (!on) return null;
+    const fovT = 72 + Math.abs(P.s) * 0.09 + (P.nitroTime > 0 ? 6 : 0);
+    if (cam.near !== 0.05) cam.near = 0.05;
+    if (d) {
+      // eye level in the F1 cockpit: halo, wheel and hands in view
+      const root = P.model.userData.root;
+      P.model.updateMatrixWorld();
+      cam.position.set(0, 1.13, 0.22).applyMatrix4(root.matrixWorld);
+      this.camLook.set(0, 0.0, 10).applyMatrix4(root.matrixWorld);
+      cam.lookAt(this.camLook);
+      this.camPos.copy(cam.position);
+      this.shake = Math.max(0, this.shake - dt * 1.8);
+      cam.fov = damp(cam.fov, fovT, 4, dt);
+      cam.updateProjectionMatrix();
+      return 'f1';
+    }
+    const C = this.ck;
+    // smoothed, capped inputs for head motion: longitudinal acceleration, slide angle and steering
+    let dv = (P.s - C.prevS) / Math.max(dt, 1e-3);
+    if (Math.abs(dv) > 80) dv = 0; // respawn or teleport: no lurch
+    C.prevS = P.s;
+    C.acc = damp(C.acc, clamp(dv, -35, 35), 4, dt);
+    const moving = clamp(Math.abs(P.s) / 8, 0, 1);
+    C.slip = damp(C.slip, P.s > 3 ? clamp(wrapAngle(P.m - P.h), -0.5, 0.5) : 0, 5, dt);
+    C.steer = damp(C.steer, P.steer || 0, 10, dt);
+    const ck = P.model.userData.cockpit;
+    P.model.updateMatrixWorld();
+    const M = P.model.matrixWorld;
+    // head is pushed back under acceleration, forward under braking, and leans a little into a slide
+    const e = this._ckEye || (this._ckEye = new THREE.Vector3());
+    e.copy(ck.eye);
+    e.z -= clamp(C.acc * 0.0025, -0.07, 0.07);
+    e.x -= C.slip * 0.1;
+    e.y += clamp(-C.acc * 0.0008, -0.02, 0.02);
+    // a faint road buzz that grows with speed, plus a short knock on impacts
+    C.vib += dt * (18 + Math.abs(P.s) * 0.4);
+    const buzz = 0.0025 * clamp(Math.abs(P.s) / 60, 0, 1);
+    e.y += Math.sin(C.vib * 2.3) * buzz;
+    e.x += Math.sin(C.vib * 1.7) * buzz * 0.6;
+    if (this.shake > 0) {
+      const k = this.shake * this.shake * 0.06;
+      e.x += (Math.random() - 0.5) * k;
+      e.y += (Math.random() - 0.5) * k;
+      this.shake = Math.max(0, this.shake - dt * 2.2);
+    }
+    cam.position.copy(e).applyMatrix4(M);
+    // look along the direction of travel when sliding, and dip the view a touch under braking
+    const yaw = C.slip * 0.55 * moving;
+    const L = this.camLook;
+    L.set(e.x + Math.sin(yaw) * 20, e.y - 1.15 + clamp(C.acc * 0.012, -0.35, 0.35), e.z + Math.cos(yaw) * 20).applyMatrix4(M);
+    cam.up.set(0, 1, 0);
+    cam.lookAt(L);
+    // gentle roll into the turn, capped so it never feels like the horizon is swinging
+    cam.rotateZ(clamp(-C.steer * 0.025 * moving - C.slip * 0.05, -0.05, 0.05));
+    this.camPos.copy(cam.position);
+    this.camYaw = P.h;
+    cam.fov = damp(cam.fov, fovT, 4, dt);
+    cam.updateProjectionMatrix();
+    this.cockpit.fit(cam.aspect);
+    this.cockpit.update(P, C.steer);
+    return 'car';
+  }
+
   updateCamera(dt) {
     const cam = this.camera;
+    const inCockpit = this.applyCockpit(dt);
+    this.cockpit.group.visible = inCockpit === 'car';
+    document.body.classList.toggle('cam-cockpit', inCockpit === 'car');
+    if (inCockpit) return;
     if (cam.userData.fixed) return;
     const st = this.state;
     let target = this.player;
@@ -2167,28 +2268,13 @@ class Game {
       return;
     }
     const P = target;
-    if (this.camMode === 3 && P.model.userData.driver) {
-      // eye level in the cockpit: halo, wheel and hands in view
-      const root = P.model.userData.root;
-      P.model.updateMatrixWorld();
-      // just above the halo, pitched down so the wheel and hands sit at the bottom of the frame
-      cam.position.set(0, 1.13, 0.22).applyMatrix4(root.matrixWorld); // just ahead of the airbox
-      this.camLook.set(0, 0.0, 10).applyMatrix4(root.matrixWorld);
-      cam.lookAt(this.camLook);
-      this.camPos.copy(cam.position);
-      cam.near = 0.05;
-      cam.fov = damp(cam.fov, 74 + Math.abs(P.s) * 0.08, 4, dt);
-      cam.updateProjectionMatrix();
-      return;
-    }
     if (cam.near !== 0.3) { cam.near = 0.3; cam.updateProjectionMatrix(); }
-    if (this.camMode === 3) this.camMode = 0;
     const modes = [
       { dist: 8.2, h: 3.0, look: 5, lookH: 1.3 },
       { dist: 12.5, h: 4.6, look: 6, lookH: 1.5 },
       { dist: 5.2, h: 1.9, look: 8, lookH: 1.1 },
     ];
-    const m = modes[this.camMode];
+    const m = modes[this.camMode === 3 ? 0 : this.camMode];
     // While drifting the camera follows the velocity direction so you can see the car slide
     const yawT = P.s >= 0 ? P.m + wrapAngle(P.h - P.m) * 0.35 : P.h;
     this.camYaw = dampAngle(this.camYaw, yawT, P.drifting ? 4.5 : 7, dt);
