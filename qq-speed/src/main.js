@@ -3162,27 +3162,37 @@ function setupPWA() {
   if (/iphone|ipad|ipod/i.test(navigator.userAgent) && !standalone) $('iosinstall').classList.remove('hidden');
 
   if (!('serviceWorker' in navigator) || !window.isSecureContext) return;
-  let accepted = false;
   const hook = (reg) => {
     if (!reg) return;
-    // a newer version finished downloading in the background: let the player pick the moment to switch
-    const offer = (w) => toast('A new version is ready.', 'Reload', () => { accepted = true; w.postMessage('skipWaiting'); });
-    if (reg.waiting && navigator.serviceWorker.controller) offer(reg.waiting);
-    reg.addEventListener('updatefound', () => {
-      const w = reg.installing;
-      w?.addEventListener('statechange', () => {
-        if (w.state === 'installed' && navigator.serviceWorker.controller) offer(w);
-      });
-    });
-    // opened offline: look for a new version as soon as the connection is back
-    window.addEventListener('online', () => reg.update().catch(() => {}));
+    // look for a new version whenever the game comes back on screen and every half hour while it stays open; opened
+    // offline, as soon as the connection is back
+    const check = () => reg.update().catch(() => {});
+    document.addEventListener('visibilitychange', () => { if (!document.hidden) check(); });
+    window.addEventListener('online', check);
+    setInterval(check, 30 * 60e3);
   };
   // registering needs the network; offline, fall back to the registration we already have
   navigator.serviceWorker.register('sw.js').then(hook)
     .catch(() => navigator.serviceWorker.getRegistration().then(hook))
     .catch(() => { /* offline support is optional */ });
-  // only reload for an update the player accepted (the first install also changes controller)
-  navigator.serviceWorker.addEventListener('controllerchange', () => { if (accepted) location.reload(); });
+  // A new version installs itself and says 'updated' (sw.js). Answering stops it reloading the page on the spot: the
+  // game reloads itself at the first quiet moment instead, in the lobby with nothing open and nothing being typed, so
+  // an update never cuts into a race, a room or a payment.
+  const quiet = () => {
+    const g = window.game;
+    if (!g) return true;
+    return g.state === 'menu' && !$('menu').classList.contains('hidden') && !g.online.inRoom && !card.isOpen()
+      && !/^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement?.tagName);
+  };
+  let updated = false;
+  navigator.serviceWorker.addEventListener('message', (e) => {
+    if (e.data !== 'updated') return;
+    e.ports[0]?.postMessage('ok');
+    if (updated) return;
+    updated = true;
+    const t = setInterval(() => { if (quiet()) { clearInterval(t); location.reload(); } }, 1000);
+  });
+  navigator.serviceWorker.startMessages();
 }
 
 window.addEventListener('DOMContentLoaded', () => {

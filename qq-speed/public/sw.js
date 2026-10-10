@@ -4,22 +4,40 @@ const CACHE = 'speed3d-__VERSION__';
 // "./" rather than "./index.html": the host redirects /index.html to /, and navigations can't be answered with a redirect
 const CORE = ['./', './manifest.webmanifest', './icons/icon-192.png', './icons/icon-512.png', './icons/maskable-512.png', './icons/apple-touch-icon.png', './icons/favicon-64.png'];
 
+// Every device switches to a new version by itself: it takes over as soon as it has downloaded, without waiting for
+// the old version's pages to close
 self.addEventListener('install', (e) => {
-  e.waitUntil(caches.open(CACHE).then((c) => c.addAll(CORE.map((u) => new Request(u, { cache: 'reload' })))));
-});
-
-// a new version waits until the page says it's a good moment (the player tapped "Reload")
-self.addEventListener('message', (e) => {
-  if (e.data === 'skipWaiting') self.skipWaiting();
+  e.waitUntil(caches.open(CACHE).then((c) => c.addAll(CORE.map((u) => new Request(u, { cache: 'reload' })))).then(() => self.skipWaiting()));
 });
 
 self.addEventListener('activate', (e) => {
   e.waitUntil(
     caches.keys()
-      .then((keys) => Promise.all(keys.filter((k) => k.startsWith('speed3d-') && k !== CACHE).map((k) => caches.delete(k))))
-      .then(() => self.clients.claim()),
+      .then((keys) => {
+        const old = keys.filter((k) => k.startsWith('speed3d-') && k !== CACHE);
+        return Promise.all(old.map((k) => caches.delete(k))).then(() => self.clients.claim()).then(() => old.length > 0);
+      })
+      // not waited for: fetches wait until activation ends
+      .then((replaced) => { if (replaced) reloadPages(); }),
   );
 });
+
+// Game pages still running the version this one replaced. A page that answers 'updated' reloads itself at a quiet
+// moment (in the menu, not in a race, a room or a payment: setupPWA in main.js); pages from before that existed don't
+// answer and are reloaded now.
+const ANSWER_WITHIN = 4000;
+async function reloadPages() {
+  const pages = (await self.clients.matchAll({ type: 'window' })).filter((p) => /^\/(index\.html)?$/.test(new URL(p.url).pathname));
+  await Promise.all(pages.map(async (page) => {
+    const answered = await new Promise((resolve) => {
+      const ch = new MessageChannel();
+      ch.port1.onmessage = () => resolve(true);
+      setTimeout(() => resolve(false), ANSWER_WITHIN);
+      page.postMessage('updated', [ch.port2]);
+    });
+    if (!answered && page.navigate) await page.navigate(page.url).catch(() => {});
+  }));
+}
 
 self.addEventListener('fetch', (e) => {
   const req = e.request;
