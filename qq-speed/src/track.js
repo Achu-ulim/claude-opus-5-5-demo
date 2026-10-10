@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { clamp, wrapAngle } from './util.js';
-import { roadTexture, wallTexture, curbTexture, checkerTexture, boostPadTexture, tunnelTexture, groundTexture } from './textures.js';
+import { roadTexture, wallTexture, curbTexture, checkerTexture, boostPadTexture, tunnelTexture, groundTexture, shareTexture } from './textures.js';
 
 const TEX_LEN = 24; // Road texture length along the track (meters)
 const WALL_TEX_LEN = 16;
@@ -408,7 +408,7 @@ export class Track {
 
     // Start/finish line
     group.add(this.roadDecal(0, 0, hw * 2 - 0.6, 3.2, new THREE.MeshStandardMaterial({
-      map: (() => { const t = checkerTexture(theme.checkerA || '#111', theme.checkerB || '#fff', 16, 2).clone(); t.needsUpdate = true; return t; })(),
+      map: shareTexture(checkerTexture(theme.checkerA || '#111', theme.checkerB || '#fff', 16, 2)),
       roughness: 0.6,
       polygonOffset: true, polygonOffsetFactor: -3, polygonOffsetUnits: -3,
     })));

@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { softDotTexture, textTexture } from './textures.js';
 import { engineAccel, gearCut } from './vehicle.js';
 import { cleanLook } from './netproto.js';
@@ -310,6 +311,71 @@ function geos(car) {
   return G;
 }
 
+// ---------- Draw calls: one per material for the rigid parts ----------
+// A car is ~90 meshes and every mesh is a draw call (two with its shadow), which on a full grid is most of the frame's
+// CPU time. Meshes that never move against `parent` are baked into one mesh per material: the same triangles with the
+// same materials, so the car looks exactly as it did. Subtrees in `skip` stay as they are (the parts that move or come
+// and go: flames, the F1 driver, its wheel and arms). With `only`, just those meshes are merged, among themselves.
+// Returns the meshes that now stand for the parts considered.
+const _rel = new THREE.Matrix4();
+function mergeParts(parent, { skip = new Set(), only = null } = {}) {
+  const groups = new Map(), kept = [];
+  const visit = (node) => {
+    for (const o of node.children) {
+      if (skip.has(o) || !o.visible) continue;
+      visit(o);
+      if (!o.isMesh || (only && !only.has(o))) continue;
+      const g = o.geometry;
+      if (o.children.length || Array.isArray(o.material) || o.material.transparent || o.onBeforeRender !== THREE.Object3D.prototype.onBeforeRender
+        || g.morphAttributes.position || g.drawRange.start !== 0 || g.drawRange.count !== Infinity) { kept.push(o); continue; }
+      const attrs = Object.keys(g.attributes).sort().map((k) => `${k}:${g.attributes[k].itemSize}:${g.attributes[k].array.constructor.name}`).join();
+      const key = `${o.material.uuid}|${o.castShadow}|${o.receiveShadow}|${o.renderOrder}|${!!g.index}|${attrs}`;
+      let grp = groups.get(key);
+      if (!grp) groups.set(key, (grp = []));
+      grp.push(o);
+    }
+  };
+  visit(parent);
+  const out = [...kept], emptied = new Set();
+  for (const meshes of groups.values()) {
+    if (meshes.length < 2) { out.push(...meshes); continue; }
+    const geos = meshes.map((o) => {
+      _rel.identity();
+      for (let p = o; p !== parent; p = p.parent) { p.updateMatrix(); _rel.premultiply(p.matrix); }
+      const geo = o.geometry.clone().applyMatrix4(_rel);
+      // a mirrored part was drawn with its winding flipped; baked in, its triangles have to be turned back
+      if (_rel.determinant() < 0) flipWinding(geo);
+      return geo;
+    });
+    const merged = mergeGeometries(geos, false);
+    if (!merged) { out.push(...meshes); continue; }
+    const src = meshes[0];
+    const m = new THREE.Mesh(merged, src.material);
+    m.castShadow = src.castShadow;
+    m.receiveShadow = src.receiveShadow;
+    m.renderOrder = src.renderOrder;
+    parent.add(m);
+    out.push(m);
+    for (const o of meshes) { emptied.add(o.parent); o.removeFromParent(); }
+  }
+  // lamp housings and the like that held only merged parts
+  for (const g of emptied) if (g !== parent && !g.children.length && !g.isMesh && !skip.has(g)) g.removeFromParent();
+  return out;
+}
+
+function flipWinding(geo) {
+  if (geo.index) {
+    const a = geo.index.array;
+    for (let i = 0; i + 2 < a.length; i += 3) { const t = a[i + 1]; a[i + 1] = a[i + 2]; a[i + 2] = t; }
+    return;
+  }
+  for (const attr of Object.values(geo.attributes)) {
+    const a = attr.array, n = attr.itemSize;
+    for (let v = 0; v + 2 < attr.count; v += 3)
+      for (let c = 0; c < n; c++) { const i = (v + 1) * n + c, j = (v + 2) * n + c, t = a[i]; a[i] = a[j]; a[j] = t; }
+  }
+}
+
 // ---------- Build ----------
 export function buildCar(car, { name = null, isPlayer = false, look = null } = {}) {
   const G = geos(car);
@@ -421,7 +487,8 @@ export function buildCar(car, { name = null, isPlayer = false, look = null } = {
     return g;
   };
 
-  add(G.body, S.front ? [paint, paint2] : paint).castShadow = true;
+  const bodyMesh = add(G.body, S.front ? [paint, paint2] : paint);
+  bodyMesh.castShadow = true;
   add(G.cabin, glass).castShadow = true;
   add(G.roof, paint2).castShadow = true;
   // pillars framing the glass (the left ones mirrored)
@@ -788,6 +855,10 @@ export function buildCar(car, { name = null, isPlayer = false, look = null } = {
   shield.visible = false;
   group.add(shield);
 
+  // the body's geometry is shared by every car of this model: left alone rather than copied into each car's merge
+  mergeParts(root, { skip: new Set([bodyMesh, ...flames]) });
+  for (const w of wheels) mergeParts(w.spin);
+
   // driver's eye for the cockpit camera: left-hand seat, just under the roof, behind the top of the windshield
   // (the cabin outline is in catalog heights; the body sits DROP lower in the car)
   const [, wsTop] = S.cabin.pts;
@@ -1046,7 +1117,15 @@ export function buildF1Car(team, { name = null, isPlayer = false } = {}) {
   shield.visible = false;
   group.add(shield);
 
-  group.userData = { root, wheels, flames: [fg], exhausts, flameMatOuter, under, glowMat, tag, shield, skin: team, isPlayer, tailM, track: 0.82, rearZ: 1.55, size: { front: 3.2, rear: 2.6, halfW: 1.0 }, wing, drive, driver: { drv, freeArms, helmet, visor: visorM, setSeated } };
+  // the front wing comes off in one piece, so its parts merge among themselves; the driver's body moves as one, as
+  // does the steering wheel (less the hands, which come and go)
+  const wingParts = mergeParts(root, { only: new Set(wing) });
+  mergeParts(root, { skip: new Set([drv, sw, fg, ...arms, ...wingParts]) });
+  mergeParts(drv, { skip: new Set([helmet, ...freeArms]) });
+  mergeParts(sw, { skip: new Set(hands) });
+  for (const w of wheels) mergeParts(w.spin);
+
+  group.userData = { root, wheels, flames: [fg], exhausts, flameMatOuter, under, glowMat, tag, shield, skin: team, isPlayer, tailM, track: 0.82, rearZ: 1.55, size: { front: 3.2, rear: 2.6, halfW: 1.0 }, wing: wingParts, drive, driver: { drv, freeArms, helmet, visor: visorM, setSeated } };
   drive(0);
   return group;
 }

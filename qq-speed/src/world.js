@@ -1,21 +1,58 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { clamp, lerp, smoothstep, makeNoise2D } from './util.js';
-import { groundTexture, cloudTexture } from './textures.js';
+import { groundTexture, cloudTexture, shareTexture } from './textures.js';
 
 // ---------- Batching: merge static props with the same material + tile into one mesh ----------
+// Everything is merged indexed: a sphere keeps its shared vertices rather than three per triangle (a quarter of the
+// memory and vertex work, the same triangles). A geometry without normals still gets them per face, as before.
 const prepCache = new WeakMap();
 function prep(geo) {
   let g = prepCache.get(geo);
   if (g) return g;
-  g = geo.index ? geo.toNonIndexed() : geo.clone();
+  g = geo.index && geo.attributes.normal ? geo.clone() : geo.index ? geo.toNonIndexed() : geo.clone();
   for (const k of Object.keys(g.attributes)) if (!['position', 'normal', 'uv'].includes(k)) g.deleteAttribute(k);
   if (!g.attributes.normal) g.computeVertexNormals();
   if (!g.attributes.uv) g.setAttribute('uv', new THREE.BufferAttribute(new Float32Array(g.attributes.position.count * 2), 2));
+  if (!g.index) g.setIndex([...Array(g.attributes.position.count).keys()]);
   g.morphAttributes = {};
   g.clearGroups();
   prepCache.set(geo, g);
   return g;
+}
+
+const MAP_SLOTS = ['map', 'lightMap', 'aoMap', 'emissiveMap', 'bumpMap', 'normalMap', 'displacementMap', 'roughnessMap', 'metalnessMap', 'alphaMap', 'envMap'];
+const textured = (mat) => MAP_SLOTS.some((k) => mat[k]);
+
+// Plain opaque materials that differ only in colour share one draw: the colour moves into the vertices (16-bit, far
+// finer than the screen shows) over a white copy of the material, which shades exactly as the coloured one did.
+// Glowing materials stay out (the neon pulses by changing its material), and so does anything else with a texture.
+// Once batched, a material's colour is baked: change it later and the batched props won't follow.
+const paletteSig = new WeakMap(), PALETTE = new Map();
+function palette(mat) {
+  if (paletteSig.has(mat)) return paletteSig.get(mat);
+  let sig = null;
+  if (mat.type === 'MeshStandardMaterial' && !mat.transparent && !mat.vertexColors && !textured(mat) && mat.emissive.getHex() === 0
+    && mat.color.r <= 1 && mat.color.g <= 1 && mat.color.b <= 1
+    && mat.onBeforeCompile === THREE.Material.prototype.onBeforeCompile && mat.customProgramCacheKey === THREE.Material.prototype.customProgramCacheKey) {
+    const j = mat.toJSON();
+    delete j.uuid;
+    delete j.color;
+    delete j.name;
+    sig = JSON.stringify(j);
+  }
+  paletteSig.set(mat, sig);
+  return sig;
+}
+function paletteMaterial(sig, like) {
+  let m = PALETTE.get(sig);
+  if (!m) {
+    m = like.clone();
+    m.color.set(0xffffff);
+    m.vertexColors = true;
+    PALETTE.set(sig, m);
+  }
+  return m;
 }
 
 export class Batch {
@@ -27,18 +64,31 @@ export class Batch {
     const g = prep(geo).clone();
     g.applyMatrix4(matrix);
     const e = matrix.elements;
-    const key = `${mat.uuid}|${Math.floor(e[12] / this.tile)}|${Math.floor(e[14] / this.tile)}|${shadow ? 1 : 0}`;
+    const sig = palette(mat);
+    const key = `${sig ?? mat.uuid}|${Math.floor(e[12] / this.tile)}|${Math.floor(e[14] / this.tile)}|${shadow ? 1 : 0}`;
     let grp = this.groups.get(key);
-    if (!grp) this.groups.set(key, (grp = { mat, geos: [], shadow }));
+    if (!grp) this.groups.set(key, (grp = { mat, sig, geos: [], mats: [], shadow }));
     grp.geos.push(g);
+    grp.mats.push(mat);
   }
   build(parent) {
     for (const grp of this.groups.values()) {
+      const mixed = grp.sig && grp.mats.some((m) => m !== grp.mat);
+      const uv = textured(grp.mat); // without a texture the shader never reads them
+      grp.geos.forEach((g, i) => {
+        if (!uv) g.deleteAttribute('uv');
+        if (mixed) {
+          const c = grp.mats[i].color, n = g.attributes.position.count, a = new Uint16Array(n * 3);
+          const r = Math.round(c.r * 65535), gg = Math.round(c.g * 65535), b = Math.round(c.b * 65535);
+          for (let v = 0; v < n * 3; v += 3) { a[v] = r; a[v + 1] = gg; a[v + 2] = b; }
+          g.setAttribute('color', new THREE.BufferAttribute(a, 3, true));
+        }
+      });
       const merged = mergeGeometries(grp.geos, false);
       grp.geos.forEach((g) => g.dispose());
       if (!merged) continue;
       merged.computeBoundingSphere();
-      const mesh = new THREE.Mesh(merged, grp.mat);
+      const mesh = new THREE.Mesh(merged, mixed ? paletteMaterial(grp.sig, grp.mat) : grp.mat);
       mesh.castShadow = grp.shadow;
       mesh.receiveShadow = true;
       mesh.matrixAutoUpdate = false;
@@ -166,8 +216,7 @@ export function buildGround(track, cfg) {
   }
   geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
   geo.computeVertexNormals();
-  const tex = groundTexture(texture).clone();
-  tex.needsUpdate = true;
+  const tex = shareTexture(groundTexture(texture));
   tex.repeat.set(size / repeat, size / repeat);
   const mat = new THREE.MeshStandardMaterial({ map: tex, vertexColors: true, roughness: 0.95 });
   const mesh = new THREE.Mesh(geo, mat);

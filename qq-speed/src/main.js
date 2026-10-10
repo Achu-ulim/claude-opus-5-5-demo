@@ -75,6 +75,19 @@ function disposeModel(model) {
     if (o.material && !o.isSprite) for (const m of [].concat(o.material)) m.dispose(); // a two-tone body has two
     if (o.geometry) o.geometry.dispose();
   });
+  // the name tag's GPU copy (the cached texture repaints if that name races again): a new grid of rivals every
+  // race would otherwise pile them up
+  model.userData.tag?.material.map?.dispose();
+}
+// every texture the materials under `root` use
+function texturesIn(root, out = new Set()) {
+  root.traverse((o) => {
+    for (const m of [].concat(o.material || [])) {
+      for (const k in m) if (m[k]?.isTexture) out.add(m[k]);
+      if (m.uniforms) for (const u of Object.values(m.uniforms)) if (u.value?.isTexture) out.add(u.value);
+    }
+  });
+  return out;
 }
 const TAKEDOWN_SPEED = 11; // m/s closing speed (~40 km/h) that wrecks the car on the receiving end
 const FATAL_SPEED = 20; // Grand Prix: a car-to-car hit this hard (~72 km/h closing) retires the car
@@ -941,6 +954,12 @@ class Game {
     ctx.batch.build(root);
     this.updaters = ctx.updaters;
     this.scene.add(root);
+    // textures only the old level used leave the GPU; cached ones repaint if a later level needs them again
+    if (this.oldTex) {
+      const keep = texturesIn(this.scene);
+      for (const t of this.oldTex) if (!keep.has(t)) t.dispose();
+      this.oldTex = null;
+    }
     this.level = root;
     this.track = track;
     this.groundAt = ground.heightAt;
@@ -948,15 +967,43 @@ class Game {
     this.fx.skids.clear();
     this.audio.setSong(map.bgm);
     this.settings.song = map.bgm;
-    try { this.renderer.compile(this.scene, this.camera); } catch { /* ignore */ }
+    this.warmUp(root);
     $('loading').classList.add('hidden');
     this.loading = false;
+  }
+
+  // Shader programs are built the first time something is drawn, and on some GPUs (ANGLE on Metal: every Mac) so is
+  // the pipeline behind them, which stalls that frame by 50-900 ms: the first nitro flame of a race froze the game for
+  // a moment. Pay for it while loading instead. On Balanced and Ultra, `roots` are drawn once into the bloom composer's
+  // buffer (never shown), hidden and off-screen parts included, with the target, lights and shadows of a real frame.
+  // Smooth draws straight to the screen, where a warm-up frame could flash up: there the programs are only built.
+  warmUp(...roots) {
+    const R = this.renderer;
+    if (!this.composer) { try { R.compile(this.scene, this.camera); } catch { /* ignore */ } return; }
+    const changed = [];
+    for (const root of roots) root?.traverse((o) => {
+      if (o.visible && !o.frustumCulled) return;
+      changed.push([o, o.visible, o.frustumCulled]);
+      o.visible = true;
+      o.frustumCulled = false;
+    });
+    const prev = R.getRenderTarget();
+    R.setRenderTarget(this.composer.readBuffer);
+    try { R.render(this.scene, this.camera); } catch { /* ignore */ }
+    R.setRenderTarget(prev);
+    for (const [o, v, f] of changed) { o.visible = v; o.frustumCulled = f; }
   }
 
   disposeLevel() {
     this.clearRacers();
     if (this.items) { this.items.dispose(); this.items = null; }
-    this.level.traverse((o) => { if (o.geometry) o.geometry.dispose(); });
+    this.oldTex = texturesIn(this.level);
+    this.level.traverse((o) => {
+      if (o.geometry) o.geometry.dispose();
+      if (o.isInstancedMesh) o.dispose(); // its per-instance buffers
+    });
+    // each level has its own sun, and its shadow map (32 MB at Ultra) would otherwise wait for garbage collection
+    this.sun?.shadow.dispose();
     this.scene.remove(this.level);
     this.level = null;
   }
@@ -1092,6 +1139,7 @@ class Game {
     if (!this.track) return;
     this.state = 'menu';
     this.makeRacers(false);
+    this.warmUp(...this.racers.map((r) => r.model));
     this.raceTime = 0;
     this.demoTarget = 0;
     this.demoT = 0;
@@ -1141,6 +1189,7 @@ class Game {
     this.ck.prevS = 0;
     if (this.items) this.items.dispose();
     this.items = this.itemMode ? new ItemSystem(this.scene, this.track, this, mulberry32(Date.now() & 0xffff)) : null;
+    this.warmUp(...this.racers.map((r) => r.model), this.items?.group, this.ghosts.model, this.cockpit.group);
     this.hud.setItemMode(this.itemMode);
     this.hud.show(true);
     $('touch').classList.toggle('hidden', !IS_TOUCH);

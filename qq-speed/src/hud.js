@@ -51,9 +51,22 @@ export class HUD {
     const r = Math.min(window.devicePixelRatio || 1, 1.5);
     this.fx.width = Math.floor(window.innerWidth * r);
     this.fx.height = Math.floor(window.innerHeight * r);
+    this.fxDrawn = false; // resizing clears it
   }
 
-  setSim(on) { $('carstat').classList.toggle('hidden', !on); if (!on) this.pitGuide(null); }
+  setSim(on) { $('carstat').classList.toggle('hidden', !on); this.measures = null; if (!on) this.pitGuide(null); }
+
+  // Where the car status panel and the pit arrow sit depends on the panels around them, and reading the layout just
+  // after the HUD has written to the page makes the browser lay it all out again on the spot: over a millisecond a
+  // frame with a full grid. The answer only changes when one of `inputs` does, so it is measured then, and otherwise
+  // at most four times a second (in case something else moved them, a web font arriving, say).
+  measure(slot, inputs, fn) {
+    const m = (this.measures ||= {})[slot], now = performance.now();
+    if (m && now - m.at < 250 && m.inputs.every((v, i) => v === inputs[i])) return m.v;
+    const v = fn();
+    this.measures[slot] = { inputs, at: now, v };
+    return v;
+  }
 
   // screen arrow toward the pit entry: angle in radians (0 = straight ahead, + = to the left), distance in meters
   pitGuide(g) {
@@ -64,25 +77,32 @@ export class HUD {
     this.set('pgRot', $('pg-arrow').style, `rotate(${(-g.angle * 180 / Math.PI).toFixed(0)}deg)`, 'transform');
     this.set('pgDist', $('pg-dist'), g.dist < 1000 ? `${Math.round(g.dist / 10) * 10} m` : `${(g.dist / 1000).toFixed(1)} km`);
     this.set('pgTitle', $('pg-title'), g.level >= 1 ? 'PIT ENTRY' : 'PIT NEEDED');
-    // keep it just under the top bar / charge bar, whichever is lower
-    const topc = $('topc').getBoundingClientRect(), gauge = $('gaugebox').getBoundingClientRect();
-    const top = Math.max(topc.bottom, gauge.top < innerHeight / 2 ? gauge.bottom : 0) + 8;
+    const C = this.cache;
+    const [top, left] = this.measure('pg', [innerWidth, innerHeight, document.body.className, C.pgVis, C.pgDist, C.pgTitle, C.csTop, C.csBox, C.csBoxT, C.csPit, C.csPitMsg], () => {
+      // keep it just under the top bar / charge bar, whichever is lower
+      const topc = $('topc').getBoundingClientRect(), gauge = $('gaugebox').getBoundingClientRect();
+      const top = Math.max(topc.bottom, gauge.top < innerHeight / 2 ? gauge.bottom : 0) + 8;
+      // narrow screens: slide right of the car status panel rather than cover it
+      const cs = $('carstat').getBoundingClientRect(), w = el.offsetWidth, h = el.offsetHeight;
+      const cx = innerWidth / 2;
+      const hits = cs.width && cx - w / 2 < cs.right && cx + w / 2 > cs.left && top < cs.bottom && top + h > cs.top;
+      return [top, hits ? Math.round(cs.right + 8 + w / 2) + 'px' : '50%'];
+    });
     this.set('pgTop', el.style, Math.round(top) + 'px', 'top');
-    // narrow screens: slide right of the car status panel rather than cover it
-    const cs = $('carstat').getBoundingClientRect(), w = el.offsetWidth, h = el.offsetHeight;
-    const cx = innerWidth / 2;
-    const hits = cs.width && cx - w / 2 < cs.right && cx + w / 2 > cs.left && top < cs.bottom && top + h > cs.top;
-    this.set('pgLeft', el.style, hits ? Math.round(cs.right + 8 + w / 2) + 'px' : '50%', 'left');
+    this.set('pgLeft', el.style, left, 'left');
   }
 
   // fuel, tyres, part health, and what the team is doing in the pits
   carStatus(c, box, pit, toEntry = null) {
     // sit just below the standings (which grow with the grid), and below the charge bar if they would collide
-    const cs = $('carstat');
-    const rank = this.rank.getBoundingClientRect(), gauge = $('gaugebox').getBoundingClientRect();
-    let top = rank.bottom + 8;
-    const left = rank.left, right = left + cs.offsetWidth;
-    if (gauge.width && left < gauge.right && right > gauge.left && top < gauge.bottom && top + cs.offsetHeight > gauge.top) top = gauge.bottom + 8;
+    const cs = $('carstat'), C = this.cache;
+    const top = this.measure('cs', [innerWidth, innerHeight, document.body.className, C.rows, C.csBox, C.csBoxT, C.csPit, C.csPitMsg], () => {
+      const rank = this.rank.getBoundingClientRect(), gauge = $('gaugebox').getBoundingClientRect();
+      let top = rank.bottom + 8;
+      const left = rank.left, right = left + cs.offsetWidth;
+      if (gauge.width && left < gauge.right && right > gauge.left && top < gauge.bottom && top + cs.offsetHeight > gauge.top) top = gauge.bottom + 8;
+      return top;
+    });
     this.set('csTop', cs.style, Math.round(top) + 'px', 'top');
     const pct = (v) => Math.round(v * 100) + '%';
     const health = (v) => (v < 0.3 ? 'ok' : v < 0.65 ? 'warn' : 'bad');
@@ -111,7 +131,7 @@ export class HUD {
     this.set('csPitBar', $('cs-pitbar').style, pit?.phase === 'stop' ? pct(Math.min(1, pit.timer / pit.work.time)) : '0%', 'width');
   }
 
-  show(v) { this.el.classList.toggle('hidden', !v); if (!v) this.clearFx(); }
+  show(v) { this.el.classList.toggle('hidden', !v); this.measures = null; if (!v) this.clearFx(); }
 
   set(key, el, val, prop = 'textContent') {
     if (this.cache[key] === val) return;
@@ -123,6 +143,7 @@ export class HUD {
     this.items.classList.toggle('hidden', !on);
     $('gaugebox').classList.toggle('hidden', on);
     this.cache = {};
+    this.measures = null;
   }
 
   setupMinimap(track, pit = null) {
@@ -245,28 +266,21 @@ export class HUD {
     g.restore();
   }
 
-  drawSpeedo(kmh, boost) {
-    const g = this.spx, W = this.sp.width, c = W / 2, R = W * 0.4;
-    g.clearRect(0, 0, W, W);
-    const a0 = Math.PI * 0.75, sweep = Math.PI * 1.5, maxK = 300;
+  // the dial's track and scale never change: painted once into a layer under the live arc and one over it
+  speedoDial(W) {
+    if (this.dial?.W === W) return this.dial;
+    const layer = () => { const c = document.createElement('canvas'); c.width = c.height = W; return c; };
+    const under = layer(), over = layer(), c = W / 2, R = W * 0.4;
+    const a0 = Math.PI * 0.75, sweep = Math.PI * 1.5;
+    let g = under.getContext('2d');
     g.lineCap = 'round';
     g.lineWidth = 26;
     g.strokeStyle = 'rgba(8,20,50,.7)';
     g.beginPath();
     g.arc(c, c, R, a0, a0 + sweep);
     g.stroke();
-    const f = Math.min(1, kmh / maxK);
-    const grd = g.createLinearGradient(0, W, W, 0);
-    if (boost) { grd.addColorStop(0, '#27c7ff'); grd.addColorStop(1, '#ffffff'); }
-    else { grd.addColorStop(0, '#27c7ff'); grd.addColorStop(0.6, '#ffd23a'); grd.addColorStop(1, '#ff5a1f'); }
-    g.strokeStyle = grd;
-    g.lineWidth = 18;
-    g.shadowColor = boost ? '#27c7ff' : '#ff8a00';
-    g.shadowBlur = 18;
-    g.beginPath();
-    g.arc(c, c, R, a0, a0 + sweep * f);
-    g.stroke();
-    g.shadowBlur = 0;
+    g = over.getContext('2d');
+    g.lineCap = 'round';
     g.lineWidth = 3;
     g.strokeStyle = 'rgba(255,255,255,.7)';
     g.fillStyle = 'rgba(255,255,255,.75)';
@@ -282,6 +296,32 @@ export class HUD {
       g.stroke();
       if (k % 2 === 0) g.fillText(String(k * 30), c + Math.cos(a) * (R - 62), c + Math.sin(a) * (R - 62));
     }
+    return (this.dial = { W, under, over });
+  }
+
+  drawSpeedo(kmh, boost) {
+    if (kmh === this.spK && boost === this.spB) return; // same reading, same picture
+    this.spK = kmh;
+    this.spB = boost;
+    const g = this.spx, W = this.sp.width, c = W / 2, R = W * 0.4;
+    const dial = this.speedoDial(W);
+    g.clearRect(0, 0, W, W);
+    g.drawImage(dial.under, 0, 0);
+    const a0 = Math.PI * 0.75, sweep = Math.PI * 1.5, maxK = 300;
+    g.lineCap = 'round';
+    const f = Math.min(1, kmh / maxK);
+    const grd = g.createLinearGradient(0, W, W, 0);
+    if (boost) { grd.addColorStop(0, '#27c7ff'); grd.addColorStop(1, '#ffffff'); }
+    else { grd.addColorStop(0, '#27c7ff'); grd.addColorStop(0.6, '#ffd23a'); grd.addColorStop(1, '#ff5a1f'); }
+    g.strokeStyle = grd;
+    g.lineWidth = 18;
+    g.shadowColor = boost ? '#27c7ff' : '#ff8a00';
+    g.shadowBlur = 18;
+    g.beginPath();
+    g.arc(c, c, R, a0, a0 + sweep * f);
+    g.stroke();
+    g.shadowBlur = 0;
+    g.drawImage(dial.over, 0, 0);
   }
 
   update(st) {
@@ -368,13 +408,15 @@ export class HUD {
 
   toggleKeys() { this.keys.classList.toggle('hidden'); }
 
-  clearFx() { this.fxx.clearRect(0, 0, this.fx.width, this.fx.height); this.lines.length = 0; }
+  clearFx() { this.fxx.clearRect(0, 0, this.fx.width, this.fx.height); this.lines.length = 0; this.fxDrawn = false; }
 
   // Speed lines
   speedLines(dt, k, color) {
     const g = this.fxx, W = this.fx.width, H = this.fx.height;
+    // nothing to draw: clear once, then leave the canvas alone (clearing it every frame makes the browser recomposite it)
+    if (k <= 0.01 && !this.lines.length) { if (this.fxDrawn) this.clearFx(); return; }
     g.clearRect(0, 0, W, H);
-    if (k <= 0.01 && !this.lines.length) return;
+    this.fxDrawn = true;
     const cx = W / 2, cy = H * 0.45;
     const spawn = k * 90 * dt * 60 / 60;
     for (let i = 0; i < spawn * 1.2; i++)

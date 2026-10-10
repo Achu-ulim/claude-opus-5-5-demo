@@ -14,7 +14,9 @@ function mk(w, h) {
   return [c, c.getContext('2d')];
 }
 
+let repainting = false;
 function toTex(c, { repeat = true, srgb = true } = {}) {
+  if (repainting) return { image: c }; // a repaint for a texture that exists already: only the canvas is wanted
   const t = new THREE.CanvasTexture(c);
   if (repeat) t.wrapS = t.wrapT = THREE.RepeatWrapping;
   t.anisotropy = MAX_ANISO;
@@ -34,10 +36,49 @@ function noiseFill(g, w, h, base, amount, rnd, size = 2, count = 0) {
   }
 }
 
+// The cache keeps every texture for good, but not its pixels. Once three has copied a canvas to the GPU the canvas is
+// let go (2D canvases are big: a road texture is 2 MB, and they pile up map after map). If three needs the pixels
+// again (the texture was disposed with its level, or the WebGL context was lost) the same painter draws them afresh:
+// the painters are deterministic (seeded noise, system fonts), so the repaint is identical.
 const cache = new Map();
 function cached(key, fn) {
-  if (!cache.has(key)) cache.set(key, fn());
-  return cache.get(key);
+  let t = cache.get(key);
+  if (!t) {
+    t = fn();
+    repaintable(t, () => {
+      repainting = true;
+      try { return fn().image; } finally { repainting = false; }
+    });
+    cache.set(key, t);
+  }
+  return t;
+}
+
+// Lets a canvas texture drop its pixels once they are on the GPU. `paint` returns the canvas drawn afresh (a new one, or
+// the same element resized and redrawn); it runs only when three needs the pixels again. Takes over tex.onUpdate.
+export function repaintable(tex, paint) {
+  let canvas = tex.source.data;
+  Object.defineProperty(tex.source, 'data', {
+    get: () => canvas || (canvas = paint()),
+    set: (v) => { canvas = v; },
+    configurable: true,
+  });
+  // three calls this after each upload: zero-size frees the backing store now rather than at some later GC
+  tex.onUpdate = () => {
+    if (!canvas) return;
+    canvas.width = canvas.height = 0;
+    canvas = null;
+  };
+}
+
+// A second texture over the same canvas and GPU copy, with its own repeat and offset. three's clone() flags the shared
+// canvas for an upload it doesn't need, which would repaint a released canvas just to send the same pixels again.
+export function shareTexture(tex) {
+  const v = tex.source.version;
+  const t = tex.clone();
+  t.source.version = v;
+  t.onUpdate = tex.onUpdate;
+  return t;
 }
 
 // Road: u spans the full road width, v runs along the road (one tile = 24 m)

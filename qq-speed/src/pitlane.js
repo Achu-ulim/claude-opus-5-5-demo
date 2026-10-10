@@ -52,18 +52,40 @@ function ribbon(track, pit, u0, u1, latFn, width, y, mat) {
   return m;
 }
 
-function person(bodyColor, helmetColor) {
-  const g = new THREE.Group();
-  const suit = new THREE.MeshStandardMaterial({ color: bodyColor, roughness: 0.7 });
-  const legs = new THREE.Mesh(new THREE.BoxGeometry(0.36, 0.8, 0.24), new THREE.MeshStandardMaterial({ color: 0x1b1b1b, roughness: 0.8 }));
-  legs.position.y = 0.4;
-  const torso = new THREE.Mesh(new THREE.BoxGeometry(0.46, 0.62, 0.28), suit);
-  torso.position.y = 1.1;
-  const head = new THREE.Mesh(new THREE.SphereGeometry(0.16, 12, 10), new THREE.MeshStandardMaterial({ color: helmetColor, roughness: 0.35, metalness: 0.2 }));
-  head.position.y = 1.58;
-  g.add(legs, torso, head);
-  g.traverse((o) => { if (o.isMesh) o.castShadow = true; });
-  return g;
+// The crews: dark legs, a torso in the team colour and a helmet in its trim, eight people a team. Drawn as one
+// instanced mesh per body part (3 draw calls rather than 3 per person); each person is an Object3D the lane's update
+// moves, copied into the instances whenever someone has moved. Colours are per instance on a white material, which
+// shades exactly as the team colour set on the material would.
+const CREW_PARTS = [
+  { y: 0.4, geo: () => new THREE.BoxGeometry(0.36, 0.8, 0.24), mat: () => new THREE.MeshStandardMaterial({ color: 0x1b1b1b, roughness: 0.8 }) },
+  { y: 1.1, geo: () => new THREE.BoxGeometry(0.46, 0.62, 0.28), mat: () => new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.7 }), color: 'body' },
+  { y: 1.58, geo: () => new THREE.SphereGeometry(0.16, 12, 10), mat: () => new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.35, metalness: 0.2 }), color: 'helmet' },
+];
+const _cq = new THREE.Quaternion(), _cp = new THREE.Vector3(), _cm = new THREE.Matrix4(), _UP = new THREE.Vector3(0, 1, 0), _ONE = new THREE.Vector3(1, 1, 1);
+function crewMeshes(parent, people) {
+  const col = new THREE.Color();
+  const parts = CREW_PARTS.map((P) => {
+    const im = new THREE.InstancedMesh(P.geo(), P.mat(), people.length);
+    im.castShadow = true;
+    if (P.color) people.forEach((m, i) => im.setColorAt(i, col.set(m[P.color])));
+    parent.add(im);
+    return { im, y: P.y };
+  });
+  const place = () => {
+    people.forEach((m, i) => {
+      _cq.setFromAxisAngle(_UP, m.p.rotation.y);
+      for (const P of parts) {
+        _cp.copy(m.p.position);
+        _cp.y += P.y;
+        P.im.setMatrixAt(i, _cm.compose(_cp, _cq, _ONE));
+      }
+    });
+    for (const P of parts) P.im.instanceMatrix.needsUpdate = true;
+  };
+  place();
+  // the bounds from where they stand, grown to take in the walk out to the car
+  for (const P of parts) { P.im.computeBoundingSphere(); P.im.boundingSphere.radius += 15; }
+  return place;
 }
 
 // Builds the lane, pit wall, garage fronts and a crew per team. Returns an object the race sim drives.
@@ -232,16 +254,17 @@ export function buildPitLane(ctx, pit, teams) {
     // crew: wheel gunners, jacks, refueller and the lollipop, waiting in front of the garage
     const roles = [[-0.95, 1.75], [0.95, 1.75], [-0.95, -1.55], [0.95, -1.55], [0, 3.4], [0, -3.2], [1.4, 0.2], [-1.6, 3.8]];
     const people = roles.map(([lat, along], j) => {
-      const p = person(team.body, team.trim);
+      const p = new THREE.Object3D();
       const home = spot(track, pit, u + (j - 3.5) * 1.2, hw + 8.2);
       const work = spot(track, pit, u + along, pit.lat + lat);
       p.position.copy(home);
       p.rotation.y = s.hd + Math.PI / 2;
-      parent.add(p);
-      return { p, home, work, face: Math.atan2(work.x - home.x, work.z - home.z) };
+      return { p, home, work, face: Math.atan2(work.x - home.x, work.z - home.z), body: team.body, helmet: team.trim };
     });
     crews.push({ people, working: false, t: 0 });
   });
+  const placeCrew = crewMeshes(parent, crews.flatMap((c) => c.people));
+  let crewMoved = true; // the first update turns everyone to face their spot
 
   let guideLevel = 0, guideTeam = -1;
   return {
@@ -265,7 +288,9 @@ export function buildPitLane(ctx, pit, teams) {
       arrowM.opacity = L > 0 ? 0.55 + pulse * 0.45 : 0.18;
       boxMats.forEach((m, k) => { m.emissive.setScalar(k === guideTeam && L > 0 ? 0.35 + pulse * 0.65 : 0); });
       for (const c of crews) {
+        const t0 = c.t;
         c.t = Math.max(0, Math.min(1, c.t + (c.working ? dt * 3 : -dt * 2)));
+        if (c.t !== t0 || c.t > 0) crewMoved = true; // walking, or at work (bouncing)
         const e = c.t * c.t * (3 - 2 * c.t);
         c.people.forEach((m, j) => {
           m.p.position.lerpVectors(m.home, m.work, e);
@@ -273,6 +298,8 @@ export function buildPitLane(ctx, pit, teams) {
           m.p.rotation.y = m.face + (c.t > 0.5 ? Math.PI : 0) * 0; // walk toward the car, keep facing it
         });
       }
+      if (crewMoved) placeCrew();
+      crewMoved = false;
     },
   };
 }
