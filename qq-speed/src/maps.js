@@ -110,7 +110,7 @@ export const MAPS = [
       tunnelOuter: 0x2a2d3c,
       shoulder: { width: 6, tex: 'plaza' },
     },
-    bgm: 0,
+    bgm: 4,
   },
   {
     id: 'bay',
@@ -133,7 +133,7 @@ export const MAPS = [
       shoulder: { width: 5, tex: 'plaza' },
     },
     isBridge: (x, z, y) => Math.abs(x) < 72 && y > 2.5,
-    bgm: 1,
+    bgm: 5,
   },
   {
     id: 'dune',
@@ -154,7 +154,7 @@ export const MAPS = [
       tunnelOuter: 0xd6b274,
       shoulder: { width: 5, tex: 'plaza' },
     },
-    bgm: 2,
+    bgm: 6,
   },
 ];
 
