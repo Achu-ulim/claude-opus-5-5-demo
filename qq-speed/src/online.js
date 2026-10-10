@@ -2,7 +2,9 @@
 // and the glue between the server's messages and the race running in Game.
 import { NetClient } from './net.js';
 import { encodeSnap, SNAPSHOT_HZ, MAX_PLAYERS, LAP_OPTIONS, CODE_LEN, normCode, cleanName, cleanLook } from './netproto.js';
-import { CARS } from './carModel.js';
+import { CARS, resolveLook } from './carModel.js';
+import { carItemId, item } from './catalog.js';
+import { TOKEN } from './garage.js';
 import { MAPS, MODES, MAP_TINT } from './maps.js';
 import { TEAMS } from './f1.js';
 import { trackName } from './leagues.js';
@@ -98,6 +100,8 @@ export class Online {
     $('rmCars').addEventListener('click', (e) => {
       const c = e.target.closest('.carcard');
       if (!c || this.me?.racing) return;
+      // a car the player hasn't unlocked opens the Garage on it
+      if (!this.game.hasCar(+c.dataset.i)) return this.game.garage.open(+c.dataset.i, 'online');
       this.game.audio.play('click');
       this.game.settings.skin = +c.dataset.i;
       this.game.save();
@@ -317,7 +321,7 @@ export class Online {
       const t = team(p);
       // a tick for players logged in to an account: the server checked who they are
       const vf = p.acct ? '<svg class="vf" viewBox="0 0 24 24" role="img" aria-label="Account"><title>Account</title><path d="M5 12l5 5L20 7"/></svg>' : '';
-      return `<div class="rp${p.id === this.myId ? ' me' : ''}"><i class="dot" style="background:${t ? hex(t.dot ?? t.body) : hex(cleanLook(p.look).paint ?? car(p.car).body)}"></i>
+      return `<div class="rp${p.id === this.myId ? ' me' : ''}"><i class="dot" style="background:${t ? hex(t.dot ?? t.body) : hex(resolveLook(car(p.car), p.look).paint)}"></i>
         <div class="who"><b>${crown}${esc(p.name)}${vf}${p.id === this.myId ? ' <small>(you)</small>' : ''}</b><small>${esc(t ? t.name : car(p.car).name)}</small></div>
         ${state}${this.isHost && !L && p.id !== this.myId ? `<button class="kick" type="button" data-id="${esc(p.id)}" title="Remove from room" aria-label="Remove ${esc(p.name)}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>` : ''}</div>`;
     }).join('') + (L ? '<div class="rp empty"><i class="dot"></i><div class="who"><b>Open seat</b><small>A league member who hasn\'t arrived, or an AI driver</small></div></div>'
@@ -338,16 +342,22 @@ export class Online {
     this.renderNet();
   }
 
-  // the room sees this player's car the way they made it in the garage
+  // the room sees this player's car the way they made it in the garage (the Garage can change the car too;
+  // a league room's car is the league's)
   sendLook() {
-    const car = this.me?.car ?? this.game.settings.skin;
-    if (this.room && !this.me?.racing) this.net?.send({ t: 'set', look: this.game.lookFor(car) });
+    if (!this.room || this.me?.racing) return;
+    const car = this.room.league ? this.me?.car ?? this.game.settings.skin : this.game.settings.skin;
+    this.net?.send({ t: 'set', car, look: this.game.lookFor(car) });
   }
 
   renderCars() {
     const thumbs = this.game.carThumbs || [];
     const sel = this.me?.car ?? this.game.settings.skin;
-    $('rmCars').innerHTML = CARS.map((c, i) => `<div class="carcard${i === sel ? ' sel' : ''}" data-i="${i}">${thumbs[i] ? `<img src="${thumbs[i]}" alt="${c.name}">` : `<div class="swatch" style="background:#${c.body.toString(16).padStart(6, '0')}"></div>`}<div class="cn">${c.name}</div></div>`).join('');
+    // cars still to unlock show their price
+    $('rmCars').innerHTML = CARS.map((c, i) => {
+      const forSale = !this.game.hasCar(i);
+      return `<div class="carcard${i === sel ? ' sel' : ''}${forSale ? ' forsale' : ''}" data-i="${i}">${thumbs[i] ? `<img src="${thumbs[i]}" alt="${c.name}">` : `<div class="swatch" style="background:#${c.body.toString(16).padStart(6, '0')}"></div>`}<div class="cn">${c.name}</div>${forSale ? `<div class="cp">${TOKEN}${item(carItemId(c.id)).price.toLocaleString('en-US')}</div>` : ''}</div>`;
+    }).join('');
     $('rmCars').classList.toggle('locked', !!this.me?.racing || !!this.room?.league);
   }
 

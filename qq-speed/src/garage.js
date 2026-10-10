@@ -1,198 +1,251 @@
-// The garage: paint, rims, underglow, a racing stripe and a race number for each car (finish, accent, rim style,
-// tyres and calipers under "More options"), shown on the lobby's live demo car behind the screen.
-// Looks are saved per car (settings.looks[car id]) and never change how a car drives.
-import { CARS, defaultLook, resolveLook, GLOW_OFF, NEON_RIM } from './carModel.js';
-import { RIMS } from './carGeometry.js';
-import { cleanLook } from './netproto.js';
-import { LOCKED_FINISHES } from './league.js';
+// The Garage (design/GarageShop): unlock cars and parts with tokens and fit parts to each car (paint, wheels, body
+// kit, underglow), shown on the lobby's live demo car behind the screen. What's for sale is catalog.js; what the
+// player has is wallet.js plus what cups and daily challenges earn (Game.has). Picking an owned car makes it the
+// player's car. Looks are cosmetic: they never change how a car drives.
+import { CARS, resolveLook } from './carModel.js';
+import { CATEGORIES, FACTORY, carItemId, item, partsIn } from './catalog.js';
+import * as wallet from './wallet.js';
 
 const $ = (id) => document.getElementById(id);
 const hex = (c) => '#' + c.toString(16).padStart(6, '0');
-const LOCK = '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>';
-const SLASH = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 19L19 5"/></svg>';
-const NOTE = '<b>Locked finishes</b> unlock from daily challenges and cup wins. Your look shows in online races too.';
-
-// swatch rows: [look fields, name, unlock id]; each row starts with the car's own colour (see rows())
-const PAINTS = [
-  [{ paint: 0xff3b3b }, 'Rosso'], [{ paint: 0xffd23a }, 'Bolt Yellow'], [{ paint: 0xd7dae5 }, 'Ice'], [{ paint: 0x2b3a8c }, 'Midnight'],
-  [{ paint: 0xb6ff3b }, 'Lime'], [{ paint: 0xb48cff }, 'Violet'], [{ paint: 0xc0c6d6, finish: 'chrome' }, 'Chrome', 'chrome'], [{ paint: 0xe0b23a, finish: 'metallic' }, 'Gold', 'gold'],
-];
-const RIM_COLORS = [[{ rimColor: 0x3a3d52 }, 'Gunmetal'], [{ rimColor: 0xc9cbdb }, 'Silver'], [{ rimColor: 0x15161f }, 'Black'], [{ rimColor: 0xb07a3a }, 'Bronze'], [{ rimColor: NEON_RIM }, 'Neon', 'neon']];
-const GLOWS = [[{ glow: GLOW_OFF }, 'Off'], [{ glow: 0x36e2ff }, 'Cyan'], [{ glow: 0xff3da6 }, 'Pink'], [{ glow: 0xffd23a }, 'Yellow'], [{ glow: 0x7cff6b }, 'Green', 'green']];
-const ACCENTS = [0x151515, 0xeceff2, 0xd40000, 0xffd000, 0xff6a00, 0x1e88e5, 0x00c853, 0xc0c4ca].map((c) => [{ accent: c }, hex(c)]);
-const CALIPERS = [0xe53935, 0xffcc00, 0x1e88e5, 0x43a047, 0xff6a00, 0x1b1b1b, 0xc0c4ca, 0x8e24aa].map((c) => [{ caliper: c }, hex(c)]);
-const FINISHES = [['gloss', 'Gloss'], ['metallic', 'Metallic'], ['matte', 'Matte'], ['pearl', 'Pearl'], ['chrome', 'Chrome', 'chrome']];
-const TYRES = [['street', 'Street'], ['redline', 'Red Line'], ['whitewall', 'White Wall'], ['letters', 'Lettered']];
-// the swatch rows on the panel: element id, rows, the label that names the current choice, and a colour picker
-const SWATCHES = [['gPaint', 'paint', 'gPaintName', true], ['gRimColor', 'rimColor', 'gRimName'], ['gGlow', 'glow', 'gGlowName'], ['gAccent', 'accent', null, true], ['gCaliper', 'caliper']];
+const fmt = (n) => n.toLocaleString('en-US');
+export const TOKEN = '<svg class="tok" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2l8.66 5v10L12 22l-8.66-5V7z"/><path d="M12 6.5l4.76 2.75v5.5L12 17.5l-4.76-2.75v-5.5z"/></svg>';
+const CONFIRM_MS = 5000; // how long Unlock waits for the confirming tap before it lets go
+// a Factory part's swatch is the car's own colour
+const FACTORY_COLOR = { paint: (c) => c.body, wheels: (c) => c.rim, glow: (c) => c.glow };
 
 export class Garage {
   constructor(game) {
     this.game = game;
-    this.car = null;
-    this.editing = false;
+    this.car = 0; // the car on show (CARS index)
+    this.tab = CATEGORIES[0].id;
+    this.sel = FACTORY[this.tab]; // the part picked in the tab, shown on the car
+    this.armed = null; // the car or part waiting for a confirming tap before tokens are spent
+    this.shown = false;
+    this.busy = false; // waiting on the wallet
+    this.dirty = false; // the player's car or a look changed since the garage opened
     this.bind();
+    wallet.onChange(() => { if (this.shown) this.render(); });
   }
 
-  get looks() { return (this.game.settings.looks ||= {}); }
   get isOpen() { return !$('garage').classList.contains('hidden'); }
-  unlocked(id) { return !id || this.game.league.unlocked(id); }
-
-  // each row with the car's factory colour first
-  rows(field) {
-    const def = defaultLook(this.car);
-    const list = { paint: PAINTS, rimColor: RIM_COLORS, glow: GLOWS, accent: ACCENTS, caliper: CALIPERS }[field];
-    return list.some(([f]) => f[field] === def[field] && Object.keys(f).length === 1) ? list : [[{ [field]: def[field] }, 'Factory'], ...list];
-  }
+  get carId() { return CARS[this.car].id; }
+  // the part fitted to the car on show in a slot
+  fitted(slot) { return wallet.equipped(this.carId)[slot] || FACTORY[slot]; }
 
   bind() {
-    for (const [id, field] of SWATCHES) {
-      $(id).addEventListener('click', (e) => {
-        const b = e.target.closest('.gsw[data-i]');
-        if (b) this.pick(this.rows(field)[+b.dataset.i]);
-      });
-      // the rainbow swatch opens the system colour picker
-      $(id).addEventListener('input', (e) => { if (e.target.type === 'color') this.set({ [field]: parseInt(e.target.value.slice(1), 16) }, true); });
-    }
-    const opts = (id, field, list) => $(id).addEventListener('click', (e) => {
-      const b = e.target.closest('button[data-v]');
-      if (b) this.pick([{ [field]: b.dataset.v }, b.textContent, list().find(([v]) => v === b.dataset.v)?.[2]]);
-    });
-    opts('gFinish', 'finish', () => FINISHES);
-    opts('gRim', 'rim', () => RIMS.map((r) => [r.id, r.name]));
-    opts('gTyre', 'tyre', () => TYRES);
-    $('gStripes').addEventListener('click', (e) => {
-      const b = e.target.closest('[data-v]');
-      if (b) this.set({ stripes: b.dataset.v === 'center' });
-    });
-    $('gNum').addEventListener('input', (e) => {
-      const v = e.target.value.replace(/\D/g, '').slice(0, 2);
-      e.target.value = v;
-      this.set({ number: v === '' ? null : +v }, true);
-    });
-    $('gDone').addEventListener('click', () => this.save());
+    $('gCars').addEventListener('click', (e) => { const b = e.target.closest('[data-i]'); if (b) this.pickCar(+b.dataset.i); });
+    $('gTabs').addEventListener('click', (e) => { const b = e.target.closest('[data-tab]'); if (b) this.pickTab(b.dataset.tab); });
+    $('gItems').addEventListener('click', (e) => { const b = e.target.closest('[data-id]'); if (b) this.pickPart(b.dataset.id); });
+    $('gCta').addEventListener('click', () => this.act());
+    $('gTokens').addEventListener('click', () => this.getTokens());
     $('gBack').addEventListener('click', () => this.back());
-    $('gRandom').addEventListener('click', () => this.randomize());
-    $('gReset').addEventListener('click', () => {
-      this.game.audio.play('click');
-      delete this.looks[this.car.id];
-      this.changed();
-    });
   }
 
   // open on a car; back to `from` ('menu' or 'online') when done
   open(carIndex, from = 'menu') {
     this.game.audio.play('click');
-    this.car = CARS[carIndex] || CARS[0];
     this.from = from;
-    this.saved = this.looks[this.car.id];
-    this.editing = true;
+    this.shown = true;
+    this.dirty = false;
     $(from).classList.add('hidden');
     $('garage').classList.remove('hidden');
-    $('gCls').textContent = this.car.cls;
-    $('gCar').textContent = this.car.name;
-    $('gNote').innerHTML = NOTE;
     this.game.focusDemoCar();
-    this.changed();
+    this.show(CARS[carIndex] ? carIndex : 0);
   }
 
-  // Save look: keep it, tell the lobby, the car pictures and the online room
-  save() {
-    if (!this.editing) return;
-    this.editing = false;
-    this.game.save();
-    this.leave();
-    this.game.onLooksChanged();
-  }
-
-  // back arrow / Escape: drop what changed since the garage opened
+  // back arrow / Escape. Equip and Unlock take effect at once, so there's nothing to save or undo.
   back() {
-    if (!this.editing) return;
-    this.cancel();
-    this.leave();
-    const skin = this.game.settings.skin;
-    this.game.dressDemoCar(CARS[skin], this.game.lookFor(skin));
-  }
-
-  // the game is moving on (a race starts, the lobby reloads): forget unsaved changes, no screen change
-  cancel() {
-    if (!this.editing) return;
-    this.editing = false;
-    if (this.saved) this.looks[this.car.id] = this.saved; else delete this.looks[this.car.id];
-  }
-
-  leave() {
+    if (!this.shown) return;
     this.game.audio.play('click');
     $('garage').classList.add('hidden');
     $(this.from).classList.remove('hidden');
+    this.close(true);
   }
 
-  // a swatch or option: [fields, name, unlock id]
-  pick([fields, name, lock]) {
-    if (!this.unlocked(lock)) {
+  // the game is moving on (a race starts, the lobby reloads) and has hidden the screen itself
+  cancel() { if (this.shown) this.close(false); }
+
+  close(toLobby) {
+    this.shown = false;
+    this.armed = null;
+    this.say('');
+    if (this.dirty) this.game.onLooksChanged(toLobby);
+    else if (toLobby) { const skin = this.game.settings.skin; this.game.dressDemoCar(CARS[skin], this.game.lookFor(skin)); }
+    this.dirty = false;
+  }
+
+  // ---------- Picking ----------
+  show(i) {
+    this.car = i;
+    this.sel = this.fitted(this.tab);
+    this.armed = null;
+    this.preview();
+    // on phones the cars are a sideways strip: bring this one into view
+    const list = $('gCars'), b = list.querySelector('.sel');
+    if (b && list.scrollWidth > list.clientWidth) list.scrollLeft = b.offsetLeft - list.offsetLeft - (list.clientWidth - b.offsetWidth) / 2;
+  }
+
+  // an owned car becomes the player's car; a locked one is only shown
+  pickCar(i) {
+    if (i === this.car) return;
+    this.game.audio.play('click');
+    this.say('');
+    if (this.game.hasCar(i)) this.useCar(i);
+    this.show(i);
+  }
+
+  useCar(i) {
+    if (this.game.settings.skin === i) return;
+    this.game.settings.skin = i;
+    this.game.save();
+    this.dirty = true;
+    this.game.online.sendLook();
+  }
+
+  pickTab(tab) {
+    if (tab === this.tab) return;
+    this.game.audio.play('click');
+    this.tab = tab;
+    this.sel = this.fitted(tab);
+    this.armed = null;
+    this.say('');
+    this.preview();
+  }
+
+  pickPart(id) {
+    if (id === this.sel) return;
+    this.game.audio.play('click');
+    this.sel = id;
+    this.armed = null;
+    this.say('');
+    this.preview();
+  }
+
+  // the car on show with its fitted parts and the one picked in this tab
+  preview() {
+    this.game.dressDemoCar(CARS[this.car], { ...wallet.equipped(this.carId), [this.tab]: this.sel }, false);
+    this.render();
+  }
+
+  // ---------- The main button ----------
+  // what it does now: { kind: 'equip' | 'on' | 'buy' | 'confirm' | 'short', label, name, note, it }
+  state() {
+    const car = CARS[this.car], carIt = item(carItemId(car.id));
+    if (!this.game.has(carIt.id)) return { ...this.buyState(carIt, 'Unlock car'), name: car.name };
+    const it = item(this.sel);
+    if (!this.game.has(it.id)) return { ...this.buyState(it, 'Unlock'), name: it.name };
+    return this.fitted(this.tab) === it.id
+      ? { kind: 'on', label: 'Equipped', name: it.name, note: 'On your car', it }
+      : { kind: 'equip', label: 'Equip', name: it.name, note: 'Owned', it };
+  }
+
+  buyState(it, verb) {
+    const bal = wallet.getBalance(), need = it.price - bal;
+    if (need > 0) return { kind: 'short', label: `Get ${fmt(need)} more tokens`, note: it.category === 'car' ? `Need ${fmt(need)} more` : `Costs ${fmt(it.price)}`, it };
+    const note = `Balance after: ${fmt(bal - it.price)}`;
+    return this.armed === it.id ? { kind: 'confirm', label: `Spend ${fmt(it.price)} tokens?`, note, it } : { kind: 'buy', label: `${verb} · ${fmt(it.price)}`, note, it };
+  }
+
+  async act() {
+    if (this.busy) return;
+    const s = this.state();
+    if (s.kind === 'on') return;
+    if (s.kind === 'short') return this.getTokens();
+    if (s.kind === 'equip') {
       this.game.audio.play('click');
-      $('gNote').innerHTML = `<b>${name}</b> is locked. ${LOCKED_FINISHES[lock]}.`;
-      return;
+      return this.equip(s.it.id);
     }
-    const f = { ...fields };
-    // Chrome is a paint and a finish together: another paint goes back to gloss
-    if ('paint' in f && !f.finish && resolveLook(this.car, this.looks[this.car.id]).finish === 'chrome') f.finish = 'gloss';
-    this.set(f);
-  }
-
-  set(fields, quiet = false) {
-    if (!quiet) this.game.audio.play('click');
-    const next = { ...cleanLook(this.looks[this.car.id]), ...fields };
-    // only what differs from the factory look is stored
-    const def = defaultLook(this.car);
-    for (const k of Object.keys(next)) if (next[k] === def[k] || next[k] == null) delete next[k];
-    if (Object.keys(next).length) this.looks[this.car.id] = next; else delete this.looks[this.car.id];
-    this.changed();
-  }
-
-  // random unlocked paint, rims, underglow and stripe
-  randomize() {
-    const any = (rows) => {
-      const ok = rows.filter(([, , lock]) => this.unlocked(lock));
-      return ok[Math.floor(Math.random() * ok.length)][0];
-    };
-    const paint = any(this.rows('paint'));
-    this.set({ finish: 'gloss', ...paint, ...any(this.rows('rimColor')), ...any(this.rows('glow')), stripes: Math.random() < 0.5 });
-  }
-
-  changed() {
-    const L = resolveLook(this.car, this.looks[this.car.id]);
-    this.render(L);
-    this.game.dressDemoCar(this.car, cleanLook(this.looks[this.car.id]));
-  }
-
-  render(L) {
-    for (const [id, field, nameId, picker] of SWATCHES) {
-      const rows = this.rows(field);
-      // a swatch is chosen when all its fields match (Chrome needs the chrome finish too)
-      const sel = rows.findIndex(([f]) => Object.entries(f).every(([k, v]) => L[k] === v));
-      $(id).innerHTML = rows.map(([f, name, lock], i) => {
-        const locked = !this.unlocked(lock), off = field === 'glow' && f.glow === GLOW_OFF;
-        return `<button type="button" class="gsw${i === sel ? ' sel' : ''}${locked ? ' locked' : ''}${off ? ' off' : ''}" data-i="${i}" style="--c:${hex(f[field])}"
-          aria-pressed="${i === sel}" aria-label="${name}${locked ? ' (locked)' : ''}" title="${locked ? `${name}: ${LOCKED_FINISHES[lock]}` : name}">${locked ? LOCK : off ? SLASH : ''}</button>`;
-      }).join('') + (picker ? `<label class="gsw pick${sel < 0 ? ' sel' : ''}" title="Any colour"><input type="color" value="${hex(L[field])}" aria-label="Pick any colour"></label>` : '');
-      if (nameId) $(nameId).textContent = sel >= 0 ? rows[sel][1] : 'Custom';
+    // Unlock asks for a second tap before spending tokens
+    if (s.kind === 'buy') {
+      this.game.audio.play('click');
+      this.armed = s.it.id;
+      clearTimeout(this.armTimer);
+      this.armTimer = setTimeout(() => { if (this.armed === s.it.id) { this.armed = null; this.render(); } }, CONFIRM_MS);
+      return this.render();
     }
-    const opts = (id, list, cur) => {
-      $(id).innerHTML = list.map(([v, name, lock]) => {
-        const locked = !this.unlocked(lock);
-        return `<button type="button" class="${v === cur ? 'sel' : ''}${locked ? ' locked' : ''}" data-v="${v}" aria-pressed="${v === cur}"${locked ? ` title="${LOCKED_FINISHES[lock]}"` : ''}>${name}</button>`;
-      }).join('');
-    };
-    opts('gFinish', FINISHES, L.finish);
-    opts('gRim', RIMS.map((r) => [r.id, r.name]), L.rim);
-    opts('gTyre', TYRES, L.tyre);
-    $('gStripes').innerHTML = [['none', 'None'], ['center', 'Center']].map(([v, name]) =>
-      `<button type="button" class="opt${(v === 'center') === L.stripes ? ' sel' : ''}" data-v="${v}" aria-pressed="${(v === 'center') === L.stripes}">${name}</button>`).join('');
-    if (document.activeElement !== $('gNum')) $('gNum').value = L.number ?? '';
+    this.busy = true;
+    this.armed = null;
+    this.render();
+    const r = await wallet.spend(s.it.id);
+    this.busy = false;
+    if (!r.ok) {
+      this.game.audio.play('wrong');
+      this.say(r.error === 'short' ? `You need ${fmt(r.need)} more tokens for that.` : 'That could not be unlocked. Try again.');
+      return this.render();
+    }
+    this.game.audio.play('gauge');
+    if (s.it.category === 'car') {
+      this.useCar(this.car);
+      this.say(`${s.name} unlocked. It's your car now.`);
+      this.render();
+    } else {
+      this.say(`${s.name} unlocked and equipped.`);
+      await this.equip(s.it.id);
+    }
   }
 
-  // where the demo car should sit on screen: the middle of the empty space beside (or above) the panel
+  async equip(id) {
+    await wallet.equip(this.carId, { ...wallet.equipped(this.carId), [this.tab]: id });
+    this.dirty = true;
+    this.game.online.sendLook();
+    this.preview();
+  }
+
+  // no token shop yet: say so (step 2 opens it here)
+  getTokens() {
+    this.game.audio.play('click');
+    this.say('The token shop opens soon. Until then, spend the tokens you have.');
+  }
+
+  say(text) { $('gMsg').textContent = text; }
+
+  // ---------- Drawing ----------
+  render() {
+    const g = this.game, bal = wallet.getBalance(), car = CARS[this.car];
+    // the lists are redrawn: keep keyboard focus on the same button
+    const f = document.activeElement, list = ['gCars', 'gTabs', 'gItems'].includes(f?.parentElement?.id) ? f.parentElement.id : null;
+    const key = list && Object.entries(f.dataset)[0];
+    $('gBal').textContent = fmt(bal);
+
+    // cars: a dot in each car's paint, then In use / Owned / its price
+    const owned = CARS.filter((_, i) => g.hasCar(i)).length;
+    $('gCarsHead').textContent = `Cars · ${owned} / ${CARS.length} owned`;
+    $('gCars').innerHTML = CARS.map((c, i) => {
+      const has = g.hasCar(i), use = i === g.settings.skin;
+      const tag = !has ? `<small class="price">${TOKEN}${fmt(item(carItemId(c.id)).price)}</small>` : use ? '<small class="use">In use</small>' : '<small>Owned</small>';
+      return `<button type="button" class="gcar${i === this.car ? ' sel' : ''}${has ? '' : ' locked'}" data-i="${i}" aria-pressed="${i === this.car}"><i style="background:${hex(resolveLook(c, wallet.equipped(c.id)).paint)}"></i><span>${c.name}</span>${tag}</button>`;
+    }).join('');
+
+    $('gCls').textContent = car.cls;
+    $('gCar').textContent = car.name;
+    const carIt = item(carItemId(car.id)), carLocked = !g.has(carIt.id);
+    $('gLock').classList.toggle('hidden', !carLocked);
+    if (carLocked) $('gLockText').innerHTML = carIt.earn ? `Unlock with tokens, or <b>${carIt.earn.text}</b> to get it free` : 'Unlock it with tokens';
+
+    $('gTabs').innerHTML = CATEGORIES.map((t) => `<button type="button" class="opt${t.id === this.tab ? ' sel' : ''}" data-tab="${t.id}" aria-pressed="${t.id === this.tab}">${t.name}</button>`).join('');
+    const on = this.fitted(this.tab);
+    $('gItems').innerHTML = partsIn(this.tab).map((p) => {
+      const has = g.has(p.id);
+      const price = !has ? `<small class="${p.price > bal ? 'short' : ''}">${TOKEN}${fmt(p.price)}</small>` : p.id === on ? '<small class="on">Equipped</small>' : '<small class="own">Owned</small>';
+      const color = p.color ?? FACTORY_COLOR[this.tab]?.(car);
+      const sw = p.swatch || (color != null ? hex(color) : '#2a2d38');
+      const cls = p.rainbow ? ' rainbow' : p.id === 'glow.off' ? ' off' : '';
+      return `<button type="button" class="gitem${p.id === this.sel ? ' sel' : ''}" data-id="${p.id}" aria-pressed="${p.id === this.sel}"><i class="gsw${cls}" style="--c:${sw}"></i><b>${p.name}</b>${price}</button>`;
+    }).join('');
+
+    const s = this.state(), part = item(this.sel);
+    $('gHint').innerHTML = !carLocked && !g.has(part.id) && part.earn ? `Or <b>${part.earn.text}</b> to get it free.` : '';
+    $('gSelName').textContent = s.name;
+    $('gSelNote').textContent = s.note;
+    const cta = $('gCta');
+    cta.textContent = this.busy ? 'Unlocking…' : s.label;
+    cta.className = 'gcta ' + s.kind;
+    cta.disabled = s.kind === 'on' || this.busy;
+    if (key) $(list).querySelector(`[data-${key[0]}="${key[1]}"]`)?.focus();
+  }
+
+  // where the demo car should sit on screen: the middle of the space between the panels (or under the car list)
   carFrame() {
     const r = $('gSpace').getBoundingClientRect();
     if (!r.width || !r.height) return null;

@@ -1,0 +1,136 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Garage Shop</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Bungee&amp;family=Chakra+Petch:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#07080F}
+button{font-family:inherit;cursor:pointer}
+button:focus-visible{outline:2px solid #36E2FF;outline-offset:2px}
+</style>
+</helmet>
+<div style="position: relative; width: 1440px; height: 900px; overflow: hidden; background: #07080F; color: #F4F1E8; font-family: 'Chakra Petch', sans-serif">
+  <div aria-hidden="true" style="position: absolute; left: 10%; right: 30%; top: 58%; bottom: -10%; transform: perspective(420px) rotateX(62deg); transform-origin: top center; background-image: linear-gradient(rgba(255,255,255,0.1) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.1) 1px, transparent 1px); background-size: 64px 64px"></div>
+
+  <div style="position: relative; height: 100%; box-sizing: border-box; padding: 28px 40px; display: grid; grid-template-columns: 250px 1fr 430px; grid-template-rows: auto 1fr; gap: 20px">
+    <header style="grid-column: 1 / -1; display: flex; align-items: center; justify-content: space-between">
+      <div style="display: flex; align-items: center; gap: 16px">
+        <button aria-label="Back to lobby" style="width: 48px; height: 48px; border-radius: 24px; border: 1px solid rgba(255,255,255,0.14); background: rgba(13,15,26,0.85); color: #F4F1E8; display: flex; align-items: center; justify-content: center"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 5l-7 7 7 7"></path></svg></button>
+        <h1 style="margin: 0; font-family: 'Bungee', sans-serif; font-weight: 400; font-size: 40px">GARAGE</h1>
+      </div>
+      <div style="display: flex; align-items: center; gap: 4px; height: 52px; padding: 0 6px 0 16px; border-radius: 26px; background: rgba(255,210,58,0.1); border: 1px solid rgba(255,210,58,0.5)">
+        <svg width="22" height="22" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2l8.66 5v10L12 22l-8.66-5V7z" fill="#FFD23A"></path><path d="M12 6.5l4.76 2.75v5.5L12 17.5l-4.76-2.75v-5.5z" fill="#A67C00"></path></svg>
+        <b style="font-family: 'Bungee', sans-serif; font-size: 20px; margin: 0 10px 0 6px">{{balance}}</b>
+        <button aria-label="Get more tokens" style="height: 40px; padding: 0 14px; border: 0; border-radius: 20px; background: #FFD23A; color: #07080F; font-weight: 700; display: flex; align-items: center; gap: 6px"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"></path></svg>GET TOKENS</button>
+      </div>
+    </header>
+
+    <section aria-label="Your cars" style="display: flex; flex-direction: column; gap: 6px; padding: 14px; border-radius: 18px; background: rgba(13,15,26,0.9); border: 1px solid rgba(255,255,255,0.12); overflow: hidden">
+      <div style="font-size: 12px; font-weight: 700; letter-spacing: 3px; color: #A3A6BF; padding: 0 6px 4px">CARS · 6 / 10 OWNED</div>
+      <sc-for list="{{cars}}" as="c" hint-placeholder-count="10">
+        <button onClick="{{c.pick}}" style="{{c.style}}">
+          <span style="width: 10px; height: 10px; border-radius: 5px; background: {{c.color}}; flex: none"></span>
+          <span style="flex: 1; text-align: left; font-weight: 600">{{c.name}}</span>
+          <span style="{{c.tagStyle}}">{{c.tag}}</span>
+        </button>
+      </sc-for>
+    </section>
+
+    <section aria-label="Preview" style="position: relative; display: flex; flex-direction: column; align-items: center; justify-content: space-between; padding: 10px 0">
+      <div style="text-align: center">
+        <div style="font-size: 12px; font-weight: 700; letter-spacing: 3px; color: #36E2FF">{{carCls}}</div>
+        <div style="font-family: 'Bungee', sans-serif; font-size: 52px; line-height: 1">{{carName}}</div>
+      </div>
+      <div style="position: relative">
+        <div aria-hidden="true" style="position: absolute; left: 40px; right: 40px; bottom: 6px; height: 40px; border-radius: 50%; background: {{glow}}; opacity: 0.5; filter: blur(24px)"></div>
+        <svg viewBox="0 0 520 170" width="600" height="200" aria-hidden="true" style="position: relative"><path d="M40 120 C40 100 60 92 96 88 L170 60 C210 44 300 42 350 58 L420 84 C462 90 486 100 488 122 L484 132 L40 132 Z" fill="{{paint}}"></path><path d="M182 64 C220 50 300 50 340 62 L384 84 L160 84 Z" fill="#07080F" opacity="0.8"></path><path d="M420 84 L470 70 L476 80 L430 92 Z" fill="#15171c" opacity="{{spoilerOn}}"></path><circle cx="130" cy="132" r="26" fill="#07080F" stroke="{{rim}}" stroke-width="7"></circle><circle cx="400" cy="132" r="26" fill="#07080F" stroke="{{rim}}" stroke-width="7"></circle></svg>
+      </div>
+      <sc-if value="{{locked}}" hint-placeholder-val="{{ false }}">
+        <div style="display: flex; align-items: center; gap: 14px; padding: 12px 16px; border-radius: 14px; background: rgba(13,15,26,0.92); border: 1px solid rgba(255,255,255,0.14)">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#A3A6BF" stroke-width="2.5" stroke-linecap="round" aria-hidden="true"><rect x="5" y="11" width="14" height="10" rx="2"></rect><path d="M8 11V7a4 4 0 0 1 8 0v4"></path></svg>
+          <span style="font-size: 15px; color: #C9CBDB">Unlock with tokens, or win the <b style="color: #F4F1E8">Legend Cup</b> to get it free</span>
+        </div>
+      </sc-if>
+    </section>
+
+    <section aria-label="Customize" style="display: flex; flex-direction: column; gap: 14px; padding: 18px; border-radius: 18px; background: rgba(13,15,26,0.92); border: 1px solid rgba(255,255,255,0.12); min-height: 0">
+      <div style="display: flex; gap: 4px; padding: 4px; border-radius: 12px; background: rgba(255,255,255,0.05)">
+        <sc-for list="{{tabs}}" as="t" hint-placeholder-count="4"><button onClick="{{t.pick}}" aria-pressed="{{t.pressed}}" style="{{t.style}}">{{t.label}}</button></sc-for>
+      </div>
+      <div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px">
+        <sc-for list="{{items}}" as="it" hint-placeholder-count="6">
+          <button onClick="{{it.pick}}" aria-pressed="{{it.pressed}}" style="{{it.style}}">
+            <span style="width: 100%; height: 46px; border-radius: 10px; background: {{it.swatch}}"></span>
+            <span style="font-size: 13px; font-weight: 700">{{it.name}}</span>
+            <span style="{{it.priceStyle}}">{{it.price}}</span>
+          </button>
+        </sc-for>
+      </div>
+      <div style="font-size: 13px; color: #8A8DA6; line-height: 1.45">Looks are cosmetic. Online races and leagues stay fair: parts never change speed or grip.</div>
+      <div style="margin-top: auto; display: flex; flex-direction: column; gap: 8px">
+        <div style="display: flex; justify-content: space-between; font-size: 14px; color: #C9CBDB"><span>{{selName}}</span><span>{{selNote}}</span></div>
+        <button style="{{ctaStyle}}">{{cta}}</button>
+      </div>
+    </section>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":900}}'>
+class Component extends DCLogic {
+  constructor(props) { super(props); this.state = { car: 5, tab: 0, item: 2 }; }
+  renderVals() {
+    const S = this.state, balance = 1250;
+    const CARS = [['Metro Sedan', 'SEDAN', '#5B95E0', 0], ['Street GT', 'SPORTS CAR', '#2EC4B6', 0], ['McLaren', 'SUPERCAR', '#FF8A00', 0], ['Audi', 'SUPERCAR', '#D7DAE5', 0], ['Bugatti', 'HYPERCAR', '#3A6BFF', 2500], ['Ferrari', 'SUPERCAR', '#FF3B3B', 0], ['Lamborghini', 'SUPERCAR', '#B6FF3B', 0], ['Porsche', 'SPORTS CAR', '#F4F1E8', 0], ['Koenigsegg', 'HYPERCAR', '#FFD23A', 3000], ['Pagani', 'HYPERCAR', '#B48CFF', 2800]];
+    // owned: price 0. Show three hypercars and one more as locked
+    const TABS = ['Paint', 'Wheels', 'Body kit', 'Glow'];
+    const ITEMS = [
+      [['Factory', '#FF3B3B', 0, 1], ['Bolt Yellow', '#FFD23A', 0, 1], ['Midnight Pearl', 'linear-gradient(135deg,#1b2a6b,#6b7bd6)', 400], ['Chrome', 'linear-gradient(135deg,#9aa3b5,#f4f6fa,#8d95a6)', 900], ['Matte Black', '#202228', 300], ['Gold Leaf', 'linear-gradient(135deg,#a67c00,#ffe680,#a67c00)', 1600]],
+      [['Gunmetal', '#3A3D52', 0, 1], ['Silver', '#C9CBDB', 0, 1], ['Bronze', '#B07A3A', 250], ['Neon Cyan', '#36E2FF', 450], ['Carbon', '#15161F', 350], ['Gold', '#E0B23A', 600]],
+      [['Stock', '#2a2d38', 0, 1], ['Street Kit', '#3b3f4d', 500], ['GT Wing', '#4a4f60', 700], ['Wide Body', '#5a6072', 1200], ['Drift Kit', '#3b3f4d', 800], ['Time Attack', '#6a7186', 1500]],
+      [['Off', '#07080F', 0, 1], ['Cyan', '#36E2FF', 0, 1], ['Pink', '#FF3DA6', 300], ['Yellow', '#FFD23A', 300], ['Green', '#7CFF6B', 300], ['Rainbow cycle', 'linear-gradient(90deg,#ff3da6,#ffd23a,#36e2ff,#7cff6b)', 1000]]
+    ];
+    const items = ITEMS[S.tab];
+    const sel = items[S.item] || items[0];
+    const car = CARS[S.car];
+    const owned = (it) => it[2] === 0;
+    let cta, ctaStyle, selNote;
+    const btn = 'height: 60px; border-radius: 16px; font-family: Bungee, sans-serif; font-size: 18px; letter-spacing: 1px; ';
+    if (car[3] > 0) { cta = 'UNLOCK CAR · ' + car[3]; selNote = car[3] > balance ? 'Need ' + (car[3] - balance) + ' more' : ''; ctaStyle = btn + (car[3] > balance ? 'border: 2px solid #FFD23A; background: transparent; color: #FFD23A' : 'border: 0; background: #FFD23A; color: #07080F; box-shadow: 0 5px 0 #A67C00'); if (car[3] > balance) cta = 'GET ' + (car[3] - balance) + ' MORE TOKENS'; }
+    else if (owned(sel)) { cta = 'EQUIP'; selNote = 'Owned'; ctaStyle = btn + 'border: 0; background: #36E2FF; color: #07080F; box-shadow: 0 5px 0 #0B6A80'; }
+    else if (sel[2] <= balance) { cta = 'UNLOCK · ' + sel[2]; selNote = 'Balance after: ' + (balance - sel[2]); ctaStyle = btn + 'border: 0; background: #FFD23A; color: #07080F; box-shadow: 0 5px 0 #A67C00'; }
+    else { cta = 'GET ' + (sel[2] - balance) + ' MORE TOKENS'; selNote = 'Costs ' + sel[2]; ctaStyle = btn + 'border: 2px solid #FFD23A; background: transparent; color: #FFD23A'; }
+    const pick = (S.tab === 0 ? sel : ITEMS[0][2]);
+    return {
+      balance: balance.toLocaleString('en-US'),
+      carName: car[0].toUpperCase(), carCls: car[1], locked: car[3] > 0,
+      paint: S.tab === 0 && !sel[1].startsWith('linear') ? sel[1] : car[2],
+      rim: S.tab === 1 && !sel[1].startsWith('linear') ? sel[1] : '#3A3D52',
+      glow: S.tab === 3 && !sel[1].startsWith('linear') ? sel[1] : '#36E2FF',
+      spoilerOn: S.tab === 2 && S.item > 0 ? 1 : 0,
+      cars: CARS.map((c, i) => ({
+        name: c[0], color: c[2], tag: c[3] ? '⬢ ' + c[3] : i === S.car ? 'IN USE' : 'OWNED',
+        tagStyle: 'font-size: 11px; font-weight: 700; letter-spacing: 1px; ' + (c[3] ? 'color: #FFD23A' : i === S.car ? 'color: #36E2FF' : 'color: #7C7F99'),
+        style: 'display: flex; align-items: center; gap: 10px; min-height: 44px; padding: 0 12px; border-radius: 10px; font-size: 14px; color: #F4F1E8; ' + (i === S.car ? 'background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.22)' : 'background: transparent; border: 1px solid transparent') + (c[3] ? '; opacity: 0.8' : ''),
+        pick: () => this.setState({ car: i })
+      })),
+      tabs: TABS.map((label, i) => ({ label, pressed: String(S.tab === i), style: 'flex: 1; min-height: 44px; border: 0; border-radius: 9px; font-size: 14px; font-weight: 700; ' + (S.tab === i ? 'background: #FFD23A; color: #07080F' : 'background: transparent; color: #C9CBDB'), pick: () => this.setState({ tab: i, item: 0 }) })),
+      items: items.map((it, i) => ({
+        name: it[0], swatch: it[1], pressed: String(S.item === i),
+        price: owned(it) ? 'OWNED' : '⬢ ' + it[2],
+        priceStyle: 'font-size: 12px; font-weight: 700; ' + (owned(it) ? 'color: #7CFF9E' : it[2] > balance ? 'color: #FF8A8A' : 'color: #FFD23A'),
+        style: 'display: flex; flex-direction: column; align-items: flex-start; gap: 6px; padding: 10px; border-radius: 12px; color: #F4F1E8; text-align: left; ' + (S.item === i ? 'background: rgba(255,210,58,0.1); border: 2px solid #FFD23A' : 'background: rgba(255,255,255,0.04); border: 2px solid transparent'),
+        pick: () => this.setState({ item: i })
+      })),
+      selName: car[3] ? car[0] : sel[0], selNote: selNote || '', cta, ctaStyle
+    };
+  }
+}
+</script>
+</body>
+</html>

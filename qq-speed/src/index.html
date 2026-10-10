@@ -266,7 +266,7 @@ body.touch #items .hint,body.touch #keys,body.touch #bigrank,body.touch #songtip
   background:radial-gradient(ellipse 46% 50% at 50% 54%,rgba(7,8,15,0),rgba(7,8,15,.5) 70%,rgba(7,8,15,.86))}
 body:has(#menu:not(.hidden)) #clinks{display:none}
 #menu button,#menu input{font-family:var(--body)}
-#menu button:focus-visible,#menu a:focus-visible,#result button:focus-visible,#cups button:focus-visible,#board button:focus-visible,#online button:focus-visible,#online input:focus-visible,#garage button:focus-visible,#garage input:focus-visible,#chal button:focus-visible,#f1s button:focus-visible,#f1w button:focus-visible,#f1st button:focus-visible,#lg button:focus-visible,#lg input:focus-visible,#garage summary:focus-visible,#menu input:focus-visible,#settings button:focus-visible,#settings input:focus-visible{outline:2px solid var(--neon);outline-offset:2px}
+#menu button:focus-visible,#menu a:focus-visible,#result button:focus-visible,#cups button:focus-visible,#board button:focus-visible,#online button:focus-visible,#online input:focus-visible,#garage button:focus-visible,#chal button:focus-visible,#f1s button:focus-visible,#f1w button:focus-visible,#f1st button:focus-visible,#lg button:focus-visible,#lg input:focus-visible,#menu input:focus-visible,#settings button:focus-visible,#settings input:focus-visible{outline:2px solid var(--neon);outline-offset:2px}
 #menu svg,#settings svg{fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
 #menu svg .f,#menu svg.fill{fill:currentColor;stroke:none}
 .mwrap{width:min(1376px,100%);min-height:100%;display:flex;flex-direction:column;gap:18px}
@@ -285,6 +285,9 @@ body:has(#menu:not(.hidden)) #clinks{display:none}
 #menu .pill{padding:0 18px;font-size:14px;font-weight:700;letter-spacing:1px;text-transform:uppercase}
 .driver button{width:34px;height:34px;border:0;background:rgba(255,255,255,.08)}
 #menu .round svg,#menu .pill svg,.driver button svg{width:18px;height:18px}
+#menu .pill.tokpill{width:auto;gap:6px;padding:0 16px 0 12px;border-color:rgba(255,210,58,.5);background:rgba(28,24,12,.85)}
+#menu .pill.tokpill b{font-family:var(--disp);font-weight:400;font-size:16px;letter-spacing:0}
+#menu .pill.tokpill .tok{width:20px;height:20px}
 #menu .round.big{width:52px;height:52px;border-radius:26px}
 #menu .round.big svg{width:22px;height:22px;stroke-width:2.5}
 
@@ -318,6 +321,7 @@ body:has(#menu:not(.hidden)) #clinks{display:none}
 #menu .cardots .carcard:hover::before{background:rgba(255,255,255,.6)}
 #menu .cardots .carcard.sel{width:36px}
 #menu .cardots .carcard.sel::before{width:28px;background:var(--bolt)}
+#menu .cardots .carcard.locked::before{width:8px;height:8px;background:transparent;box-shadow:inset 0 0 0 2px rgba(255,210,58,.55)}
 #menu .custbtn{width:auto;margin:0;display:flex;align-items:center;gap:8px;height:44px;padding:0 20px;border-radius:22px;border:1px solid var(--edge);background:var(--ink2);color:var(--cream);font:700 14px var(--body);letter-spacing:1px;text-transform:uppercase;transition:border-color .15s,background .15s}
 #menu .custbtn:hover{border-color:var(--bolt);background:rgba(30,33,50,.9)}
 #menu .custbtn svg{width:18px;height:18px;color:var(--bolt)}
@@ -715,7 +719,7 @@ table.res td.pos{font-family:var(--num);font-style:italic;color:var(--yellow);fo
 #result::before,#cups::before,#online::before{left:-20%;right:-20%;top:var(--floor);bottom:-10%;transform:perspective(420px) rotateX(62deg);transform-origin:top center;background-size:64px 64px;
   background-image:linear-gradient(var(--grid) 1px,transparent 1px),linear-gradient(90deg,var(--grid) 1px,transparent 1px)}
 #result::after{left:0;right:0;top:56%;height:1px;background:var(--bolt);opacity:.5;box-shadow:0 0 24px 4px var(--bolt)}
-#result button,#cups button,#board button,#online button,#online input,#garage button,#garage input,#chal button,#f1s button,#f1w button,#f1st button,#lg button,#lg input{font-family:var(--body)}
+#result button,#cups button,#board button,#online button,#online input,#garage button,#chal button,#f1s button,#f1w button,#f1st button,#lg button,#lg input{font-family:var(--body)}
 body:has(#result:not(.hidden)) #hud,body:has(#result:not(.hidden)) #clinks,body:has(#cups:not(.hidden)) #clinks,body:has(#board:not(.hidden)) #clinks,body:has(#online:not(.hidden)) #clinks,body:has(#garage:not(.hidden)) #clinks,body:has(#chal:not(.hidden)) #clinks,body:has(#f1s:not(.hidden)) #clinks,body:has(#f1w:not(.hidden)) #clinks,body:has(#f1st:not(.hidden)) #clinks,body:has(#lg:not(.hidden)) #clinks{display:none}
 .rwrap{flex:none;position:relative;z-index:1;width:min(1312px,100%);height:100%;padding:22px 32px;display:grid;gap:24px 40px;
   grid-template-columns:minmax(0,1.45fr) minmax(340px,1fr);grid-template-rows:minmax(0,1fr) auto;grid-template-areas:"hero side" "btns side"}
@@ -935,61 +939,96 @@ body:has(#result:not(.hidden)) #hud,body:has(#result:not(.hidden)) #clinks,body:
   .chcard{padding:16px;gap:10px}
   .chcard h3{font-size:18px}
 }
-/* garage: the lobby's live demo car shows through the left side; the options panel on the right */
-#garage{justify-content:flex-start;color:var(--cream);font-family:var(--body);background:linear-gradient(90deg,rgba(7,8,15,.6),rgba(7,8,15,0) 38%,rgba(7,8,15,0) 55%,rgba(7,8,15,.75))}
-.gwrap{flex:none;width:min(1312px,100%);height:100%;display:grid;gap:16px 32px;padding:22px 32px;
-  grid-template-columns:minmax(0,1fr) 420px;grid-template-rows:auto minmax(0,1fr) auto;grid-template-areas:"head panel" "space panel" "btns panel"}
-.ghead{grid-area:head;display:flex;flex-direction:column;gap:16px}
+/* garage (design/GarageShop): cars on the left, the lobby's live demo car through the middle, parts on the right */
+#garage{justify-content:flex-start;color:var(--cream);font-family:var(--body);background:linear-gradient(90deg,rgba(7,8,15,.7),rgba(7,8,15,0) 30%,rgba(7,8,15,0) 62%,rgba(7,8,15,.7))}
+.tok{flex:none;width:22px;height:22px}
+.tok path{fill:#ffd23a;stroke:none}
+.tok path+path{fill:#a67c00}
+.gwrap{flex:none;width:min(1440px,100%);height:100%;display:grid;gap:20px;padding:10px 24px;
+  grid-template-columns:250px minmax(0,1fr) 430px;grid-template-rows:auto minmax(0,1fr);grid-template-areas:"head head head" "cars stage panel"}
+.ghead{grid-area:head;display:flex;align-items:center;justify-content:space-between;gap:12px}
+.gtl{display:flex;align-items:center;gap:16px;min-width:0}
+.gtl h2{font-family:var(--disp);font-weight:400;font-size:40px;line-height:1;text-transform:uppercase}
+.gbal{flex:none;display:flex;align-items:center;gap:4px;height:52px;padding:0 6px 0 16px;border-radius:26px;background:rgba(255,210,58,.1);border:1px solid rgba(255,210,58,.5)}
+.gbal b{margin:0 10px 0 6px;font-family:var(--disp);font-weight:400;font-size:20px}
+#gTokens{display:flex;align-items:center;gap:6px;height:40px;padding:0 14px;border:0;border-radius:20px;background:var(--bolt);color:var(--ink);font-size:14px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;cursor:pointer}
+#gTokens svg{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round}
+.gcars{grid-area:cars;min-height:0;display:flex;flex-direction:column;gap:6px;padding:14px;border-radius:18px;background:rgba(13,15,26,.9);border:1px solid var(--edge)}
+.glab{padding:0 6px 4px;font-size:12px;font-weight:700;letter-spacing:3px;color:var(--dim);text-transform:uppercase}
+.gcarlist{min-height:0;display:flex;flex-direction:column;gap:6px;overflow:auto;scrollbar-width:thin;scrollbar-color:rgba(255,255,255,.2) transparent}
+.gcar{flex:none;display:flex;align-items:center;gap:10px;min-height:44px;padding:0 12px;border-radius:10px;border:1px solid transparent;background:transparent;color:var(--cream);font-size:14px;cursor:pointer;transition:background .15s}
+.gcar:hover{background:rgba(255,255,255,.06)}
+.gcar.sel{background:rgba(255,255,255,.1);border-color:rgba(255,255,255,.22)}
+.gcar.locked{opacity:.8}
+.gcar i{flex:none;width:10px;height:10px;border-radius:5px}
+.gcar span{flex:1;min-width:0;text-align:left;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.gcar small{display:flex;align-items:center;gap:4px;font-size:11px;font-weight:700;letter-spacing:1px;color:#7c7f99;text-transform:uppercase;white-space:nowrap}
+.gcar small.use{color:var(--neon)}
+.gcar small.price{color:var(--bolt)}
+.gcar .tok,.gitem .tok{width:12px;height:12px}
+.gstage{grid-area:stage;min-height:0;display:flex;flex-direction:column;align-items:center;gap:12px;padding:10px 0;text-align:center}
 .gtitle{text-shadow:0 2px 16px rgba(0,0,0,.6)}
 .gcls{font-size:12px;font-weight:700;letter-spacing:3px;color:var(--neon);text-transform:uppercase}
-.gname{font-family:var(--disp);font-size:64px;line-height:1;text-transform:uppercase}
-.gspace{grid-area:space;min-height:0}
-.gbtns{grid-area:btns;display:flex;flex-wrap:wrap;gap:12px}
-.gbtns button{height:60px;padding:0 24px;border-radius:16px;border:2px solid rgba(255,255,255,.3);background:rgba(13,15,26,.85);color:var(--cream);font-size:15px;font-weight:700;letter-spacing:2px;text-transform:uppercase;box-shadow:0 5px 0 #2a2c3c;cursor:pointer}
-.gbtns button:active{transform:translateY(3px);box-shadow:0 2px 0 #2a2c3c}
-#garage #gDone{padding:0 36px;border:0;background:var(--bolt);color:var(--ink);font-family:var(--disp);font-weight:400;font-size:20px;box-shadow:0 6px 0 #a67c00}
-#garage #gDone:active{box-shadow:0 3px 0 #a67c00}
-.gpanel{grid-area:panel;min-height:0;overflow:auto;touch-action:pan-y;display:flex;flex-direction:column;gap:18px;padding:22px;border-radius:20px;background:rgba(13,15,26,.9);border:1px solid var(--edge);scrollbar-width:thin;scrollbar-color:rgba(255,255,255,.2) transparent}
-.grow{display:flex;flex-direction:column;gap:10px}
-#garage .olab b{font-size:13px;font-weight:600;letter-spacing:0;color:var(--cream);text-transform:none}
-#garage .olab small{font-size:12px;font-weight:400;letter-spacing:0;text-transform:none}
-.gsws{display:flex;flex-wrap:wrap;gap:10px}
-.gsw{position:relative;flex:none;width:44px;height:44px;border-radius:22px;padding:0;border:3px solid rgba(255,255,255,.15);background:var(--c);display:flex;align-items:center;justify-content:center;cursor:pointer;transition:transform .12s}
-.gsw:hover{transform:scale(1.08)}
-.gsw.sel{border-color:var(--cream);box-shadow:inset 0 0 0 3px var(--ink)}
-.gsw.locked{opacity:.45;cursor:not-allowed}
-.gsw.locked:hover{transform:none}
-.gsw svg{width:16px;height:16px;fill:none;stroke:var(--cream);stroke-width:2.5;stroke-linecap:round;stroke-linejoin:round;filter:drop-shadow(0 1px 1px rgba(0,0,0,.6))}
-.gsw.off{background:var(--ink)}
-.gsw.pick{overflow:hidden;background:conic-gradient(#f33,#ff3,#3f3,#3ff,#33f,#f3f,#f33)}
-.gsw.pick input{position:absolute;inset:-6px;width:calc(100% + 12px);height:calc(100% + 12px);opacity:0;cursor:pointer}
-.gsws.sm{gap:8px}
-.gsws.sm .gsw{width:34px;height:34px;border-width:2px}
-#gNum{width:100%;height:48px;padding:0 14px;border-radius:12px;border:1px solid rgba(255,255,255,.16);background:rgba(255,255,255,.05);color:var(--cream);font-family:var(--disp);font-size:22px;outline:none;user-select:text;-webkit-user-select:text;pointer-events:auto}
-#gNum::placeholder{font-family:var(--body);font-size:15px;color:#7c7f99}
-#gNum:focus{border-color:var(--bolt)}
-.gmore{display:flex;flex-direction:column;gap:14px;border-top:1px solid var(--edge);padding-top:14px}
-.gmore summary{cursor:pointer;font-size:13px;font-weight:700;letter-spacing:1px;color:#c9cbdb;list-style-position:inside}
-.gmore[open] summary{margin-bottom:14px}
-.gmore .grow+.grow{margin-top:14px}
-.gopts{display:flex;flex-wrap:wrap;gap:6px}
-.gopts button{min-height:38px;padding:0 12px;border-radius:10px;border:1px solid var(--edge);background:rgba(255,255,255,.04);color:#c9cbdb;font-size:13px;font-weight:700;cursor:pointer}
-.gopts button.sel{background:var(--bolt);border-color:var(--bolt);color:var(--ink)}
-.gopts button.locked{opacity:.45;cursor:not-allowed}
-.gnote{margin-top:auto;padding:12px 14px;border-radius:12px;background:rgba(255,210,58,.1);font-size:13px;line-height:1.45;color:#e8e2c8}
-.gnote b{color:var(--bolt)}
-/* phones and short windows: the car on top, the panel under it, the buttons pinned to the bottom */
+.gname{font-family:var(--disp);font-size:52px;line-height:1;text-transform:uppercase}
+.gspace{flex:1;align-self:stretch;min-height:0}
+.glock{display:flex;align-items:center;gap:14px;padding:12px 16px;border-radius:14px;background:rgba(13,15,26,.92);border:1px solid rgba(255,255,255,.14);font-size:15px;line-height:1.35;color:#c9cbdb;text-align:left}
+.glock b{color:var(--cream)}
+.glock svg{flex:none;width:20px;height:20px;fill:none;stroke:var(--dim);stroke-width:2.5;stroke-linecap:round;stroke-linejoin:round}
+.gpanel{grid-area:panel;min-height:0;display:flex;flex-direction:column;gap:14px;padding:18px;border-radius:18px;background:rgba(13,15,26,.92);border:1px solid var(--edge);overflow:auto;touch-action:pan-y;scrollbar-width:thin;scrollbar-color:rgba(255,255,255,.2) transparent}
+.gitems{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+.gitem{min-width:0;display:flex;flex-direction:column;align-items:flex-start;gap:6px;padding:10px;border-radius:12px;border:2px solid transparent;background:rgba(255,255,255,.04);color:var(--cream);text-align:left;cursor:pointer;transition:background .15s}
+.gitem:hover{background:rgba(255,255,255,.08)}
+.gitem.sel{background:rgba(255,210,58,.1);border-color:var(--bolt)}
+.gitem b{max-width:100%;font-size:13px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.gitem small{display:flex;align-items:center;gap:4px;font-size:12px;font-weight:700;color:var(--bolt);text-transform:uppercase}
+.gitem small.own{color:#7cff9e}
+.gitem small.on{color:var(--neon)}
+.gitem small.short{color:#ff8a8a}
+.gsw{display:block;width:100%;height:46px;border-radius:10px;background:var(--c)}
+.gsw.off{background:linear-gradient(to top left,transparent calc(50% - 1px),rgba(255,255,255,.3) 50%,transparent calc(50% + 1px)),#07080f;box-shadow:inset 0 0 0 1px rgba(255,255,255,.14)}
+@media (prefers-reduced-motion:no-preference){.gsw.rainbow{animation:ghue 4s linear infinite}}
+@keyframes ghue{to{filter:hue-rotate(360deg)}}
+.gfair{font-size:13px;line-height:1.45;color:#8a8da6}
+.gbuy{margin-top:auto;display:flex;flex-direction:column;gap:8px}
+.ghint{font-size:13px;line-height:1.4;color:#e8e2c8}
+.ghint b{color:var(--bolt)}
+.ghint:empty,.gmsg:empty{display:none}
+.gsel{display:flex;justify-content:space-between;gap:12px;font-size:14px;color:#c9cbdb}
+.gsel span:last-child{text-align:right}
+.gcta{height:60px;padding:0 12px;border-radius:16px;border:0;font-family:var(--disp);font-size:18px;letter-spacing:1px;text-transform:uppercase;cursor:pointer}
+.gcta.equip{background:var(--neon);color:var(--ink);box-shadow:0 5px 0 #0b6a80}
+.gcta.buy,.gcta.confirm{background:var(--bolt);color:var(--ink);box-shadow:0 5px 0 #a67c00}
+.gcta.confirm{background:#fff0a8}
+.gcta.short{border:2px solid var(--bolt);background:transparent;color:var(--bolt)}
+.gcta.on,.gcta:disabled{background:rgba(255,255,255,.08);color:#7c7f99;box-shadow:none;cursor:default}
+.gcta.equip:active{transform:translateY(3px);box-shadow:0 2px 0 #0b6a80}
+.gcta.buy:active,.gcta.confirm:active{transform:translateY(3px);box-shadow:0 2px 0 #a67c00}
+.gmsg{font-size:13px;line-height:1.4;color:var(--bolt)}
+/* phones and short windows: the panels stack (cars scroll sideways), the button stays at the bottom of the screen */
 @media (max-width:900px),(max-height:560px){
-  #garage{background:linear-gradient(180deg,rgba(7,8,15,.45),rgba(7,8,15,0) 30%)}
-  .gwrap{height:auto;min-height:100%;padding:4px 0 0;gap:14px;grid-template-columns:minmax(0,1fr);grid-template-rows:auto;grid-template-areas:"head" "space" "panel" "btns"}
-  .gname{font-size:40px}
-  .gspace{height:clamp(200px,42vh,420px)}
-  .gpanel{overflow:visible;padding:18px}
-  .gbtns{position:sticky;bottom:calc(-1 * max(18px,env(safe-area-inset-bottom)));z-index:3;margin:0 -16px;padding:12px 16px max(12px,env(safe-area-inset-bottom));
-    display:grid;grid-template-columns:1fr 1fr;gap:10px;background:linear-gradient(180deg,rgba(7,8,15,0),rgba(7,8,15,.96) 20px)}
-  .gbtns button{height:52px;padding:0 8px;font-size:13px;letter-spacing:1px}
-  #garage #gDone{grid-column:1/-1;height:56px;font-size:18px}
+  #garage{background:linear-gradient(180deg,rgba(7,8,15,.55),rgba(7,8,15,0) 45%)}
+  .gwrap{height:auto;min-height:100%;padding:4px 0 0;gap:14px;grid-template-columns:minmax(0,1fr);grid-template-rows:auto;grid-template-areas:"head" "cars" "stage" "panel"}
+  .gtl{gap:12px}
+  .gtl h2{font-size:28px}
+  .gcars{padding:10px}
+  .gcarlist{flex-direction:row;overflow-x:auto;overflow-y:hidden;touch-action:pan-x pan-y;padding-bottom:2px}
+  .gstage{padding:0}
+  .gname{font-size:36px}
+  .gspace{flex:none;height:clamp(170px,32vh,360px)}
+  .gpanel{overflow:visible;padding:16px}
+  .gbuy{position:sticky;bottom:calc(-1 * max(18px,env(safe-area-inset-bottom)));z-index:3;margin:0 -16px -16px;padding:22px 16px max(12px,env(safe-area-inset-bottom));border-radius:0 0 18px 18px;
+    background:linear-gradient(180deg,rgba(13,15,26,0),rgba(13,15,26,.98) 14px)}
 }
+@media (max-width:600px){
+  .gbal{height:44px;padding-left:12px}
+  .gbal b{margin:0 8px 0 4px;font-size:17px}
+  #gTokens{height:34px;padding:0 10px;font-size:12px}
+  .gitems{gap:8px}
+  .gitem{padding:8px}
+  .gsw{height:38px}
+  .gcta{height:54px;font-size:16px}
+}
+@media (max-width:400px){#gTokens span{display:none}}
 /* online: the home view (quick match, private room, join by code) and the room */
 .ohome{flex:none;width:min(1100px,100%);display:flex;flex-direction:column;gap:24px;padding:22px 32px}
 #online .driver{padding-right:16px}
@@ -1068,6 +1107,9 @@ body:has(#result:not(.hidden)) #hud,body:has(#result:not(.hidden)) #clinks,body:
 #rmCars .carcard:hover{transform:none;border-color:rgba(255,255,255,.35)}
 #rmCars .carcard.sel{border-color:var(--neon);background:rgba(54,226,255,.12);box-shadow:none}
 #rmCars .carcard .cn{font-size:11px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#rmCars .carcard.forsale img{opacity:.55}
+#rmCars .carcard .cp{display:flex;align-items:center;justify-content:center;gap:3px;margin-top:2px;font-size:11px;font-weight:700;color:var(--bolt)}
+#rmCars .carcard .cp .tok{width:11px;height:11px}
 .roomacts{flex:none;display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:12px 20px;position:sticky;bottom:calc(-1 * max(18px,env(safe-area-inset-bottom)));z-index:3}
 .roomacts .onlmsg{flex:1 1 280px}
 .racts{display:flex;gap:14px}
@@ -1613,6 +1655,7 @@ body:has(#result:not(.hidden)) #hud,body:has(#result:not(.hidden)) #clinks,body:
     </div>
     <div class="mtools">
       <div class="driver"><label for="pname">Driver</label><input id="pname" maxlength="16" autocomplete="off" spellcheck="false"><button id="pdice" type="button" title="Random name" aria-label="Random name"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="4"/><circle cx="8.5" cy="8.5" r="1.2" class="f"/><circle cx="12" cy="12" r="1.2" class="f"/><circle cx="15.5" cy="15.5" r="1.2" class="f"/></svg></button><button id="pacct" class="pacct" type="button" title="Your account"><i class="av" id="pacctAv"></i><b id="pacctName"></b><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg></button></div>
+      <button class="pill tokpill" id="tokbtn" type="button" title="Your tokens: spend them in the Garage"><svg class="tok" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2l8.66 5v10L12 22l-8.66-5V7z"/><path d="M12 6.5l4.76 2.75v5.5L12 17.5l-4.76-2.75v-5.5z"/></svg><b id="tokBal"></b></button>
       <button class="pill" id="chalbtn" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 22c4 0 7-3 7-7 0-4-3-6-4-10-2 2-3 4-3 6-1-1-2-2-2-4-3 2-5 5-5 8 0 4 3 7 7 7z"/></svg><span>Challenges</span></button>
       <button class="pill" id="garagebtn" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 21V9l9-6 9 6v12"/><path d="M7 21v-8h10v8M7 17h10"/></svg><span>Garage</span></button>
       <button class="pill" id="boardbtn" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 21h8M12 17v4M7 4h10v5a5 5 0 0 1-10 0z"/><path d="M17 5h3v2a3 3 0 0 1-3 3M7 5H4v2a3 3 0 0 0 3 3"/></svg><span>Leaderboard</span></button>
@@ -1868,26 +1911,29 @@ body:has(#result:not(.hidden)) #hud,body:has(#result:not(.hidden)) #clinks,body:
 
 <div id="garage" class="screen hidden">
   <div class="gwrap">
-    <div class="ghead">
-      <header class="shead"><div><button class="backbtn" id="gBack" type="button" aria-label="Back without saving" title="Back without saving"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg></button><h2>Garage</h2></div></header>
+    <header class="ghead">
+      <div class="gtl"><button class="backbtn" id="gBack" type="button" aria-label="Back to lobby" title="Back"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg></button><h2>Garage</h2></div>
+      <div class="gbal"><svg class="tok" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2l8.66 5v10L12 22l-8.66-5V7z"/><path d="M12 6.5l4.76 2.75v5.5L12 17.5l-4.76-2.75v-5.5z"/></svg><b id="gBal"></b><button id="gTokens" type="button" aria-label="Get more tokens"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg><span>Get tokens</span></button></div>
+    </header>
+    <section class="gcars" aria-label="Your cars">
+      <div class="glab" id="gCarsHead"></div>
+      <div class="gcarlist" id="gCars"></div>
+    </section>
+    <section class="gstage" aria-label="Preview">
       <div class="gtitle"><div class="gcls" id="gCls"></div><div class="gname" id="gCar"></div></div>
-    </div>
-    <div class="gspace" id="gSpace"></div>
-    <div class="gbtns"><button id="gDone" type="button">Save look</button><button class="gsec" id="gRandom" type="button">Randomize</button><button class="gsec" id="gReset" type="button">Factory look</button></div>
+      <div class="gspace" id="gSpace"></div>
+      <div class="glock hidden" id="gLock"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg><span id="gLockText"></span></div>
+    </section>
     <section class="gpanel" aria-label="Customize">
-      <div class="grow"><div class="olab"><span>Paint</span><b id="gPaintName"></b></div><div class="gsws" id="gPaint"></div></div>
-      <div class="grow"><div class="olab"><span>Rims</span><b id="gRimName"></b></div><div class="gsws" id="gRimColor"></div></div>
-      <div class="grow"><div class="olab"><span>Underglow</span><b id="gGlowName"></b></div><div class="gsws" id="gGlow"></div></div>
-      <div class="grow"><div class="olab">Racing stripe</div><div class="seg" id="gStripes"></div></div>
-      <div class="grow"><label class="olab" for="gNum">Race number</label><input id="gNum" inputmode="numeric" maxlength="2" placeholder="None" autocomplete="off" spellcheck="false"></div>
-      <details class="gmore"><summary>More options</summary>
-        <div class="grow"><div class="olab">Finish</div><div class="gopts" id="gFinish"></div></div>
-        <div class="grow"><div class="olab"><span>Accent</span><small>wing, splitter, skirts, stripes</small></div><div class="gsws sm" id="gAccent"></div></div>
-        <div class="grow"><div class="olab">Rim style</div><div class="gopts" id="gRim"></div></div>
-        <div class="grow"><div class="olab">Tyres</div><div class="gopts" id="gTyre"></div></div>
-        <div class="grow"><div class="olab">Brake calipers</div><div class="gsws sm" id="gCaliper"></div></div>
-      </details>
-      <div class="gnote" id="gNote" role="status"></div>
+      <div class="seg" id="gTabs" role="group" aria-label="Part"></div>
+      <div class="gitems" id="gItems"></div>
+      <p class="gfair">Looks are cosmetic. Online races and leagues stay fair: parts never change speed or grip.</p>
+      <div class="gbuy">
+        <div class="ghint" id="gHint"></div>
+        <div class="gsel"><span id="gSelName"></span><span id="gSelNote"></span></div>
+        <button class="gcta" id="gCta" type="button"></button>
+        <div class="gmsg" id="gMsg" role="status" aria-live="polite"></div>
+      </div>
     </section>
   </div>
 </div>

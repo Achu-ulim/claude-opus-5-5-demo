@@ -2,12 +2,13 @@
 // player gets the same set and it works offline. Progress, the streak and XP live in the game's settings.
 import { MAPS, MAP_TINT } from './maps.js';
 import { mulberry32, formatTime } from './util.js';
+import { partForUnlock } from './catalog.js';
 
 const $ = (id) => document.getElementById(id);
 const pick = (rnd, list) => list[Math.floor(rnd() * list.length)];
 const fmt = (n) => Math.round(n).toLocaleString('en-US');
 const TIERS = [['easy', 'Easy', '#7cff9e'], ['medium', 'Medium', '#ffd23a'], ['hard', 'Hard', '#ff5a5a']];
-// Garage finishes a hard challenge can award (see LOCKED_FINISHES in league.js)
+// Garage parts a hard challenge can award: league unlock flags, named by the parts' earn rules in catalog.js
 const UNLOCK_NAMES = { chrome: 'Chrome paint', neon: 'Neon rims', green: 'Green glow' };
 const XP = { easy: 100, medium: 200, hard: 400 };
 
@@ -182,7 +183,8 @@ export class Challenges {
 
   reward(i) {
     const c = this.set[i];
-    const unlock = c.unlocks?.find((id) => !this.game.league.unlocked(id));
+    // the first finish the player doesn't have yet, earned or bought with tokens
+    const unlock = c.unlocks?.find((id) => !this.game.league.unlocked(id) && !this.game.has(partForUnlock(id)?.id));
     return unlock ? { unlock, label: UNLOCK_NAMES[unlock] } : { xp: XP[c.tier], label: `+${XP[c.tier]} XP` };
   }
 

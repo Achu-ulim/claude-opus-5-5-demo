@@ -29,9 +29,11 @@ import { Online } from './online.js';
 import { Leagues } from './leagues.js';
 import { Account } from './account.js';
 import { Garage } from './garage.js';
+import { item, carItemId, legacyLook } from './catalog.js';
+import * as wallet from './wallet.js';
 import { Challenges } from './challenges.js';
 import { Ghosts } from './ghost.js';
-import { COUNTDOWN, cleanLook } from './netproto.js';
+import { COUNTDOWN } from './netproto.js';
 import { clamp, lerp, damp, dampAngle, wrapAngle, mulberry32, formatTime, smoothstep } from './util.js';
 import { setMaxAniso } from './textures.js';
 
@@ -186,9 +188,6 @@ class Game {
       f1: { team: 0, laps: 3, diff: 1, rounds: 6, tyre: 'medium' } }, this.load());
     if (!LAPS.includes(this.settings.laps)) this.settings.laps = 3;
     if (!(this.settings.skin >= 0 && this.settings.skin < CARS.length)) this.settings.skin = 0;
-    // garage looks per car id: keep only well-formed ones
-    const looks = this.settings.looks && typeof this.settings.looks === 'object' ? this.settings.looks : {};
-    this.settings.looks = Object.fromEntries(CARS.filter((c) => looks[c.id]).map((c) => [c.id, cleanLook(looks[c.id])]));
     this.canvas = $('gl');
     this.renderer = new THREE.WebGLRenderer({ canvas: this.canvas, antialias: true, powerPreference: 'high-performance' });
     this.renderer.toneMapping = THREE.NeutralToneMapping;
@@ -231,6 +230,9 @@ class Game {
       this.input.bindTouch($('touch'));
     }
     this.league = new League();
+    this.moveOldLooks();
+    // the lobby car has to be one the player has (hypercars cost tokens now)
+    if (!this.hasCar(this.settings.skin)) this.settings.skin = 0;
     this.confetti = new Confetti($('confetti'));
     this.setupQuality();
     this.buildMenu();
@@ -359,8 +361,11 @@ class Game {
       $('side').querySelectorAll('.opt').forEach((e) => e.classList.toggle('sel', SIDES[e.dataset.i].id === S.side));
       document.body.classList.toggle('ctl-right', S.side === 'right');
       $('skins').querySelectorAll('.carcard').forEach((e) => {
-        e.classList.toggle('sel', +e.dataset.i === S.skin);
-        e.setAttribute('aria-pressed', String(+e.dataset.i === S.skin));
+        const i = +e.dataset.i, locked = !this.hasCar(i);
+        e.classList.toggle('sel', i === S.skin);
+        e.classList.toggle('locked', locked);
+        e.setAttribute('aria-pressed', String(i === S.skin));
+        e.setAttribute('aria-label', locked ? `${CARS[i].name}, locked: open the Garage` : CARS[i].name);
       });
       mapsEl.querySelectorAll('.map').forEach((e) => e.setAttribute('aria-pressed', String(e.dataset.id === S.map)));
       $('trackPos').textContent = `${String(MAPS.findIndex((m) => m.id === S.map) + 1).padStart(2, '0')} / ${String(MAPS.length).padStart(2, '0')}`;
@@ -397,9 +402,13 @@ class Game {
     });
     bind('side', (i) => (S.side = SIDES[i].id));
     $('mutebtn').addEventListener('click', () => this.setMuted(!S.muted));
-    bind('skins', (i) => { S.skin = i; if (this.state === 'menu') this.startDemo(); });
+    // a locked car's dot opens the Garage on it
+    bind('skins', (i) => { if (!this.hasCar(i)) return this.garage.open(i, 'menu'); S.skin = i; if (this.state === 'menu') this.startDemo(); });
+    // ← → step through the cars the player has
     this.pickCar = (d) => {
-      S.skin = (S.skin + d + CARS.length) % CARS.length;
+      let i = S.skin;
+      do i = (i + d + CARS.length) % CARS.length; while (!this.hasCar(i) && i !== S.skin);
+      S.skin = i;
       refresh();
       this.audio.play('click');
       if (this.state === 'menu') this.startDemo();
@@ -408,6 +417,16 @@ class Game {
     $('carNext').addEventListener('click', () => this.pickCar(1));
     $('custombtn').addEventListener('click', () => this.garage.open(S.skin, 'menu'));
     $('garagebtn').addEventListener('click', () => this.garage.open(S.skin, 'menu'));
+    // the token balance in the lobby header; tokens are spent in the Garage
+    const showBalance = () => {
+      const n = wallet.getBalance().toLocaleString('en-US');
+      $('tokBal').textContent = n;
+      $('tokbtn').setAttribute('aria-label', `${n} tokens: open the Garage`);
+    };
+    showBalance();
+    wallet.onChange(showBalance);
+    $('tokbtn').addEventListener('click', () => this.garage.open(S.skin, 'menu'));
+    this.refreshMenu = refresh;
     this.buildSettings();
     $('start').addEventListener('click', () => this.startRace());
     $('resume').addEventListener('click', () => this.togglePause());
@@ -530,13 +549,37 @@ class Game {
     return ok;
   }
 
-  // ---------- Garage looks ----------
-  lookFor(carIndex) { return cleanLook(this.settings.looks?.[CARS[carIndex]?.id]); }
+  // ---------- Garage: what the player has, and the looks on their cars ----------
+  // a car or part (catalog.js id) is the player's when it's free, bought with tokens (wallet.js) or earned:
+  // a cup win, or a league unlock flag (Legend Cup, daily challenge rewards)
+  has(id) {
+    const it = item(id);
+    if (!it) return false;
+    if (wallet.owns(id)) return true;
+    const e = it.earn;
+    return !!e && (e.cup ? this.league.d.cupWins?.[e.cup] > 0 : this.league.unlocked(e.unlock));
+  }
+  hasCar(carIndex) { return !!CARS[carIndex] && this.has(carItemId(CARS[carIndex].id)); }
+
+  lookFor(carIndex) { return wallet.equipped(CARS[carIndex]?.id); }
+
+  // the first garage kept colour looks in settings.looks: they move to the wallet as the matching parts the player has
+  moveOldLooks() {
+    const old = this.settings.looks;
+    if (!old) return;
+    for (const car of CARS) {
+      if (!old[car.id] || Object.keys(wallet.equipped(car.id)).length) continue;
+      const look = Object.fromEntries(Object.entries(legacyLook(old[car.id])).filter(([, id]) => this.has(id)));
+      if (Object.keys(look).length) wallet.equip(car.id, look);
+    }
+    delete this.settings.looks;
+    this.save();
+  }
 
   // car pictures for the online room, drawn the way the player has made each car
   updateCarThumbs() {
     let thumbs = [];
-    try { thumbs = renderCarThumbs(this.settings.looks); } catch { /* previews are optional */ }
+    try { thumbs = renderCarThumbs(Object.fromEntries(CARS.map((c) => [c.id, wallet.equipped(c.id)]))); } catch { /* previews are optional */ }
     this.carThumbs = thumbs;
   }
 
@@ -547,11 +590,11 @@ class Game {
     this.demoCut = true;
   }
 
-  // dress that demo car in the look being made, without restarting the demo
-  dressDemoCar(car, look) {
+  // dress that demo car in the look being made, without restarting the demo; in the Garage it carries no name tag
+  dressDemoCar(car, look, named = true) {
     const r = this.racers[0];
     if (this.state !== 'menu' || !r) return;
-    const model = buildCar(car, { name: r.name, look });
+    const model = buildCar(car, { name: named ? r.name : null, look });
     model.position.copy(r.model.position);
     model.rotation.copy(r.model.rotation);
     this.scene.remove(r.model);
@@ -560,12 +603,14 @@ class Game {
     this.scene.add(model);
   }
 
-  // the garage closed: new pictures, the lobby demo shows the new look, and online the room learns it
-  onLooksChanged() {
+  // the garage closed with a new car or look: new pictures, the lobby shows the car, and online the room learns it.
+  // toLobby: the player went back to the lobby (not on into a race), so the demo restarts with their car.
+  onLooksChanged(toLobby = true) {
     this.updateCarThumbs();
+    this.refreshMenu();
     this.online.renderCars();
     this.online.sendLook();
-    if (this.state === 'menu') this.startDemo();
+    if (toLobby && this.state === 'menu') this.startDemo();
   }
 
   // sound on/off for everything (engines, effects, music), remembered between visits
@@ -643,6 +688,7 @@ class Game {
       return this.startDemo();
     }
     $('menu').classList.remove('hidden');
+    this.refreshMenu(); // a cup win may have unlocked a car
     // a tournament may have left us on a different track than the one picked in the lobby
     if (this.map && this.map.id !== this.settings.map && !this.loading) this.loadMap(this.settings.map).then(() => this.startDemo());
     else this.startDemo();
@@ -2846,8 +2892,9 @@ class Game {
       const R = sky ? 30 : frame ? (cam.aspect < 1 ? 14 : 8.5) : 11;
       const want = new THREE.Vector3(tx + Math.sin(a) * R, ty + (sky ? 5 : 3.2 + Math.sin(this.time * 0.4) * 1.2), tz + Math.cos(a) * R);
       // a new subject far across the map (the winner's celebration, then back): cut rather than fly over
+      // the garage keeps its car in the frame: no trailing behind it while it drives
       const cut = this.demoCut || this.camPos.distanceTo(want) > 80;
-      if (cut) { this.camPos.copy(want); this.demoCut = false; }
+      if (cut || frame) { this.camPos.copy(want); this.demoCut = false; }
       this.camPos.lerp(want, 1 - Math.exp(-3 * dt));
       this.camLook.lerp(new THREE.Vector3(tx, ty + (sky ? 16 : 1), tz), sky && !cut ? 1 - Math.exp(-2 * dt) : 1);
       cam.position.copy(this.camPos);

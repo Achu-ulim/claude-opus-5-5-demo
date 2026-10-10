@@ -1,5 +1,6 @@
 // Online play: what the game client and the multiplayer server (server/src/index.js) agree on.
 // Imported by both sides, so it must stay free of browser, three.js and Workers dependencies.
+import { LOOK_SLOTS, FACTORY, item } from './catalog.js';
 
 export const MAX_PLAYERS = 6; // the grid and the points table are built for six racers
 export const SNAPSHOT_HZ = 15; // car state updates per second from each racer
@@ -25,24 +26,17 @@ export function cleanName(s, max = 16) {
 }
 
 // ---------- Car looks (the garage) ----------
-// Paint, rims, tyres, trim and a race number a player picks for a car. Looks only: they never change how a car drives.
-// A glow of 0 (black) means the underglow is off.
-export const FINISHES = ['gloss', 'metallic', 'matte', 'pearl', 'chrome'];
-export const RIM_STYLES = ['star', 'six', 'split', 'mesh', 'turbine', 'dish'];
-export const TYRE_STYLES = ['street', 'redline', 'whitewall', 'letters'];
-const COLOR_KEYS = ['paint', 'accent', 'rimColor', 'caliper', 'glow'];
-
-// keeps only well-formed fields, so a look from storage or another player can't break a car
+// What a player has fitted to a car: { paint, wheels, bodykit, glow }, each a part id from catalog.js. Looks only:
+// they never change how a car drives. A slot that is left out has the car's factory part.
+// Keeps only ids the catalog has for that slot, so a look from storage or another player can't break a car. Looks
+// from older games (colours, not ids) and ids this version doesn't know come out as factory parts.
 export function cleanLook(l) {
   const out = {};
   if (!l || typeof l !== 'object') return out;
-  for (const k of COLOR_KEYS) if (Number.isInteger(l[k]) && l[k] >= 0 && l[k] <= 0xffffff) out[k] = l[k];
-  if (FINISHES.includes(l.finish)) out.finish = l.finish;
-  if (RIM_STYLES.includes(l.rim)) out.rim = l.rim;
-  if (TYRE_STYLES.includes(l.tyre)) out.tyre = l.tyre;
-  if (typeof l.stripes === 'boolean') out.stripes = l.stripes;
-  // race number on the roof and doors; looks from older games have none, which shows no number
-  if (Number.isInteger(l.number) && l.number >= 0 && l.number <= 99) out.number = l.number;
+  for (const slot of LOOK_SLOTS) {
+    const id = l[slot];
+    if (typeof id === 'string' && id !== FACTORY[slot] && item(id)?.category === slot) out[slot] = id;
+  }
   return out;
 }
 

@@ -13,15 +13,6 @@ export const CUPS = [
   { id: 'legend', name: 'Legend Cup', icon: '🏆', color: '#ffd23a', races: 5, laps: 3, diff: 2, band: [0.65, 1], desc: 'Five cities, three laps each, against the top of the bank.' },
 ];
 
-// garage finishes that have to be earned, and how. Each one is a flag in the saved data (d.unlocks):
-// Gold is set by winning the Legend Cup, the others will be set by Daily Challenges (league.unlock) once they exist.
-export const LOCKED_FINISHES = {
-  gold: 'Win the Legend Cup to unlock',
-  chrome: 'Unlocks from Daily Challenges',
-  neon: 'Unlocks from Daily Challenges',
-  green: 'Unlocks from Daily Challenges',
-};
-
 const PREFIX = ['Neon', 'Turbo', 'Apex', 'Nitro', 'Shadow', 'Pixel', 'Blaze', 'Frost', 'Storm', 'Rocket', 'Lucky', 'Silent', 'Crimson', 'Vortex', 'Zen', 'Hyper', 'Solar', 'Lunar', 'Iron', 'Velvet', 'Rapid', 'Night', 'Gold', 'Wild'];
 const NOUN = ['Fox', 'Tiger', 'Hawk', 'Wolf', 'Viper', 'Comet', 'Falcon', 'Panda', 'Raven', 'Drifter', 'Ghost', 'Rider', 'Bolt', 'Lynx', 'Cobra', 'Otter', 'Koi', 'Dragon', 'Mantis', 'Jet', 'Shark', 'Phoenix'];
 const FIRST = ['Kai', 'Mira', 'Leo', 'Hana', 'Rin', 'Zoe', 'Ivan', 'Aiko', 'Nico', 'Sora', 'Luca', 'Yuki', 'Maya', 'Theo', 'Ada', 'Omar', 'Lena', 'Juno', 'Ravi', 'Emi', 'Finn', 'Noor', 'Tao', 'Ines'];
@@ -222,8 +213,9 @@ export class League {
   abandonCup() { this.d.cup = null; this.save(); }
 
   // ---------- Garage unlocks ----------
+  // Garage parts earned free, each a flag in the saved data (d.unlocks): Gold comes with a Legend Cup win, the others
+  // are hard Daily Challenge rewards (unlock). catalog.js names the part each flag stands for.
   unlocked(id) {
-    if (!(id in LOCKED_FINISHES)) return true;
     // Legend Cups won before unlocks existed count too
     return !!this.d.unlocks?.[id] || (id === 'gold' && this.d.cupWins.legend > 0);
   }
