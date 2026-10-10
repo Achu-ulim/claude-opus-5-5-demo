@@ -36,7 +36,7 @@
     { "tag": "v4", "new_sqlite_classes": ["Presence"] }
   ],
   // Accounts also need these secrets (npx wrangler secret put <NAME>): AUTH_SECRET, a long random string that signs
-  // sessions (openssl rand -base64 48), and EMAIL_API_KEY if EMAIL_PROVIDER is "resend".
+  // sessions (openssl rand -base64 48), EMAIL_API_KEY if EMAIL_PROVIDER is "resend", and PAYSTACK_SECRET_KEY for payments.
   // For "cloudflare", add the Email Service binding instead: "send_email": [{ "name": "EMAIL" }].
   // Local dev reads both from .dev.vars (see .dev.vars.example).
   "vars": {
@@ -46,6 +46,10 @@
     // how login codes are emailed: "resend" or "cloudflare" (server/src/mail.js). Empty: no emails, so only devices
     // that already have a device token can log in. Resend only sends once driftbolt.online is verified at resend.com/domains
     "EMAIL_PROVIDER": "resend",
-    "EMAIL_FROM": "Driftbolt <login@driftbolt.online>"
+    "EMAIL_FROM": "Driftbolt <login@driftbolt.online>",
+    // Paystack, for buying tokens (server/src/pay.js). The secret key is a secret: npx wrangler secret put PAYSTACK_SECRET_KEY.
+    // Without it, buying is off. In Paystack's dashboard, set the webhook URL to https://driftbolt.online/paystack/webhook.
+    // The public key isn't needed by the game's checkout (the server opens each payment and hands over an access code).
+    "PAYSTACK_PUBLIC_KEY": ""
   }
 }

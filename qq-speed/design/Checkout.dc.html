@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Checkout States</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Bungee&amp;family=Chakra+Petch:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#07080F}
+button{font-family:inherit;cursor:pointer}
+</style>
+</helmet>
+<div style="width: 1440px; height: 900px; box-sizing: border-box; padding: 32px 40px; background: #0B0C16; color: #F4F1E8; font-family: 'Chakra Petch', sans-serif; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); grid-template-rows: repeat(2, minmax(0, 1fr)); gap: 24px">
+  <sc-for list="{{panels}}" as="p" hint-placeholder-count="6">
+    <div style="display: flex; flex-direction: column; gap: 10px">
+      <div style="font-size: 12px; font-weight: 700; letter-spacing: 3px; color: #7C7F99">{{p.step}}</div>
+      <div style="{{p.card}}">
+        <div style="{{p.iconWrap}}"><svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="{{p.icon}}"></path></svg></div>
+        <div style="font-family: 'Bungee', sans-serif; font-size: 22px; line-height: 1.15">{{p.title}}</div>
+        <div style="font-size: 15px; line-height: 1.5; color: #C9CBDB; white-space: pre-line">{{p.body}}</div>
+        <div style="margin-top: auto; display: flex; flex-direction: column; gap: 8px; width: 100%">
+          <button style="{{p.primaryStyle}}">{{p.primary}}</button>
+          <button style="height: 44px; border: 0; background: transparent; color: #A3A6BF; font-size: 14px; font-weight: 700">{{p.secondary}}</button>
+        </div>
+      </div>
+    </div>
+  </sc-for>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":900}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const I = {
+      spend: 'M12 2l8.66 5v10L12 22l-8.66-5V7z',
+      user: 'M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM4 21c1-4 4-6 8-6s7 2 8 6',
+      wait: 'M12 6v6l4 2M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20z',
+      bank: 'M3 10l9-6 9 6M5 10v8M19 10v8M9 10v8M15 10v8M3 20h18',
+      ok: 'M5 12l5 5L20 7',
+      fail: 'M6 6l12 12M18 6L6 18'
+    };
+    const P = [
+      ['1 · SPEND TOKENS', I.spend, '#FFD23A', 'UNLOCK MIDNIGHT PEARL?', '400 tokens · balance 1,250 → 850\nPaint for Ferrari. Yours to keep.', 'UNLOCK · 400', 'Cancel', 'y'],
+      ['2 · GUESTS BUYING TOKENS', I.user, '#36E2FF', 'SAVE YOUR GARAGE FIRST', 'Tokens live on your account, so you keep them on every device.\nTakes 20 seconds: name + email.', 'CREATE ACCOUNT', 'Log in instead', 'c'],
+      ['3 · PAYSTACK OPEN', I.wait, '#36E2FF', 'COMPLETE PAYMENT', 'Finish paying in the Paystack window.\nDon\'t close this page.', 'REOPEN PAYMENT WINDOW', 'Cancel', 'c'],
+      ['4 · BANK TRANSFER PENDING', I.bank, '#FFD23A', 'WAITING FOR YOUR BANK', 'Transfers can take a few minutes. Keep racing; your tokens arrive automatically and we\'ll email a receipt.', 'KEEP RACING', 'Check status', 'y'],
+      ['5 · SUCCESS', I.ok, '#7CFF9E', '+1,200 TOKENS', 'Payment confirmed. Balance: 2,450.\nReceipt sent to ni•••••@gmail.com.', 'UNLOCK MIDNIGHT PEARL', 'Back to garage', 'g'],
+      ['6 · FAILED OR CANCELLED', I.fail, '#FF6B6B', 'PAYMENT DIDN\'T GO THROUGH', 'You were not charged. If money left your account, it will be reversed by your bank, or contact support with reference DB-7QM4-2210.', 'TRY AGAIN', 'Contact support', 'r']
+    ];
+    const fill = { y: ['#FFD23A', '#07080F', '#A67C00'], c: ['#36E2FF', '#07080F', '#0B6A80'], g: ['#7CFF9E', '#07080F', '#2F8A4E'], r: ['#FF6B6B', '#07080F', '#8A1C1C'] };
+    return {
+      panels: P.map(([step, icon, color, title, body, primary, secondary, f]) => ({
+        step, icon, title, body, primary, secondary,
+        card: 'flex: 1; display: flex; flex-direction: column; align-items: center; gap: 12px; padding: 24px; border-radius: 22px; text-align: center; background: #11131F; border: 1px solid rgba(255,255,255,0.12); box-shadow: 0 20px 50px rgba(0,0,0,0.4)',
+        iconWrap: 'width: 60px; height: 60px; border-radius: 30px; display: flex; align-items: center; justify-content: center; color: ' + color + '; background: rgba(255,255,255,0.06); border: 2px solid ' + color,
+        primaryStyle: 'height: 52px; border: 0; border-radius: 14px; font-family: Bungee, sans-serif; font-size: 16px; letter-spacing: 1px; background: ' + fill[f][0] + '; color: ' + fill[f][1] + '; box-shadow: 0 5px 0 ' + fill[f][2]
+      }))
+    };
+  }
+}
+</script>
+</body>
+</html>

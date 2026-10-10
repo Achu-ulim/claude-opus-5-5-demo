@@ -18,6 +18,8 @@ const NOUN = ['Fox', 'Tiger', 'Hawk', 'Wolf', 'Viper', 'Comet', 'Falcon', 'Panda
 const FIRST = ['Kai', 'Mira', 'Leo', 'Hana', 'Rin', 'Zoe', 'Ivan', 'Aiko', 'Nico', 'Sora', 'Luca', 'Yuki', 'Maya', 'Theo', 'Ada', 'Omar', 'Lena', 'Juno', 'Ravi', 'Emi', 'Finn', 'Noor', 'Tao', 'Ines'];
 
 const pick = (a, rnd) => a[Math.floor(rnd() * a.length)];
+// a cup's or season's own id: its win can only be rewarded once (wallet.js)
+export const runId = () => Array.from(crypto.getRandomValues(new Uint8Array(12)), (x) => 'abcdefghijklmnopqrstuvwxyz0123456789'[x % 36]).join('');
 const shuffle = (a, rnd = Math.random) => {
   for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(rnd() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; }
   return a;
@@ -154,7 +156,7 @@ export class League {
       return c;
     });
     this.d.cup = {
-      id: cupId, car, mode,
+      id: cupId, car, mode, run: runId(),
       tracks: shuffle(MAPS.map((m) => m.id)).slice(0, def.races),
       idx: 0,
       rivals: rivals.map((r, i) => ({ id: r.id, car: cars[i] })),
@@ -207,7 +209,7 @@ export class League {
       this.d.cup = null;
     }
     this.save();
-    return { gained, standings, done, champion };
+    return { gained, standings, done, champion, run: cup.run ||= runId() };
   }
 
   abandonCup() { this.d.cup = null; this.save(); }
@@ -247,7 +249,7 @@ export class League {
     const drivers = this.f1Grid(team);
     // results: each finished round's Grand Prix and finishing order (ids)
     this.d.f1 = {
-      team, laps, diff, calendar, idx: 0, drivers,
+      team, laps, diff, calendar, idx: 0, drivers, run: runId(),
       pts: Object.fromEntries([['me', 0], ...drivers.map((d) => [d.id, 0])]),
       wins: {},
       results: [],

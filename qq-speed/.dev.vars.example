@@ -3,3 +3,5 @@
 AUTH_SECRET=local-dev-only-not-a-real-secret
 # Log login codes to the terminal instead of emailing them (only works on localhost)
 EMAIL_PROVIDER=console
+# Paystack test secret key (sk_test_… from the Paystack dashboard), so token purchases work locally. Never the live key here.
+# PAYSTACK_SECRET_KEY=sk_test_...

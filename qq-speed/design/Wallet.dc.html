@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Token Wallet</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Bungee&amp;family=Chakra+Petch:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#07080F}
+button{font-family:inherit;cursor:pointer}
+</style>
+</helmet>
+<div style="position: relative; width: 1440px; height: 900px; overflow: hidden; background: #07080F; color: #F4F1E8; font-family: 'Chakra Petch', sans-serif">
+  <div style="height: 100%; box-sizing: border-box; padding: 32px 48px; display: grid; grid-template-columns: 420px 1fr; grid-template-rows: auto 1fr; gap: 24px">
+    <header style="grid-column: 1 / -1; display: flex; align-items: center; gap: 16px">
+      <button aria-label="Back" style="width: 48px; height: 48px; border-radius: 24px; border: 1px solid rgba(255,255,255,0.14); background: rgba(13,15,26,0.85); color: #F4F1E8; display: flex; align-items: center; justify-content: center"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 5l-7 7 7 7"></path></svg></button>
+      <h1 style="margin: 0; font-family: 'Bungee', sans-serif; font-weight: 400; font-size: 40px">WALLET</h1>
+    </header>
+
+    <div style="display: flex; flex-direction: column; gap: 18px">
+      <section style="display: flex; flex-direction: column; gap: 14px; padding: 24px; border-radius: 22px; background: rgba(255,210,58,0.08); border: 2px solid #FFD23A">
+        <div style="font-size: 12px; font-weight: 700; letter-spacing: 3px; color: #FFD23A">BALANCE</div>
+        <div style="display: flex; align-items: center; gap: 14px"><svg width="44" height="44" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2l8.66 5v10L12 22l-8.66-5V7z" fill="#FFD23A"></path><path d="M12 6.5l4.76 2.75v5.5L12 17.5l-4.76-2.75v-5.5z" fill="#A67C00"></path></svg><span style="font-family: 'Bungee', sans-serif; font-size: 56px; line-height: 1">2,450</span></div>
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px">
+          <div style="padding: 12px; border-radius: 12px; background: rgba(255,255,255,0.05)"><div style="font-size: 11px; font-weight: 700; letter-spacing: 2px; color: #A3A6BF">EARNED</div><b style="font-size: 20px">1,850</b></div>
+          <div style="padding: 12px; border-radius: 12px; background: rgba(255,255,255,0.05)"><div style="font-size: 11px; font-weight: 700; letter-spacing: 2px; color: #A3A6BF">BOUGHT</div><b style="font-size: 20px">1,200</b></div>
+        </div>
+        <button style="height: 56px; border: 0; border-radius: 14px; background: #FFD23A; color: #07080F; font-family: 'Bungee', sans-serif; font-size: 18px; letter-spacing: 1px; box-shadow: 0 5px 0 #A67C00">GET TOKENS</button>
+      </section>
+
+      <section style="flex: 1; display: flex; flex-direction: column; gap: 10px; padding: 20px; border-radius: 20px; background: rgba(13,15,26,0.9); border: 1px solid rgba(255,255,255,0.12)">
+        <div style="font-size: 12px; font-weight: 700; letter-spacing: 3px; color: #A3A6BF">EARN FREE TOKENS</div>
+        <sc-for list="{{earn}}" as="e" hint-placeholder-count="4">
+          <div style="display: flex; flex-direction: column; gap: 6px; padding: 10px 12px; border-radius: 12px; background: rgba(255,255,255,0.04)">
+            <div style="display: flex; justify-content: space-between; font-size: 14px"><span style="font-weight: 600">{{e.name}}</span><b style="color: #FFD23A">+{{e.reward}}</b></div>
+            <div style="height: 6px; border-radius: 3px; background: rgba(255,255,255,0.1); overflow: hidden"><div style="{{e.bar}}"></div></div>
+            <span style="font-size: 12px; color: #8A8DA6">{{e.note}}</span>
+          </div>
+        </sc-for>
+      </section>
+    </div>
+
+    <section aria-label="History" style="display: flex; flex-direction: column; gap: 4px; padding: 20px 22px; border-radius: 20px; background: rgba(13,15,26,0.9); border: 1px solid rgba(255,255,255,0.12)">
+      <div style="display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 6px"><span style="font-size: 12px; font-weight: 700; letter-spacing: 3px; color: #A3A6BF">HISTORY</span><span style="font-size: 13px; color: #7C7F99">Receipts are also emailed</span></div>
+      <div style="display: grid; grid-template-columns: 120px 1fr 160px 120px 110px; padding: 0 12px 6px; font-size: 11px; font-weight: 700; letter-spacing: 2px; color: #7C7F99"><span>DATE</span><span>WHAT</span><span>PAYMENT</span><span>STATUS</span><span style="text-align: right">TOKENS</span></div>
+      <sc-for list="{{rows}}" as="r" hint-placeholder-count="9">
+        <div style="display: grid; grid-template-columns: 120px 1fr 160px 120px 110px; align-items: center; min-height: 52px; padding: 0 12px; border-radius: 12px; font-size: 14px; border-bottom: 1px solid rgba(255,255,255,0.05)">
+          <span style="color: #A3A6BF">{{r.date}}</span>
+          <span style="font-weight: 600">{{r.what}}</span>
+          <span style="color: #A3A6BF; font-size: 13px">{{r.pay}}</span>
+          <span style="{{r.statusStyle}}">{{r.status}}</span>
+          <span style="{{r.amtStyle}}">{{r.amt}}</span>
+        </div>
+      </sc-for>
+    </section>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":900}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const R = [
+      ['Today', 'Bought Podium pack', '₦[PRICE] · DB-7QM4-2210', 'Pending', 1200],
+      ['Today', 'Daily: 5 Perfect boosts', '—', 'Done', 150],
+      ['Yesterday', 'Unlocked Neon Cyan rims', '—', 'Done', -450],
+      ['Yesterday', 'Pro Cup win', '—', 'Done', 400],
+      ['8 Oct', '7-day streak', '—', 'Done', 300],
+      ['8 Oct', 'Unlocked Street Kit', '—', 'Done', -500],
+      ['6 Oct', 'Bought Podium pack', '₦[PRICE] · DB-K2P9-0610', 'Paid', 1200],
+      ['5 Oct', 'Payment cancelled', '₦[PRICE] · DB-X81Q-0510', 'Cancelled', 0],
+      ['3 Oct', 'Welcome bonus', '—', 'Done', 200]
+    ];
+    const tone = { Pending: '#FFD23A', Done: '#7CFF9E', Paid: '#7CFF9E', Cancelled: '#7C7F99' };
+    return {
+      earn: [['Daily challenges', 150, 0.66, '2 of 3 done today · resets in 7h'], ['Win a cup', 400, 0.5, 'Pro Cup race 3 of 4'], ['7-day streak', 300, 0.71, 'Day 5 of 7'], ['Invite a friend who races', 250, 0, 'Both of you get tokens']].map(([name, reward, p, note]) => ({
+        name, reward, note, bar: 'height: 100%; width: ' + Math.round(p * 100) + '%; background: #FFD23A'
+      })),
+      rows: R.map(([date, what, pay, status, amt]) => ({
+        date, what, pay, status,
+        statusStyle: 'font-size: 12px; font-weight: 700; letter-spacing: 1px; color: ' + tone[status],
+        amt: amt > 0 ? '+' + amt.toLocaleString('en-US') : amt < 0 ? '−' + Math.abs(amt).toLocaleString('en-US') : '0',
+        amtStyle: 'text-align: right; font-family: Bungee, sans-serif; font-size: 15px; color: ' + (status === 'Pending' ? '#FFD23A' : amt > 0 ? '#7CFF9E' : amt < 0 ? '#F4F1E8' : '#7C7F99')
+      }))
+    };
+  }
+}
+</script>
+</body>
+</html>

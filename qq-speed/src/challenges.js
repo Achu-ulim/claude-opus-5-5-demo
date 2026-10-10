@@ -1,8 +1,11 @@
 // Daily challenges: three a day (easy, medium, hard), picked by a generator seeded with the local date, so every
-// player gets the same set and it works offline. Progress, the streak and XP live in the game's settings.
+// player gets the same set and it works offline. Progress and the streak live in the game's settings; claiming a
+// challenge adds its tokens to the wallet (wallet.js), and every seventh day of a streak brings a bonus.
 import { MAPS, MAP_TINT } from './maps.js';
 import { mulberry32, formatTime } from './util.js';
-import { partForUnlock } from './catalog.js';
+import { partForUnlock, REWARDS } from './catalog.js';
+import * as wallet from './wallet.js';
+import { TOKEN } from './garage.js';
 
 const $ = (id) => document.getElementById(id);
 const pick = (rnd, list) => list[Math.floor(rnd() * list.length)];
@@ -10,7 +13,6 @@ const fmt = (n) => Math.round(n).toLocaleString('en-US');
 const TIERS = [['easy', 'Easy', '#7cff9e'], ['medium', 'Medium', '#ffd23a'], ['hard', 'Hard', '#ff5a5a']];
 // Garage parts a hard challenge can award: league unlock flags, named by the parts' earn rules in catalog.js
 const UNLOCK_NAMES = { chrome: 'Chrome paint', neon: 'Neon rims', green: 'Green glow' };
-const XP = { easy: 100, medium: 200, hard: 400 };
 
 // What a finished race adds to a challenge:
 //   drift:       metres drifted, the best single race counts
@@ -133,13 +135,13 @@ export class Challenges {
       D.prog[i] = Math.min(p, c.goal);
       if (this.done(i)) newly.push(c);
     });
-    if (newly.length) this.markStreak();
+    const streak = newly.length ? this.markStreak() : false;
     if (newly.length) this.checkBadges(); // a streak badge
     this.addCareer(r);
     const badges = this.checkBadges(r);
     this.game.save();
     this.renderDot();
-    return { daily: newly, badges };
+    return { daily: newly, badges, streak };
   }
 
   // ---------- Achievements ----------
@@ -169,36 +171,48 @@ export class Challenges {
     return fresh;
   }
 
-  // days in a row with at least one challenge completed
+  // days in a row with at least one challenge completed; true on each seventh day, which earns the streak bonus
   markStreak() {
     const key = dayKey(), s = (this.S.streak ||= { n: 0, last: null });
-    if (s.last === key) return;
+    if (s.last === key) return false;
     s.n = s.last === prevDay(key) ? s.n + 1 : 1;
     s.last = key;
+    return s.n % 7 === 0;
   }
   get streak() {
     const s = this.S.streak, key = dayKey();
     return s && (s.last === key || s.last === prevDay(key)) ? s.n : 0;
   }
 
+  // tokens for every challenge; the hard one also unlocks the first of its parts the player doesn't have yet
   reward(i) {
-    const c = this.set[i];
-    // the first finish the player doesn't have yet, earned or bought with tokens
+    const c = this.set[i], tokens = REWARDS.challenge[c.tier];
     const unlock = c.unlocks?.find((id) => !this.game.league.unlocked(id) && !this.game.has(partForUnlock(id)?.id));
-    return unlock ? { unlock, label: UNLOCK_NAMES[unlock] } : { xp: XP[c.tier], label: `+${XP[c.tier]} XP` };
+    return { tokens, unlock, label: `${TOKEN}+${tokens}${unlock ? ` · ${UNLOCK_NAMES[unlock]}` : ''}` };
   }
 
-  claim(i) {
-    const D = this.today();
-    if (!this.done(i) || D.claimed[i]) return;
+  // the tokens go to the wallet (or wait there, offline or over the day's limit); the challenge counts as claimed either way
+  async claim(i) {
+    const D = this.today(), c = this.set[i];
+    if (!this.done(i) || D.claimed[i] || this.claiming) return;
+    this.claiming = true;
     const r = this.reward(i);
-    if (r.unlock) this.game.league.unlock(r.unlock);
-    else this.S.xp = (this.S.xp || 0) + r.xp;
+    if (r.unlock) { this.game.league.unlock(r.unlock); this.game.syncEarned(); }
     D.claimed[i] = true;
     this.game.save();
     this.game.audio.play('gauge');
-    this.render();
+    try {
+      const res = await wallet.earn('challenge', { day: this.set.key, tier: c.tier }, `Daily: ${c.title}`);
+      this.note = res.held ? `+${r.tokens} tokens are waiting: ${res.error === 'cap' ? 'today\'s reward limit is reached, so they come tomorrow' : 'they\'re added once you\'re online'}.` : '';
+    } finally {
+      this.claiming = false;
+    }
+    if (!$('chal').classList.contains('hidden')) this.render();
     this.renderDot();
+  }
+
+  async claimAll() {
+    for (let i = 0; i < this.set.length; i++) if (this.done(i) && !this.today().claimed[i]) await this.claim(i);
   }
 
   get unclaimed() {
@@ -206,7 +220,10 @@ export class Challenges {
     return this.set.some((c, i) => this.done(i) && !D.claimed[i]);
   }
 
-  renderDot() { $('chalbtn').classList.toggle('dot', this.unclaimed); }
+  renderDot() {
+    $('chalbtn').classList.toggle('dot', this.unclaimed);
+    this.game.walletDot?.();
+  }
 
   open() {
     this.game.audio.play('click');
@@ -242,6 +259,7 @@ export class Challenges {
         <div class="chbar"><i style="width:${Math.round((p / c.goal) * 100)}%"></i></div>
         <div class="chfoot"><span>${progress}</span>${reward}</div></article>`;
     }).join('');
+    $('chNote').textContent = this.note || '';
     this.renderBadges();
     this.renderGhost();
     const n = this.streak;

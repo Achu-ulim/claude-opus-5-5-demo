@@ -24,10 +24,12 @@ self.addEventListener('activate', (e) => {
 self.addEventListener('fetch', (e) => {
   const req = e.request;
   const url = new URL(req.url);
-  // the game's own files only: the online server's answers (accounts, leagues, health) always come from the network
-  if (req.method !== 'GET' || url.origin !== self.location.origin || /^\/(auth|league|ws|health)(\/|$)/.test(url.pathname)) return;
-  // cache first: instant start, works offline; updates arrive through a new service worker version
-  if (req.mode === 'navigate') {
+  // the game's own files only: the online server's answers (accounts, wallet, payments, leagues, health) always come
+  // from the network
+  if (req.method !== 'GET' || url.origin !== self.location.origin || /^\/(auth|wallet|pay|paystack|league|ws|health)(\/|$)/.test(url.pathname)) return;
+  // cache first: instant start, works offline; updates arrive through a new service worker version. Only the game is
+  // one page: other pages (terms, refunds) are themselves.
+  if (req.mode === 'navigate' && (url.pathname === '/' || url.pathname === '/index.html')) {
     e.respondWith(caches.match('./').then((r) => r || fetch(req)));
     return;
   }

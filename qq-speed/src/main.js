@@ -14,7 +14,7 @@ import { Cockpit } from './cockpit.js';
 import { F1_MAPS, F1_POINTS, GPS, TEAMS, teamTune } from './f1.js';
 import { PlayerCar, NO_INPUT } from './vehicle.js';
 import { AICar } from './ai.js';
-import { League, CUPS, POINTS } from './league.js';
+import { League, CUPS, POINTS, runId } from './league.js';
 import { Confetti } from './confetti.js';
 import { PIT, pitLayout, pitLat, buildPitLane } from './pitlane.js';
 import { RaceSim, COMPOUNDS, pickCompound, tyreLaps } from './racesim.js';
@@ -29,9 +29,12 @@ import { Online } from './online.js';
 import { Leagues } from './leagues.js';
 import { Account } from './account.js';
 import { Garage } from './garage.js';
-import { item, carItemId, legacyLook } from './catalog.js';
+import { item, carItemId, legacyLook, CAR_ITEMS, PARTS, REWARDS, MOVE_CAP, earnAmount } from './catalog.js';
 import * as wallet from './wallet.js';
-import { Challenges } from './challenges.js';
+import * as card from './checkout.js';
+import { Shop } from './shop.js';
+import { WalletScreen } from './walletscreen.js';
+import { Challenges, dayKey } from './challenges.js';
 import { Ghosts } from './ghost.js';
 import { COUNTDOWN } from './netproto.js';
 import { clamp, lerp, damp, dampAngle, wrapAngle, mulberry32, formatTime, smoothstep } from './util.js';
@@ -239,6 +242,14 @@ class Game {
     this.garage = new Garage(this);
     this.ghosts = new Ghosts(this);
     this.challenges = new Challenges(this);
+    this.shop = new Shop(this);
+    this.walletScreen = new WalletScreen(this);
+    card.bind();
+    // tokens that arrived on their own (a reward that had to wait, a purchase, a league win, an invite): a toast in the lobby
+    wallet.onCredit(({ amount, label }) => {
+      (this.credits ||= []).push(`+${amount.toLocaleString('en-US')} tokens · ${label}`);
+      this.flushCredits();
+    });
     this.showCamMode(false);
     this.online = new Online(this);
     this.account = new Account(this, this.online.url);
@@ -421,11 +432,21 @@ class Game {
     const showBalance = () => {
       const n = wallet.getBalance().toLocaleString('en-US');
       $('tokBal').textContent = n;
-      $('tokbtn').setAttribute('aria-label', `${n} tokens: open the Garage`);
+      $('tokbtn').setAttribute('aria-label', `Wallet: ${n} tokens`);
     };
     showBalance();
-    wallet.onChange(showBalance);
-    $('tokbtn').addEventListener('click', () => this.garage.open(S.skin, 'menu'));
+    wallet.onChange(() => {
+      showBalance();
+      this.walletDot();
+      // another wallet (logged in or out) may not have the lobby car: back to one it has
+      if (wallet.ready() && !this.hasCar(S.skin)) {
+        S.skin = Math.max(0, CARS.findIndex((_, i) => this.hasCar(i)));
+        if (this.state === 'menu' && !this.garage?.shown) this.startDemo();
+      }
+      refresh();
+      this.flushCredits();
+    });
+    $('tokbtn').addEventListener('click', () => this.walletScreen.open('menu'));
     this.refreshMenu = refresh;
     this.buildSettings();
     $('start').addEventListener('click', () => this.startRace());
@@ -554,12 +575,87 @@ class Game {
   // a cup win, or a league unlock flag (Legend Cup, daily challenge rewards)
   has(id) {
     const it = item(id);
-    if (!it) return false;
-    if (wallet.owns(id)) return true;
+    return !!it && (wallet.owns(id) || this.earnedFree(it));
+  }
+  earnedFree(it) {
     const e = it.earn;
     return !!e && (e.cup ? this.league.d.cupWins?.[e.cup] > 0 : this.league.unlocked(e.unlock));
   }
   hasCar(carIndex) { return !!CARS[carIndex] && this.has(carItemId(CARS[carIndex].id)); }
+
+  // what cups and challenges unlocked on this device goes onto the account too, so its looks can use them
+  syncEarned() {
+    if (wallet.isAccount()) wallet.claimEarned([...CAR_ITEMS, ...PARTS].filter((it) => it.price > 0 && this.earnedFree(it)).map((it) => it.id));
+  }
+
+  // who's playing changed (account.js): the account's wallet from the server, or this browser's guest wallet.
+  // A brand-new account is offered the guest's garage.
+  onAccount() {
+    const a = this.account, was = wallet.user();
+    if (!a?.user || !a.base) {
+      wallet.useGuest();
+      if (was) this.onLooksChanged(!this.garage.shown);
+      return;
+    }
+    const fresh = a.fresh, garage = wallet.isAccount() ? null : wallet.guestGarage();
+    a.fresh = false;
+    wallet.useAccount({ base: a.base, token: a.token, user: a.user, expired: () => a.expired() }).then(() => {
+      this.syncEarned();
+      // another wallet: the lobby car, the car pictures and the online room show its looks
+      if (was !== a.user) this.onLooksChanged(!this.garage.shown);
+      if (fresh && garage?.count) this.offerMove(garage);
+    });
+  }
+
+  offerMove(g) {
+    const n = g.items.length, cars = Object.keys(g.looks).length;
+    const what = [n && `${n} unlocked item${n === 1 ? '' : 's'}`, cars && `the looks on ${cars} car${cars === 1 ? '' : 's'}`].filter(Boolean).join(' and ');
+    card.show({
+      icon: 'garage', tone: 'c', title: 'Bring your garage along?',
+      body: `Move ${what} from this device to ${wallet.user()}.\nGuest tokens stay here: your account starts with a ${REWARDS.welcome}-token welcome bonus instead.`,
+      primary: 'Move my garage', secondary: 'Start fresh',
+      onPrimary: async () => {
+        card.show({ icon: 'garage', tone: 'c', title: 'Moving your garage…', body: '', busy: true });
+        const r = await wallet.moveGuestGarage();
+        if (r.ok) {
+          const skipped = r.skipped ? `\n${r.skipped} didn't fit: up to ${MOVE_CAP.toLocaleString('en-US')} tokens' worth can move.` : '';
+          card.show({ icon: 'ok', tone: 'g', title: 'Garage moved', body: `${r.moved.length} unlocked item${r.moved.length === 1 ? '' : 's'} and ${r.cars} car look${r.cars === 1 ? '' : 's'} are on your account now.${skipped}`, primary: 'Nice', onPrimary: card.hide });
+        } else if (r.error === 'unreachable') {
+          card.show({ icon: 'fail', tone: 'r', title: 'Couldn\'t move it', body: 'Can\'t reach the server. Check your connection and try again.', primary: 'Try again', secondary: 'Start fresh', onPrimary: () => this.offerMove(g) });
+        } else {
+          card.show({ icon: 'fail', tone: 'r', title: 'Couldn\'t move it', body: 'A garage can only move once, while the account is new.', primary: 'OK', onPrimary: card.hide });
+        }
+      },
+    });
+  }
+
+  // a dot on the lobby's wallet pill when rewards are waiting: challenges to claim, or tokens that couldn't be added yet
+  walletDot() { $('tokbtn').classList.toggle('dot', wallet.held().length > 0 || !!this.challenges?.unclaimed); }
+
+  // queued token toasts, shown once the lobby is in view
+  flushCredits() {
+    if (!this.credits?.length || this.state !== 'menu' || $('menu').classList.contains('hidden') || card.isOpen()) return;
+    toast(this.credits.splice(0).join(' · '), 'OK', () => {});
+  }
+
+  // a reward this race won (a cup, a championship, a streak): its tokens, shown on the results screen
+  async reward(kind, proof, label) {
+    const r = await wallet.earn(kind, proof, label);
+    if (!r.ok && !r.held) return;
+    const amount = r.ok ? r.amount : earnAmount(kind, proof);
+    const M = (this.moment ||= []);
+    M.push(r.ok ? label : `${label} (${r.error === 'cap' ? 'waiting: today\'s reward limit is reached' : 'waiting until you\'re online'})`);
+    M.total = (M.total || 0) + amount;
+    $('resRewardAmt').textContent = `+${M.total.toLocaleString('en-US')}`;
+    $('resRewardTxt').textContent = M.join(' · ');
+    const box = $('resReward');
+    box.classList.toggle('waiting', !r.ok);
+    box.classList.remove('hidden', 'pop');
+    void box.offsetWidth;
+    box.classList.add('pop');
+    this.audio.play('gauge');
+  }
+  resetMoment() { this.moment = []; $('resReward').classList.add('hidden'); }
 
   lookFor(carIndex) { return wallet.equipped(CARS[carIndex]?.id); }
 
@@ -689,6 +785,8 @@ class Game {
     }
     $('menu').classList.remove('hidden');
     this.refreshMenu(); // a cup win may have unlocked a car
+    wallet.refresh(); // league wins and invite rewards the server added while racing
+    this.flushCredits();
     // a tournament may have left us on a different track than the one picked in the lobby
     if (this.map && this.map.id !== this.settings.map && !this.loading) this.loadMap(this.settings.map).then(() => this.startDemo());
     else this.startDemo();
@@ -697,8 +795,10 @@ class Game {
   // closes every screen and clears what a race leaves behind (the HUD, the podium, the race sim)
   leaveRace() {
     this.endPodium();
-    ['menu', 'pause', 'settings', 'garage', 'chal', 'result', 'cups', 'board', 'f1s', 'f1w', 'f1st', 'lg', 'celebrate', 'online'].forEach((i) => $(i).classList.add('hidden'));
+    ['menu', 'pause', 'settings', 'garage', 'wallet', 'shop', 'chal', 'result', 'cups', 'board', 'f1s', 'f1w', 'f1st', 'lg', 'celebrate', 'online'].forEach((i) => $(i).classList.add('hidden'));
     this.garage.cancel();
+    this.shop.cancel();
+    this.walletScreen.cancel();
     this.ghosts.hide();
     this.challenges.renderDot(); // a new day may have started
     this.celeb = null;
@@ -719,6 +819,9 @@ class Game {
       if (code === 'Escape') this.closeSettings();
       return;
     }
+    if (code === 'Escape' && card.escape()) return;
+    if (code === 'Escape' && this.shop.isOpen) return this.shop.close();
+    if (code === 'Escape' && this.walletScreen.isOpen) return this.walletScreen.close();
     if (code === 'Escape' && this.garage.isOpen) return this.garage.back();
     if (code === 'Escape' && !$('chal').classList.contains('hidden')) return this.challenges.close();
     const inLobby = this.state === 'menu' && !$('menu').classList.contains('hidden') && document.activeElement?.tagName !== 'INPUT';
@@ -975,8 +1078,10 @@ class Game {
   // the server has drawn the grid: build the track if needed, then line up (Online.onLoad reports back when done)
   async startOnlineRace({ seq, cfg, grid, me }) {
     if (this.loading) await new Promise((r) => { const t = setInterval(() => { if (!this.loading) { clearInterval(t); r(); } }, 50); });
-    ['menu', 'pause', 'settings', 'garage', 'chal', 'result', 'cups', 'board', 'f1s', 'f1w', 'f1st', 'lg', 'celebrate', 'online'].forEach((i) => $(i).classList.add('hidden'));
+    ['menu', 'pause', 'settings', 'garage', 'wallet', 'shop', 'chal', 'result', 'cups', 'board', 'f1s', 'f1w', 'f1st', 'lg', 'celebrate', 'online'].forEach((i) => $(i).classList.add('hidden'));
     this.garage.cancel();
+    this.shop.cancel();
+    this.walletScreen.cancel();
     this.endPodium();
     if (this.map.id !== cfg.map) await this.loadMap(cfg.map);
     const mine = grid.find((g) => g.id === me);
@@ -1009,8 +1114,10 @@ class Game {
       race.beatGhost = false;
     }
     this.ghosts.show(race.trial ? race.ghost : null);
-    ['menu', 'pause', 'settings', 'garage', 'chal', 'result', 'cups', 'board', 'f1s', 'f1w', 'f1st', 'lg', 'online'].forEach((i) => $(i).classList.add('hidden'));
+    ['menu', 'pause', 'settings', 'garage', 'wallet', 'shop', 'chal', 'result', 'cups', 'board', 'f1s', 'f1w', 'f1st', 'lg', 'online'].forEach((i) => $(i).classList.add('hidden'));
     this.garage.cancel();
+    this.shop.cancel();
+    this.walletScreen.cancel();
     // online: no restarting a shared race, and quitting leaves the race but not the room
     document.body.classList.toggle('online', !!race.online);
     $('restart').classList.toggle('hidden', !!race.online);
@@ -1437,7 +1544,7 @@ class Game {
   // daily challenges and achievements: what this race counts for (difficulty only offline); a toast says what was earned
   countChallenges(finished, place) {
     const st = this.player.stats, R = this.race, won = finished && place === 1 && !R.trial;
-    const { daily, badges } = this.challenges.raceDone({
+    const { daily, badges, streak } = this.challenges.raceDone({
       track: this.map.id, diff: R.online || R.trial ? null : R.diff, online: !!R.online, trial: !!R.trial, beatGhost: !!R.beatGhost, finished, won, place,
       nitro: st.nitro, drift: st.driftM, perfect: st.perfect, double: st.double, crash: st.crash, takedown: st.takedown || 0, rocket: st.rocket,
     });
@@ -1445,6 +1552,7 @@ class Game {
     if (daily.length) news.push(`Daily challenge${daily.length > 1 ? 's' : ''} done: ${daily.map((c) => c.title).join(', ')}. Claim in Challenges.`);
     if (badges.length) news.push(`Achievement${badges.length > 1 ? 's' : ''}: ${badges.map((a) => a.name).join(', ')}`);
     if (news.length) toast(news.join(' · '), 'OK', () => {});
+    if (streak) this.reward('streak', { day: dayKey() }, '7-day streak');
   }
 
   // results screen: the track · mode · laps line and the big finishing position (place 0: did not finish)
@@ -1478,6 +1586,9 @@ class Game {
   }
 
   showOnlineResults(res) {
+    this.resetMoment();
+    // a league race win is added by the server: it shows once the wallet hears of it
+    setTimeout(() => wallet.refresh(), 4000);
     this.resultShown = true;
     this.state = 'finish';
     this.hud.finalCount('');
@@ -1518,6 +1629,7 @@ class Game {
     $('resBoard').classList.remove('hidden');
     $('back').textContent = 'Back to Lobby';
     $('back').classList.remove('pri');
+    this.resetMoment();
     this.resultShown = true;
     this.state = 'finish';
     this.hud.finalCount('');
@@ -1545,6 +1657,10 @@ class Game {
     }
     $('resTitle').textContent = title;
     $('resTitle').classList.toggle('champ', won && !!(cup?.done || season?.done));
+    // a cup or championship win pays tokens (and may have unlocked a car)
+    if (cup?.done && won) this.reward('cup', { cup: def.id, run: cup.run }, `${def.name} win`);
+    if (season?.done && won) this.reward('f1', { run: season.season.run ||= runId() }, 'F1 championship win');
+    if ((cup?.done || season?.done) && won) this.syncEarned();
     this.renderCupBox(def, cup);
     if (season) this.renderSeasonBox(season);
     const next = cup || season;

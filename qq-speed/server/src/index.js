@@ -13,6 +13,8 @@ import {
 } from '../../src/netproto.js';
 import { GPS, TEAMS } from '../../src/f1.js';
 import { mailReady, sendMail } from './mail.js';
+import { signatureOk } from './pay.js';
+import { REWARDS } from '../../src/catalog.js';
 
 export { Accounts } from './accounts.js';
 
@@ -86,6 +88,8 @@ export default {
     if (url.pathname === '/health') return new Response('Driftbolt multiplayer server: ok\n', { headers: { 'content-type': 'text/plain' } });
     if (url.pathname === '/league' || url.pathname.startsWith('/league/')) return leagueApi(req, env, url);
     if (url.pathname.startsWith('/auth/')) return authApi(req, env, url, ctx);
+    if (url.pathname === '/wallet' || url.pathname.startsWith('/wallet/') || url.pathname.startsWith('/pay/')) return walletApi(req, env, url);
+    if (url.pathname === '/paystack/webhook') return paystackWebhook(req, env, ctx);
     if (url.pathname !== '/ws' && url.pathname !== '/presence') return new Response('Not found\n', { status: 404 });
     if (req.headers.get('Upgrade') !== 'websocket') return new Response('Expected a WebSocket upgrade\n', { status: 426 });
     const origin = req.headers.get('Origin');
@@ -198,6 +202,54 @@ async function authApi(req, env, url, ctx) {
   // the email goes out after the answer, so a name with an account takes no longer to answer than one without
   if (mail) ctx.waitUntil(sendMail(env, mail));
   return reply(r);
+}
+
+// ---------- Wallet and payments HTTP API (wallet.js, pay.js) ----------
+// With "Authorization: Bearer <session>", for that account:
+// GET  /wallet                          { balance, earned, bought, owned, looks, history, payments, today, cap, starterUsed, invited, friends }
+// POST /wallet/unlock { itemId }        { balance, owned }; 402 short { need }
+// POST /wallet/equip  { carId, look }   { carId, look, balance }; 403 not_owned { item }
+// POST /wallet/earn   { kind, proof }   { amount, balance }; 409 claimed, 429 cap { left }
+// POST /wallet/claim  { items }         { owned }: cars and parts a cup or challenge unlocked on the player's device
+// POST /wallet/move   { items, looks }  { moved, skipped, cars, owned }: a new account's guest garage, once
+// POST /pay/init      { packId }        { reference, access_code } for Paystack's popup
+// GET  /pay/status/<reference>          { status: pending | paid | failed | abandoned, pack, tokens, balance }
+const WALLET_ACTIONS = new Set(['unlock', 'equip', 'earn', 'claim', 'move']);
+
+async function walletApi(req, env, url) {
+  const h = await httpApi(req, env, url, 'GET, POST');
+  if (h instanceof Response) return h;
+  const { reply, input } = h;
+  const p = url.pathname, post = req.method === 'POST';
+  let action = null;
+  if (p === '/wallet') action = req.method === 'GET' ? 'get' : null;
+  else if (p.startsWith('/wallet/')) action = post && WALLET_ACTIONS.has(p.slice(8)) ? p.slice(8) : null;
+  else if (p === '/pay/init') action = post ? 'pay/init' : null;
+  else if (p.startsWith('/pay/status/') && req.method === 'GET') {
+    action = 'pay/status';
+    input.reference = p.slice('/pay/status/'.length);
+  }
+  if (!action) return reply(fail(404, 'not_found'));
+  // Paystack sends the player back to the page they paid from: this Worker's game, or an allowed copy (httpApi checked it)
+  if (action === 'pay/init') input.origin = req.headers.get('Origin') || url.origin;
+  const session = /^Bearer (\S{1,400})$/.exec(req.headers.get('Authorization') || '')?.[1] || null;
+  return reply(await accounts(env).walletApi(action, input, session));
+}
+
+// POST /paystack/webhook: Paystack's events, signed with the secret key (x-paystack-signature, HMAC-SHA512 of the raw
+// body). Anything unsigned is refused; a signed event is answered at once and handled after. charge.success only
+// starts a check: the payment is verified with Paystack before any tokens are added (wallet.js settle()).
+async function paystackWebhook(req, env, ctx) {
+  if (req.method !== 'POST') return new Response('Not found\n', { status: 404 });
+  const raw = await req.arrayBuffer();
+  if (raw.byteLength > 256 * 1024) return new Response('Too big\n', { status: 413 });
+  if (!(await signatureOk(env, raw, req.headers.get('x-paystack-signature')))) return new Response('Bad signature\n', { status: 401 });
+  let ev = null;
+  try { ev = JSON.parse(new TextDecoder().decode(raw)); } catch { /* signed but unreadable: nothing to do */ }
+  if (ev?.event === 'charge.success' && typeof ev.data?.reference === 'string') {
+    ctx.waitUntil(accounts(env).payConfirm(ev.data.reference).catch((e) => console.error(`pay: webhook check failed (${e?.message})`)));
+  }
+  return new Response('ok\n');
 }
 
 // ---------- Matchmaker: the public rooms Quick Match can drop a player into ----------
@@ -558,7 +610,7 @@ export class Room extends DurableObject {
       const name = seat ? seat.name : this.uniqueName(who?.registered ? guestLabel(who.name) : who?.name || cleanName(m.name) || 'Driver', id);
       p = { id, token: rid(24), name, car: carIdx(seat ? seat.car : m.car), look: cleanLook(m.look), ready: false, joined: now, connected: true, goneAt: 0 };
       if (seat?.team) p.team = seat.team;
-      if (who?.account) p.account = who.account;
+      if (who?.account || seat?.account) p.account = who?.account || seat.account;
       R.players[id] = p;
     }
     // past the start time with nobody there yet: the race starts a minute after the first arrival
@@ -692,7 +744,7 @@ export class Room extends DurableObject {
     R.race = {
       seq: R.seq, cfg: { ...R.cfg }, grid: grid.map((p) => p.id), loadDeadline: Date.now() + LOAD_TIMEOUT, startAt: 0, endAt: 0, hardEndAt: 0, firstAt: 0,
       aiBy: ai.length ? (racers.find((p) => p.id === R.hostId) || racers[0]).id : null,
-      entries: Object.fromEntries(grid.map((p) => [p.id, { name: p.name, car: carIdx(p.car), team: p.team, ai: !!p.ai, loaded: !!p.ai, out: false, lap: 0, lapTimes: [], finished: false, time: 0, prog: -1 }])),
+      entries: Object.fromEntries(grid.map((p) => [p.id, { name: p.name, car: carIdx(p.car), team: p.team, ai: !!p.ai, account: p.account || null, loaded: !!p.ai, out: false, lap: 0, lapTimes: [], finished: false, time: 0, prog: -1 }])),
     };
     this.send({ t: 'load', seq: R.seq, cfg: R.race.cfg, aiBy: R.race.aiBy, grid: grid.map((p) => ({ id: p.id, name: p.name, car: carIdx(p.car), look: p.look || {}, ...(p.team && { team: p.team }), ...(p.ai && { ai: true }) })) });
   }
@@ -781,6 +833,9 @@ export class Room extends DurableObject {
     rows.forEach((r, i) => { r.place = i + 1; });
     this.send({ t: 'results', seq: R.seq, laps: R.race.cfg.laps, rows });
     if (R.league) R.league.report = { round: R.league.round, rows };
+    // account holders who finished: an invited player's races count toward the invite reward (wallet.js)
+    const finished = Object.values(R.race.entries).filter((e) => e.finished && e.account).map((e) => e.account);
+    if (finished.length) this.ctx.waitUntil(accounts(this.env).raceFinished(finished).catch(() => { /* a reward can wait for the next race */ }));
     R.phase = 'lobby';
     R.race = null;
     this.dirty = true;
@@ -1064,7 +1119,8 @@ export class League extends DurableObject {
   async seatInRoom(m) {
     const L = this.L;
     const ticket = (L.race.tickets[m.id] = rid(16));
-    try { await this.env.ROOMS.get(this.env.ROOMS.idFromName(L.race.room)).leagueSeat(ticket, this.seat(m)); } catch { /* the room may be gone */ }
+    // the room also learns the member's account (never shown to others), so the race counts for their wallet
+    try { await this.env.ROOMS.get(this.env.ROOMS.idFromName(L.race.room)).leagueSeat(ticket, { ...this.seat(m), ...(m.account && { account: m.account }) }); } catch { /* the room may be gone */ }
   }
 
   // the race room's report: rows in finishing order, or null when nobody came. Stale or repeated reports are ignored.
@@ -1094,6 +1150,9 @@ export class League extends DurableObject {
     L.results.push({ round, map: L.race.map, at: now, rows: out });
     const win = out.find((r) => r.pos === 1);
     if (win) this.feed({ k: 'win', round, map: L.race.map, id: win.id, name: win.name, ...(win.ai && { ai: true }) });
+    // the winner's account gets the league win reward straight from the server: no claim from their game
+    const account = win && !win.ai && Object.hasOwn(L.members, win.id) ? L.members[win.id].account : null;
+    if (account) (L.grants ||= []).push({ account, ref: `league:${L.code}:${round}` });
     const fast = out.filter((r) => r.best > 0).sort((a, b) => a.best - b.best)[0];
     if (fast) this.feed({ k: 'fastest', round, map: L.race.map, id: fast.id, name: fast.name, time: fast.best, ...(fast.ai && { ai: true }) });
     L.round++;
@@ -1103,14 +1162,28 @@ export class League extends DurableObject {
       if (champ) this.feed({ k: 'champion', id: champ.id, name: champ.name, ...(champ.ai && { ai: true }) });
     } else L.next = nextNight(S.night, now);
     await this.save();
+    await this.payGrants();
     return true;
+  }
+
+  // league win rewards into winners' wallets (Accounts); one that doesn't go through is tried again a minute later
+  async payGrants() {
+    const L = this.L;
+    if (!L?.grants?.length) return;
+    const left = [];
+    for (const g of L.grants) {
+      try { await accounts(this.env).grant(g.account, 'league', g.ref, REWARDS.leagueWin); } catch { left.push(g); }
+    }
+    L.grants = left;
+    await this.save();
   }
 
   // the clock: open the room before race night, or give up on a room that never reported back
   async schedule() {
     const L = this.L;
     if (!L) return this.ctx.storage.deleteAlarm();
-    const at = L.race ? L.race.startsAt + RACE_TIMEOUT : L.round < L.calendar.length ? L.next - LOBBY_OPEN : 0;
+    let at = L.race ? L.race.startsAt + RACE_TIMEOUT : L.round < L.calendar.length ? L.next - LOBBY_OPEN : 0;
+    if (L.grants?.length) at = Math.min(at || Infinity, Date.now() + 60_000);
     if (at) await this.ctx.storage.setAlarm(Math.max(Date.now() + 20, at));
     else await this.ctx.storage.deleteAlarm();
   }
@@ -1118,6 +1191,7 @@ export class League extends DurableObject {
   async alarm() {
     const L = this.L;
     if (!L) return;
+    await this.payGrants();
     const now = Date.now();
     if (L.race && now >= L.race.startsAt + RACE_TIMEOUT) {
       this.feed({ k: 'postponed', round: L.round, map: L.race.map });

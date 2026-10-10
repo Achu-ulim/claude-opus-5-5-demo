@@ -9,6 +9,7 @@ const SESSION = 'driftbolt.session'; // { token, username, email (masked), exp }
 const SAVED = 'driftbolt.accounts'; // [{ username, device?, at }]: accounts used on this device, most recent first
 const GUEST = 'driftbolt.guest'; // true: this player chose to play as a guest
 const GUEST_NAME = 'driftbolt.guestName'; // a guest's driver name, put back when they log out
+const INVITE = 'driftbolt.invite'; // the friend whose invite link brought this player here, until they sign up
 const PANELS = { login: 'auLogin', signup: 'auSignup', verify: 'auVerify', email: 'auEmail' };
 const COLORS = ['#ff3b3b', '#36e2ff', '#ffd23a', '#7cff9e', '#ff5fa8', '#b07cff'];
 const RENEW = 7 * 86_400_000; // a session this close to its end is renewed with the device token
@@ -51,6 +52,10 @@ export class Account {
     this.session = s && typeof s.token === 'string' && typeof s.username === 'string' ? s : null;
     const saved = read(SAVED);
     this.saved = Array.isArray(saved) ? saved.filter((a) => a && typeof a.username === 'string' && USERNAME_RE.test(a.username)) : [];
+    // an invite link (?invite=<username>): the friend gets tokens once this player signs up and races (wallet.js)
+    const invite = new URLSearchParams(location.search).get('invite');
+    if (invite && USERNAME_RE.test(invite)) write(INVITE, invite);
+    this.fresh = false; // a brand-new account, just created here: the game offers to move the guest garage in
     this.done = null; // resolves the launch screen
     this.pending = null; // the code being waited for: { purpose: 'login' | 'email', username, masked, email?, resendAt }
     this.nameCheck = { name: '', state: '' };
@@ -175,6 +180,7 @@ export class Account {
     $('pacctName').textContent = u || '';
     $('pacct').setAttribute('aria-label', u ? `Account: ${u}` : 'Account');
     avatar($('pacctAv'), u);
+    this.game.onAccount?.();
     for (const id of ['onName']) {
       $(id).value = g.league.name;
       $(id).readOnly = !!u;
@@ -417,7 +423,10 @@ export class Account {
     this.renderSignup();
     this.say('auSignupMsg', 'Creating your account…', false);
     try {
-      const r = await this.call('/auth/signup', { username: $('auSUser').value.trim(), email: $('auSMail').value.trim() });
+      const invite = read(INVITE);
+      const r = await this.call('/auth/signup', { username: $('auSUser').value.trim(), email: $('auSMail').value.trim(), ...(typeof invite === 'string' && { invite }) });
+      write(INVITE, null);
+      this.fresh = true;
       this.busy = false;
       $('auSUser').value = $('auSMail').value = '';
       this.nameCheck = { name: '', state: '' };

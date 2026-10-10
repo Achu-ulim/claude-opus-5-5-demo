@@ -9,7 +9,8 @@
     "deploy": "wrangler deploy",
     "preview": "wrangler dev --port 8787",
     "test:league": "node server/test/league.mjs",
-    "test:auth": "node server/test/auth.mjs"
+    "test:auth": "node server/test/auth.mjs",
+    "test:wallet": "node server/test/wallet.mjs"
   },
   "keywords": [],
   "author": "",

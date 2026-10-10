@@ -1,7 +1,8 @@
 // Player accounts with no passwords: a username and an email to sign up, the username alone to log in.
 // A device that has proved itself keeps a device token and logs in with it; anywhere else a 6-digit code is emailed first.
-// One global Accounts object (SQLite) holds every account. The Worker's /auth API calls api(); rooms and leagues ask
-// resolve() whose a session is and isRegistered() whether a guest's name belongs to an account.
+// One global Accounts object (SQLite) holds every account and its token wallet (wallet.js). The Worker's /auth API calls
+// api() and its /wallet and /pay API wallet(); rooms and leagues ask resolve() whose a session is and isRegistered()
+// whether a guest's name belongs to an account, and report races and league wins for the wallet.
 //
 // Kept: only hashes of device tokens and codes, and of IP addresses (for rate limits). Sessions are signed with
 // AUTH_SECRET (a Wrangler secret) and checked here too, so logging out, or out of every device, takes effect at once.
@@ -11,6 +12,7 @@ import { DurableObject } from 'cloudflare:workers';
 import { USERNAME_RE, EMAIL_RE, EMAIL_MAX, RESEND_GAP } from '../../src/netproto.js';
 import { nameProblem } from './names.js';
 import { maskEmail, codeMail, changedMail } from './mail.js';
+import { Wallet, WALLET_SCHEMA } from './wallet.js';
 
 const SESSION_TTL = 30 * 86_400_000;
 const CODE_TTL = 10 * 60_000;
@@ -26,6 +28,7 @@ const LIMITS = {
   'verify:ip': [60, 10 * MIN], 'verify:name': [15, 10 * MIN],
   'resend:ip': [20, 10 * MIN], 'resend:name': [6, 60 * MIN],
   'email:acct': [5, 60 * MIN], 'emailverify:acct': [15, 10 * MIN],
+  'wallet:acct': [120, 10 * MIN], 'walletget:acct': [240, 10 * MIN], 'pay:acct': [20, 10 * MIN],
 };
 const TOKEN_RE = /^[A-Za-z0-9_-]{43}$/;
 const SCHEMA = [
@@ -69,8 +72,9 @@ export class Accounts extends DurableObject {
   constructor(ctx, env) {
     super(ctx, env);
     this.sql = ctx.storage.sql;
-    for (const q of SCHEMA) this.sql.exec(q);
+    for (const q of [...SCHEMA, ...WALLET_SCHEMA]) this.sql.exec(q);
     this.tidyAt = 0;
+    this.wallet = new Wallet(this);
   }
 
   row(q, ...args) { return this.sql.exec(q, ...args).toArray()[0] || null; }
@@ -156,6 +160,9 @@ export class Accounts extends DurableObject {
     this.sql.exec('INSERT INTO accounts (id, username, name_key, email, created, epoch) VALUES (?, ?, ?, ?, ?, 0)', id, name, name.toLowerCase(), email, now);
     this.sql.exec('INSERT INTO devices (hash, account, created, used) VALUES (?, ?, ?, ?)', hash, id, now, now);
     this.sql.exec('DELETE FROM codes WHERE key = ?', 'x:' + name.toLowerCase());
+    // signed up from a friend's invite link: both get tokens once this player has raced (wallet.js)
+    const inviter = typeof input.invite === 'string' && USERNAME_RE.test(input.invite) ? this.byName(input.invite) : null;
+    if (inviter) this.wallet.invited(id, inviter.id);
     const acct = this.byName(name);
     return ok({ session: await this.newSession(acct), deviceToken: token, account: view(acct) });
   }
@@ -225,6 +232,36 @@ export class Accounts extends DurableObject {
     // the old address hears about it, in case it wasn't the owner
     return { ...ok({ account: view({ ...A, email }) }), mail: changedMail(A.email, A.username, maskEmail(email)) };
   }
+
+  // ---------- the wallet (wallet.js) ----------
+  // The /wallet and /pay API, for the session's account. Returns { status, body }.
+  async walletApi(action, input, session) {
+    if (!this.ready) return fail(503, 'not_configured');
+    const me = await this.readSession(session);
+    if (!me) return fail(401, 'session');
+    const A = me.acct, W = this.wallet;
+    const wait = this.limit(action === 'get' || action === 'pay/status' ? 'walletget:acct' : action === 'pay/init' ? 'pay:acct' : 'wallet:acct', A.id);
+    if (wait) return slow(wait);
+    W.ensure(A);
+    switch (action) {
+      case 'get': return ok(W.view(A));
+      case 'unlock': return W.unlock(A, input.itemId);
+      case 'equip': return W.equip(A, input.carId, input.look);
+      case 'earn': return W.earn(A, input.kind, input.proof);
+      case 'claim': return W.claimEarned(A, input.items);
+      case 'move': return W.move(A, input);
+      case 'pay/init': return W.payInit(A, input.packId, input.origin);
+      case 'pay/status': return W.payStatus(A, input.reference);
+    }
+    return fail(404, 'not_found');
+  }
+
+  // Paystack's webhook said a charge succeeded (the Worker has checked its signature)
+  async payConfirm(reference) { await this.wallet.payConfirm(reference); }
+  // a league race win, from the League object
+  grant(accountId, reason, ref, amount) { return this.wallet.grant(accountId, reason, ref, amount); }
+  // accounts that finished an online race, from a Room
+  raceFinished(accountIds) { if (Array.isArray(accountIds)) this.wallet.raceFinished(accountIds.filter((id) => typeof id === 'string')); }
 
   // ---------- codes ----------
   // Emails a new code (or says one is on its way). With no account behind the name, a stand-in code is kept the same way

@@ -87,6 +87,51 @@ export const partsIn = (category) => PARTS.filter((p) => p.category === category
 // the part a league unlock flag stands for (the daily challenge rewards)
 export const partForUnlock = (flag) => PARTS.find((p) => p.earn?.unlock === flag);
 
+// ---------- Rewards ----------
+// Tokens for playing, paid by the server wallet. A game claims the first four kinds (POST /wallet/earn), so each
+// can only be claimed once (a challenge per day, a cup or championship per run) and claims share a daily cap.
+// The others the server grants itself: the welcome bonus, invites, and league race wins (the League confirms those).
+export const REWARDS = {
+  challenge: { easy: 50, medium: 100, hard: 200 }, // each daily challenge
+  cup: { rookie: 150, pro: 300, legend: 500 }, // winning a Tournament cup
+  f1: 500, // winning a Formula 1 championship
+  streak: 300, // a 7-day daily challenge streak
+  welcome: 200, // once per account
+  invite: 250, // to each of the two players, once the invited friend has finished INVITE_RACES online races
+  leagueWin: 300, // winning a league race night
+};
+export const EARN_KINDS = ['challenge', 'cup', 'f1', 'streak'];
+export const DAILY_EARN_CAP = 1000; // tokens a day from claims; the rest waits for the next day
+export const INVITE_RACES = 3;
+// a guest's bought cars and parts can move to their new account up to this many tokens' worth: guest wallets live
+// on the device, so this is the most a faked one can bring along
+export const MOVE_CAP = 1250;
+const own = (o, k) => (typeof k === 'string' && Object.hasOwn(o, k) ? o[k] : 0);
+// what a claim is worth (0: not a reward)
+export function earnAmount(kind, proof) {
+  switch (kind) {
+    case 'challenge': return own(REWARDS.challenge, proof?.tier);
+    case 'cup': return own(REWARDS.cup, proof?.cup);
+    case 'f1': return REWARDS.f1;
+    case 'streak': return REWARDS.streak;
+  }
+  return 0;
+}
+
+// ---------- Token packs ----------
+// Bought with Paystack in naira. price_kobo is the price in kobo (₦1 = 100 kobo); null means not on sale yet.
+export const PACKS = [
+  { id: 'pit-stop', name: 'Pit Stop', tokens: 500, price_kobo: null, badge: '' },
+  { id: 'podium', name: 'Podium', tokens: 1200, price_kobo: null, badge: 'Popular', bonus: '+20% bonus' },
+  { id: 'champion', name: 'Champion', tokens: 3000, price_kobo: null, badge: 'Best value', bonus: '+50% bonus' },
+  { id: 'legend', name: 'Legend', tokens: 8000, price_kobo: null, badge: '', bonus: '+60% bonus' },
+];
+// only for an account's first purchase; it also unlocks the parts in `grants`
+export const STARTER_PACK = { id: 'starter', name: 'Starter Pack', tokens: 1500, price_kobo: null, badge: 'One-time', grants: ['paint.gold-leaf'] };
+export const packById = (id) => [STARTER_PACK, ...PACKS].find((p) => p.id === id);
+// ₦ with kobo shown only when there are any: 250000 → "₦2,500"
+export const naira = (kobo) => '₦' + (kobo / 100).toLocaleString('en-US', { minimumFractionDigits: kobo % 100 ? 2 : 0, maximumFractionDigits: 2 });
+
 // a look from the first garage, which stored colours ({ paint: 0xff3b3b, finish, rimColor, glow, … }), as part ids:
 // the colours that match a part carry over, the rest go back to factory
 export function legacyLook(old) {

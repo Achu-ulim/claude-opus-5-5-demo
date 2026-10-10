@@ -5,12 +5,14 @@
 import { CARS, resolveLook } from './carModel.js';
 import { CATEGORIES, FACTORY, carItemId, item, partsIn } from './catalog.js';
 import * as wallet from './wallet.js';
+import * as card from './checkout.js';
 
 const $ = (id) => document.getElementById(id);
 const hex = (c) => '#' + c.toString(16).padStart(6, '0');
 const fmt = (n) => n.toLocaleString('en-US');
 export const TOKEN = '<svg class="tok" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2l8.66 5v10L12 22l-8.66-5V7z"/><path d="M12 6.5l4.76 2.75v5.5L12 17.5l-4.76-2.75v-5.5z"/></svg>';
-const CONFIRM_MS = 5000; // how long Unlock waits for the confirming tap before it lets go
+// what a part is, on the unlock card: "Paint for the Ferrari"
+const PART_WORD = { paint: 'Paint', wheels: 'Rims', bodykit: 'A body kit', glow: 'Underglow' };
 // a Factory part's swatch is the car's own colour
 const FACTORY_COLOR = { paint: (c) => c.body, wheels: (c) => c.rim, glow: (c) => c.glow };
 
@@ -20,7 +22,6 @@ export class Garage {
     this.car = 0; // the car on show (CARS index)
     this.tab = CATEGORIES[0].id;
     this.sel = FACTORY[this.tab]; // the part picked in the tab, shown on the car
-    this.armed = null; // the car or part waiting for a confirming tap before tokens are spent
     this.shown = false;
     this.busy = false; // waiting on the wallet
     this.dirty = false; // the player's car or a look changed since the garage opened
@@ -68,7 +69,6 @@ export class Garage {
 
   close(toLobby) {
     this.shown = false;
-    this.armed = null;
     this.say('');
     if (this.dirty) this.game.onLooksChanged(toLobby);
     else if (toLobby) { const skin = this.game.settings.skin; this.game.dressDemoCar(CARS[skin], this.game.lookFor(skin)); }
@@ -79,7 +79,6 @@ export class Garage {
   show(i) {
     this.car = i;
     this.sel = this.fitted(this.tab);
-    this.armed = null;
     this.preview();
     // on phones the cars are a sideways strip: bring this one into view
     const list = $('gCars'), b = list.querySelector('.sel');
@@ -108,7 +107,6 @@ export class Garage {
     this.game.audio.play('click');
     this.tab = tab;
     this.sel = this.fitted(tab);
-    this.armed = null;
     this.say('');
     this.preview();
   }
@@ -117,7 +115,6 @@ export class Garage {
     if (id === this.sel) return;
     this.game.audio.play('click');
     this.sel = id;
-    this.armed = null;
     this.say('');
     this.preview();
   }
@@ -129,7 +126,7 @@ export class Garage {
   }
 
   // ---------- The main button ----------
-  // what it does now: { kind: 'equip' | 'on' | 'buy' | 'confirm' | 'short', label, name, note, it }
+  // what it does now: { kind: 'equip' | 'on' | 'buy' | 'short', label, name, note, it }
   state() {
     const car = CARS[this.car], carIt = item(carItemId(car.id));
     if (!this.game.has(carIt.id)) return { ...this.buyState(carIt, 'Unlock car'), name: car.name };
@@ -143,36 +140,44 @@ export class Garage {
   buyState(it, verb) {
     const bal = wallet.getBalance(), need = it.price - bal;
     if (need > 0) return { kind: 'short', label: `Get ${fmt(need)} more tokens`, note: it.category === 'car' ? `Need ${fmt(need)} more` : `Costs ${fmt(it.price)}`, it };
-    const note = `Balance after: ${fmt(bal - it.price)}`;
-    return this.armed === it.id ? { kind: 'confirm', label: `Spend ${fmt(it.price)} tokens?`, note, it } : { kind: 'buy', label: `${verb} · ${fmt(it.price)}`, note, it };
+    return { kind: 'buy', label: `${verb} · ${fmt(it.price)}`, note: `Balance after: ${fmt(bal - it.price)}`, it };
   }
 
-  async act() {
+  act() {
     if (this.busy) return;
     const s = this.state();
     if (s.kind === 'on') return;
-    if (s.kind === 'short') return this.getTokens();
+    if (s.kind === 'short') return this.getTokens(s.it);
     if (s.kind === 'equip') {
       this.game.audio.play('click');
       return this.equip(s.it.id);
     }
-    // Unlock asks for a second tap before spending tokens
-    if (s.kind === 'buy') {
-      this.game.audio.play('click');
-      this.armed = s.it.id;
-      clearTimeout(this.armTimer);
-      this.armTimer = setTimeout(() => { if (this.armed === s.it.id) { this.armed = null; this.render(); } }, CONFIRM_MS);
-      return this.render();
-    }
+    this.confirmBuy(s);
+  }
+
+  // Unlock asks first, on the checkout card
+  confirmBuy(s) {
+    this.game.audio.play('click');
+    const it = s.it, bal = wallet.getBalance(), car = CARS[this.car];
+    const what = it.category === 'car' ? `A ${car.cls.toLowerCase()} for your garage. Yours to keep.` : `${PART_WORD[it.category]} for the ${car.name}. Yours to keep, for every car.`;
+    card.show({
+      icon: 'spend', tone: 'y', title: `Unlock ${s.name}?`, body: `${fmt(it.price)} tokens · balance ${fmt(bal)} → ${fmt(bal - it.price)}\n${what}`,
+      primary: `Unlock · ${fmt(it.price)}`, secondary: 'Cancel', onPrimary: () => this.buy(s),
+    });
+  }
+
+  async buy(s) {
+    card.hide();
     this.busy = true;
-    this.armed = null;
     this.render();
     const r = await wallet.spend(s.it.id);
     this.busy = false;
     if (!r.ok) {
+      if (r.error === 'session') return this.render(); // logged out elsewhere: the Log In screen takes over
       this.game.audio.play('wrong');
-      this.say(r.error === 'short' ? `You need ${fmt(r.need)} more tokens for that.` : 'That could not be unlocked. Try again.');
-      return this.render();
+      this.render();
+      if (r.error === 'short') return this.getTokens(s.it);
+      return this.say(r.error === 'unreachable' ? 'Can\'t reach the server, so nothing was spent. Check your connection and try again.' : 'That couldn\'t be unlocked. Try again.');
     }
     this.game.audio.play('gauge');
     if (s.it.category === 'car') {
@@ -186,16 +191,32 @@ export class Garage {
   }
 
   async equip(id) {
-    await wallet.equip(this.carId, { ...wallet.equipped(this.carId), [this.tab]: id });
+    const r = await wallet.equip(this.carId, { ...wallet.equipped(this.carId), [this.tab]: id });
+    if (!r.ok && r.error !== 'session') {
+      this.say(r.error === 'unreachable' ? 'Can\'t reach the server, so the look wasn\'t saved. Try again when you\'re online.' : 'The look couldn\'t be saved. Try again.');
+    }
     this.dirty = true;
     this.game.online.sendLook();
     this.preview();
   }
 
-  // no token shop yet: say so (step 2 opens it here)
-  getTokens() {
-    this.game.audio.play('click');
-    this.say('The token shop opens soon. Until then, spend the tokens you have.');
+  // the Token Shop, remembering what the player was short for so it can come back to it
+  getTokens(it = null) {
+    this.game.shop.open({ from: 'garage', want: it && { id: it.id, need: it.price - wallet.getBalance(), car: this.car } });
+  }
+
+  // back from the Token Shop: the car and part the player wanted, with its unlock card up when it's now affordable
+  reopen(want) {
+    if (!this.shown) return this.open(want?.car ?? this.game.settings.skin, 'menu');
+    $('garage').classList.remove('hidden');
+    const it = want && item(want.id);
+    if (it) {
+      if (want.car !== this.car && CARS[want.car]) this.show(want.car);
+      if (it.category !== 'car') { this.tab = it.category; this.sel = it.id; }
+      this.preview();
+      const s = this.state();
+      if (s.kind === 'buy' && s.it.id === it.id) this.confirmBuy(s);
+    } else this.render();
   }
 
   say(text) { $('gMsg').textContent = text; }

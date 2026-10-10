@@ -260,13 +260,13 @@ body.touch #items .hint,body.touch #keys,body.touch #bigrank,body.touch #songtip
 /* ---------- Menu ---------- */
 .screen{position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:safe center;overflow:auto;-webkit-overflow-scrolling:touch;touch-action:pan-y;padding:max(18px,env(safe-area-inset-top)) max(16px,env(safe-area-inset-right)) max(18px,env(safe-area-inset-bottom)) max(16px,env(safe-area-inset-left))}
 /* lobby: neon arcade look; the live 3D demo shows through the middle column */
-#menu,#settings,#result,#cups,#board,#online,#garage,#chal,#f1s,#f1w,#f1st,#lg{--ink:#07080f;--ink2:rgba(13,15,26,.84);--edge:rgba(255,255,255,.12);--cream:#f4f1e8;--dim:#a3a6bf;--bolt:#ffd23a;--neon:#36e2ff;
+#menu,#settings,#result,#cups,#board,#online,#garage,#wallet,#shop,#checkout,#chal,#f1s,#f1w,#f1st,#lg{--ink:#07080f;--ink2:rgba(13,15,26,.84);--edge:rgba(255,255,255,.12);--cream:#f4f1e8;--dim:#a3a6bf;--bolt:#ffd23a;--neon:#36e2ff;
   --disp:"Bungee",var(--num);--body:"Chakra Petch",var(--ui)}
 #menu{justify-content:flex-start;color:var(--cream);font-family:var(--body);
   background:radial-gradient(ellipse 46% 50% at 50% 54%,rgba(7,8,15,0),rgba(7,8,15,.5) 70%,rgba(7,8,15,.86))}
 body:has(#menu:not(.hidden)) #clinks{display:none}
 #menu button,#menu input{font-family:var(--body)}
-#menu button:focus-visible,#menu a:focus-visible,#result button:focus-visible,#cups button:focus-visible,#board button:focus-visible,#online button:focus-visible,#online input:focus-visible,#garage button:focus-visible,#chal button:focus-visible,#f1s button:focus-visible,#f1w button:focus-visible,#f1st button:focus-visible,#lg button:focus-visible,#lg input:focus-visible,#menu input:focus-visible,#settings button:focus-visible,#settings input:focus-visible{outline:2px solid var(--neon);outline-offset:2px}
+#menu button:focus-visible,#menu a:focus-visible,#result button:focus-visible,#cups button:focus-visible,#board button:focus-visible,#online button:focus-visible,#online input:focus-visible,#garage button:focus-visible,#wallet button:focus-visible,#shop button:focus-visible,#shop a:focus-visible,#chal button:focus-visible,#f1s button:focus-visible,#f1w button:focus-visible,#f1st button:focus-visible,#lg button:focus-visible,#lg input:focus-visible,#menu input:focus-visible,#settings button:focus-visible,#settings input:focus-visible{outline:2px solid var(--neon);outline-offset:2px}
 #menu svg,#settings svg{fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
 #menu svg .f,#menu svg.fill{fill:currentColor;stroke:none}
 .mwrap{width:min(1376px,100%);min-height:100%;display:flex;flex-direction:column;gap:18px}
@@ -720,7 +720,7 @@ table.res td.pos{font-family:var(--num);font-style:italic;color:var(--yellow);fo
   background-image:linear-gradient(var(--grid) 1px,transparent 1px),linear-gradient(90deg,var(--grid) 1px,transparent 1px)}
 #result::after{left:0;right:0;top:56%;height:1px;background:var(--bolt);opacity:.5;box-shadow:0 0 24px 4px var(--bolt)}
 #result button,#cups button,#board button,#online button,#online input,#garage button,#chal button,#f1s button,#f1w button,#f1st button,#lg button,#lg input{font-family:var(--body)}
-body:has(#result:not(.hidden)) #hud,body:has(#result:not(.hidden)) #clinks,body:has(#cups:not(.hidden)) #clinks,body:has(#board:not(.hidden)) #clinks,body:has(#online:not(.hidden)) #clinks,body:has(#garage:not(.hidden)) #clinks,body:has(#chal:not(.hidden)) #clinks,body:has(#f1s:not(.hidden)) #clinks,body:has(#f1w:not(.hidden)) #clinks,body:has(#f1st:not(.hidden)) #clinks,body:has(#lg:not(.hidden)) #clinks{display:none}
+body:has(#result:not(.hidden)) #hud,body:has(#result:not(.hidden)) #clinks,body:has(#cups:not(.hidden)) #clinks,body:has(#board:not(.hidden)) #clinks,body:has(#online:not(.hidden)) #clinks,body:has(#garage:not(.hidden)) #clinks,body:has(#wallet:not(.hidden)) #clinks,body:has(#shop:not(.hidden)) #clinks,body:has(#chal:not(.hidden)) #clinks,body:has(#f1s:not(.hidden)) #clinks,body:has(#f1w:not(.hidden)) #clinks,body:has(#f1st:not(.hidden)) #clinks,body:has(#lg:not(.hidden)) #clinks{display:none}
 .rwrap{flex:none;position:relative;z-index:1;width:min(1312px,100%);height:100%;padding:22px 32px;display:grid;gap:24px 40px;
   grid-template-columns:minmax(0,1.45fr) minmax(340px,1fr);grid-template-rows:minmax(0,1fr) auto;grid-template-areas:"hero side" "btns side"}
 .rhero{grid-area:hero;container-type:inline-size;display:flex;flex-direction:column;gap:24px;min-width:0}
@@ -1029,6 +1029,153 @@ body:has(#result:not(.hidden)) #hud,body:has(#result:not(.hidden)) #clinks,body:
   .gcta{height:54px;font-size:16px}
 }
 @media (max-width:400px){#gTokens span{display:none}}
+/* wallet (design/Wallet): the balance and ways to earn on the left, the history on the right */
+#wallet,#shop{justify-content:flex-start;color:var(--cream);font-family:var(--body);background:rgba(7,8,15,.86)}
+#wallet button,#shop button,#checkout button{font-family:var(--body)}
+.wwrap{flex:none;width:min(1440px,100%);min-height:100%;display:grid;gap:24px;padding:10px 32px;
+  grid-template-columns:420px minmax(0,1fr);grid-template-rows:auto minmax(0,1fr);grid-template-areas:"head head" "left hist"}
+.whead{grid-area:head;display:flex;align-items:center;gap:16px}
+.whead h2,.stl h2{font-family:var(--disp);font-weight:400;font-size:40px;line-height:1;text-transform:uppercase}
+.wleft{grid-area:left;display:flex;flex-direction:column;gap:18px;min-width:0}
+.wlab{display:flex;justify-content:space-between;align-items:baseline;gap:12px;font-size:12px;font-weight:700;letter-spacing:3px;color:var(--dim);text-transform:uppercase}
+.wlab small{font-size:13px;font-weight:400;letter-spacing:0;text-transform:none;color:#7c7f99}
+.wlab.yl{color:var(--bolt)}
+.wbal{display:flex;flex-direction:column;gap:14px;padding:24px;border-radius:22px;background:rgba(255,210,58,.08);border:2px solid var(--bolt)}
+.wbig{display:flex;align-items:center;gap:14px}
+.wbig .tok{width:44px;height:44px}
+.wbig b{font-family:var(--disp);font-weight:400;font-size:56px;line-height:1}
+.wwho{margin-top:-6px;font-size:13px;color:#c9cbdb}
+.wsplit{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.wsplit div{padding:12px;border-radius:12px;background:rgba(255,255,255,.05)}
+.wsplit span{display:block;font-size:11px;font-weight:700;letter-spacing:2px;color:var(--dim);text-transform:uppercase}
+.wsplit b{font-size:20px}
+.wget,.spay{height:56px;border:0;border-radius:14px;background:var(--bolt);color:var(--ink);font-family:var(--disp);font-size:18px;letter-spacing:1px;text-transform:uppercase;box-shadow:0 5px 0 #a67c00;cursor:pointer}
+#wallet .wget,#shop .spay{font-family:var(--disp)}
+.wget:active,.spay:active:not(:disabled){transform:translateY(3px);box-shadow:0 2px 0 #a67c00}
+.wearnbox{flex:1;display:flex;flex-direction:column;gap:10px;padding:20px;border-radius:20px;background:rgba(13,15,26,.9);border:1px solid var(--edge)}
+.wearns{display:flex;flex-direction:column;gap:8px}
+.wearn{display:flex;flex-direction:column;gap:6px;padding:10px 12px;border-radius:12px;background:rgba(255,255,255,.04)}
+.wearn.hot{background:rgba(255,210,58,.1);box-shadow:inset 0 0 0 1px rgba(255,210,58,.45)}
+.wtop{display:flex;justify-content:space-between;gap:10px;font-size:14px}
+.wtop span{font-weight:600}
+.wtop b{color:var(--bolt);white-space:nowrap}
+.wbar{height:6px;border-radius:3px;background:rgba(255,255,255,.1);overflow:hidden}
+.wbar i{display:block;height:100%;background:var(--bolt)}
+.wfoot{display:flex;justify-content:space-between;align-items:center;gap:10px;font-size:12px;line-height:1.4;color:#8a8da6}
+.wbtn{flex:none;min-height:32px;padding:0 12px;border-radius:9px;border:1px solid var(--edge);background:rgba(255,255,255,.06);color:var(--cream);font-size:12px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;cursor:pointer}
+.wbtn.hot{border-color:var(--bolt);background:var(--bolt);color:var(--ink)}
+.wmsg{font-size:13px;color:var(--bolt);overflow-wrap:anywhere}
+.wmsg:empty{display:none}
+.whist{grid-area:hist;min-height:0;min-width:0;display:flex;flex-direction:column;gap:4px;padding:20px 22px;border-radius:20px;background:rgba(13,15,26,.9);border:1px solid var(--edge)}
+.whist>.wlab{margin-bottom:6px}
+.hrows{min-height:0;overflow:auto;scrollbar-width:thin;scrollbar-color:rgba(255,255,255,.2) transparent}
+.hrow{display:grid;grid-template-columns:96px minmax(0,1fr) 190px 96px 90px;align-items:center;gap:8px;min-height:52px;padding:6px 12px;font-size:14px;border-bottom:1px solid rgba(255,255,255,.05)}
+.hrow.hhead{min-height:0;padding-bottom:6px;font-size:11px;font-weight:700;letter-spacing:2px;color:#7c7f99;text-transform:uppercase;border:0}
+.hrow.hhead span:last-child,.ha{text-align:right}
+.hd{color:var(--dim)}
+.hw{font-weight:600;min-width:0}
+.hp{color:var(--dim);font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.hs{font-size:12px;font-weight:700;letter-spacing:1px;text-transform:uppercase}
+.hs.ok{color:#7cff9e}.hs.wait{color:var(--bolt)}.hs.off{color:#7c7f99}
+.ha{font-family:var(--disp);font-size:15px;white-space:nowrap}
+.ha.up{color:#7cff9e}.ha.down{color:var(--cream)}.ha.wait{color:var(--bolt)}.ha.zero{color:#7c7f99}
+.hnone{padding:24px 12px;color:#8a8da6;font-size:14px}
+/* token shop (design/TokenShop): packs on the left, the order on the right */
+.swrap{flex:none;width:min(1440px,100%);min-height:100%;display:grid;gap:24px;padding:10px 32px;
+  grid-template-columns:minmax(0,1fr) 420px;grid-template-rows:auto 1fr;grid-template-areas:"head head" "main order"}
+.shead2{grid-area:head;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px 16px}
+.stl{display:flex;align-items:center;gap:16px;min-width:0}
+.sneed{margin-top:4px;font-size:14px;color:var(--dim)}
+.sbal{display:flex;align-items:center;gap:10px;height:48px;padding:0 18px;border-radius:24px;background:rgba(255,210,58,.1);border:1px solid rgba(255,210,58,.5)}
+.sbal .tok{width:20px;height:20px}
+.sbal b{font-family:var(--disp);font-weight:400;font-size:18px}
+.smain{grid-area:main;display:flex;flex-direction:column;gap:18px;min-width:0}
+.sstarter{display:flex;align-items:center;gap:18px;padding:18px 22px;border-radius:18px;background:rgba(255,61,166,.1);border:2px dashed #ff3da6}
+.sstarter.sel{border-style:solid;background:rgba(255,61,166,.18)}
+.sone{flex:none;font-family:var(--disp);font-size:16px;color:#ff3da6;padding:6px 10px;border-radius:8px;background:rgba(255,61,166,.15);text-transform:uppercase}
+.sstx{flex:1;min-width:0}
+.sstx b{font-size:18px}
+.sstx div{font-size:14px;color:#c9cbdb}
+#shopStarter{flex:none;height:48px;padding:0 20px;border-radius:12px;border:2px solid #ff3da6;background:transparent;color:var(--cream);font-size:15px;font-weight:700;cursor:pointer}
+.spacks{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px}
+.spack{display:flex;flex-direction:column;align-items:center;gap:8px;min-height:260px;padding:14px;border-radius:18px;color:var(--cream);background:rgba(13,15,26,.9);border:2px solid rgba(255,255,255,.12);cursor:pointer;transition:border-color .15s}
+.spack:hover{border-color:rgba(255,255,255,.3)}
+.spack.sel{background:rgba(255,210,58,.12);border-color:var(--bolt)}
+.sbadge{align-self:stretch;text-align:center;font-size:11px;font-weight:700;letter-spacing:2px;padding:4px 0;border-radius:6px;background:var(--bolt);color:var(--ink);text-transform:uppercase}
+.sbadge.none{background:none;color:transparent}
+.spack b{font-family:var(--disp);font-weight:400;font-size:28px}
+.sbonus{font-size:13px;color:#7cff9e;font-weight:700;min-height:18px}
+.sprice{margin-top:auto;width:100%;padding:10px 0;border-radius:10px;background:rgba(255,255,255,.06);font-size:18px;font-weight:700}
+.sinfo{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.sbox{padding:16px 18px;border-radius:16px;background:rgba(13,15,26,.9);border:1px solid var(--edge)}
+.searn{display:flex;flex-direction:column;gap:6px;margin-top:8px;font-size:14px;color:#c9cbdb}
+.searn b{color:var(--bolt)}
+.slegal{font-size:13px;line-height:1.55;color:var(--dim)}
+.slegal a{color:var(--dim)}
+.sorder{grid-area:order;align-self:start;display:flex;flex-direction:column;gap:14px;padding:24px;border-radius:22px;background:rgba(13,15,26,.94);border:2px solid var(--bolt)}
+.sotok{font-family:var(--disp);font-size:28px;text-transform:uppercase}
+.sorows{display:flex;flex-direction:column;gap:10px;font-size:15px}
+.sorows div{display:flex;justify-content:space-between;gap:12px;padding-bottom:10px;border-bottom:1px solid rgba(255,255,255,.08)}
+.sorows div:last-child{padding:0;border:0}
+.sorows span{color:var(--dim)}
+.sorows b{min-width:0;overflow-wrap:anywhere;text-align:right}
+.sorows div:last-child b{font-family:var(--disp);font-weight:400;font-size:22px}
+.schips{display:flex;gap:6px;flex-wrap:wrap}
+.schips span{padding:6px 10px;border-radius:8px;background:rgba(255,255,255,.06);font-size:12px;font-weight:700;text-transform:uppercase}
+.spay{height:64px;font-size:20px;box-shadow:0 6px 0 #a67c00}
+.spay:disabled{background:rgba(255,255,255,.08);color:#7c7f99;box-shadow:none;cursor:default}
+.ssecure{display:flex;align-items:center;justify-content:center;gap:8px;font-size:13px;color:var(--dim)}
+.ssecure svg{width:14px;height:14px;fill:none;stroke:currentColor;stroke-width:2.5;stroke-linecap:round}
+@media (max-width:1100px){
+  .wwrap,.swrap{grid-template-columns:minmax(0,1fr);grid-template-rows:auto;padding:4px 0 0;gap:16px}
+  .wwrap{grid-template-areas:"head" "left" "hist"}
+  .swrap{grid-template-areas:"head" "main" "order"}
+  .hrows{overflow:visible}
+}
+@media (max-width:700px){
+  .whead h2,.stl h2{font-size:28px}
+  .wbig b{font-size:44px}
+  .wbal,.wearnbox,.whist,.sorder{padding:16px}
+  .hrow{grid-template-columns:52px minmax(0,1fr) 74px 66px;font-size:13px;padding:6px 4px}
+  .hrow .hp{display:none}
+  .hs{font-size:10px;letter-spacing:.5px}
+  .sstarter{flex-wrap:wrap;gap:10px 14px;padding:14px}
+  #shopStarter{width:100%}
+  .spacks{grid-template-columns:1fr 1fr;gap:10px}
+  .spack{min-height:0}
+  .sinfo{grid-template-columns:1fr}
+}
+/* the checkout card (design/Checkout): every step of spending and buying tokens */
+#checkout{position:fixed;inset:0;z-index:28;display:flex;align-items:center;justify-content:center;padding:16px;background:rgba(4,5,10,.72);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);font-family:var(--body);pointer-events:auto}
+#checkout.hidden{display:none}
+.cocard{width:min(420px,100%);display:flex;flex-direction:column;align-items:center;gap:12px;padding:24px;border-radius:22px;text-align:center;background:#11131f;border:1px solid rgba(255,255,255,.12);box-shadow:0 20px 50px rgba(0,0,0,.4);color:var(--cream);animation:coIn .2s ease-out}
+.cocard.t-y{--c:#ffd23a;--d:#a67c00}.cocard.t-c{--c:#36e2ff;--d:#0b6a80}.cocard.t-g{--c:#7cff9e;--d:#2f8a4e}.cocard.t-r{--c:#ff6b6b;--d:#8a1c1c}
+.coicon{width:60px;height:60px;border-radius:30px;display:flex;align-items:center;justify-content:center;color:var(--c);background:rgba(255,255,255,.06);border:2px solid var(--c)}
+.coicon svg{width:30px;height:30px;fill:none;stroke:currentColor;stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round}
+.cotitle{font-family:var(--disp);font-size:22px;line-height:1.15;text-transform:uppercase}
+.cobody{font-size:15px;line-height:1.5;color:#c9cbdb;overflow-wrap:anywhere}
+.cobody:empty{display:none}
+.cobtns{margin-top:8px;display:flex;flex-direction:column;gap:8px;width:100%}
+#coPrimary{height:52px;border:0;border-radius:14px;font-family:var(--disp);font-size:16px;letter-spacing:1px;text-transform:uppercase;background:var(--c);color:#07080f;box-shadow:0 5px 0 var(--d);cursor:pointer}
+#coPrimary:active:not(:disabled){transform:translateY(3px);box-shadow:0 2px 0 var(--d)}
+#coPrimary:disabled{opacity:.55;cursor:default}
+.cosec{height:44px;border:0;background:transparent;color:var(--dim);font-size:14px;font-weight:700;cursor:pointer}
+#checkout button:focus-visible{outline:2px solid var(--neon);outline-offset:2px}
+@keyframes coIn{from{transform:translateY(12px);opacity:0}}
+@keyframes cospin{to{transform:rotate(360deg)}}
+@media (prefers-reduced-motion:no-preference){.cocard.busy .coicon svg{animation:cospin 1.4s linear infinite}}
+/* a reward on the results screen: "+300 ⬢ Pro Cup win" */
+.rreward{display:flex;align-items:center;gap:12px;width:fit-content;max-width:100%;padding:10px 16px;border-radius:16px;background:rgba(255,210,58,.12);border:2px solid #ffd23a;color:#f4f1e8}
+.rreward.hidden{display:none}
+.rreward .tok{width:30px;height:30px}
+.rreward b{font-family:var(--disp);font-weight:400;font-size:30px;line-height:1;color:#ffd23a}
+.rreward span{font-size:14px;line-height:1.35;color:#e8e2c8}
+.rreward.waiting{border-style:dashed}
+@media (prefers-reduced-motion:no-preference){.rreward.pop{animation:rpop .6s cubic-bezier(.2,1.6,.4,1)}}
+@keyframes rpop{from{transform:scale(.6);opacity:0}}
+.chclaim .tok,.chrw .tok{width:14px;height:14px;vertical-align:-2px;margin-right:3px}
+.chnote{font-size:13px;color:#ffd23a}
+.chnote:empty{display:none}
 /* online: the home view (quick match, private room, join by code) and the room */
 .ohome{flex:none;width:min(1100px,100%);display:flex;flex-direction:column;gap:24px;padding:22px 32px}
 #online .driver{padding-right:16px}
@@ -1655,7 +1802,7 @@ body:has(#result:not(.hidden)) #hud,body:has(#result:not(.hidden)) #clinks,body:
     </div>
     <div class="mtools">
       <div class="driver"><label for="pname">Driver</label><input id="pname" maxlength="16" autocomplete="off" spellcheck="false"><button id="pdice" type="button" title="Random name" aria-label="Random name"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="4"/><circle cx="8.5" cy="8.5" r="1.2" class="f"/><circle cx="12" cy="12" r="1.2" class="f"/><circle cx="15.5" cy="15.5" r="1.2" class="f"/></svg></button><button id="pacct" class="pacct" type="button" title="Your account"><i class="av" id="pacctAv"></i><b id="pacctName"></b><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg></button></div>
-      <button class="pill tokpill" id="tokbtn" type="button" title="Your tokens: spend them in the Garage"><svg class="tok" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2l8.66 5v10L12 22l-8.66-5V7z"/><path d="M12 6.5l4.76 2.75v5.5L12 17.5l-4.76-2.75v-5.5z"/></svg><b id="tokBal"></b></button>
+      <button class="pill tokpill" id="tokbtn" type="button" title="Wallet: your tokens and how to earn more"><svg class="tok" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2l8.66 5v10L12 22l-8.66-5V7z"/><path d="M12 6.5l4.76 2.75v5.5L12 17.5l-4.76-2.75v-5.5z"/></svg><b id="tokBal"></b></button>
       <button class="pill" id="chalbtn" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 22c4 0 7-3 7-7 0-4-3-6-4-10-2 2-3 4-3 6-1-1-2-2-2-4-3 2-5 5-5 8 0 4 3 7 7 7z"/></svg><span>Challenges</span></button>
       <button class="pill" id="garagebtn" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 21V9l9-6 9 6v12"/><path d="M7 21v-8h10v8M7 17h10"/></svg><span>Garage</span></button>
       <button class="pill" id="boardbtn" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 21h8M12 17v4M7 4h10v5a5 5 0 0 1-10 0z"/><path d="M17 5h3v2a3 3 0 0 1-3 3M7 5H4v2a3 3 0 0 0 3 3"/></svg><span>Leaderboard</span></button>
@@ -1884,6 +2031,14 @@ body:has(#result:not(.hidden)) #hud,body:has(#result:not(.hidden)) #clinks,body:
   <button id="celebSkip" type="button">Skip to results</button>
 </div>
 
+<div id="checkout" class="hidden" role="dialog" aria-modal="true" aria-labelledby="coTitle" aria-describedby="coBody">
+  <div class="cocard" id="coCard">
+    <div class="coicon" id="coIcon"></div>
+    <div class="cotitle" id="coTitle"></div>
+    <div class="cobody" id="coBody"></div>
+    <div class="cobtns"><button id="coPrimary" type="button"></button><button class="cosec" id="coSecondary" type="button"></button></div>
+  </div>
+</div>
 <div id="toast" class="glass hidden"><span id="toastmsg"></span><button id="toastbtn" type="button"></button></div>
 
 <div id="loading" class="screen hidden"><div style="font-size:20px;font-weight:800;letter-spacing:3px" id="loadtxt">Generating track…</div><div class="bar"><i></i></div></div>
@@ -1895,6 +2050,7 @@ body:has(#result:not(.hidden)) #hud,body:has(#result:not(.hidden)) #clinks,body:
       <div class="chtools"><div class="chstreak"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 22c4 0 7-3 7-7 0-4-3-6-4-10-2 2-3 4-3 6-1-1-2-2-2-4-3 2-5 5-5 8 0 4 3 7 7 7z"/></svg><span id="chStreak"></span></div><div class="chclock">New in <b id="chTimer"></b></div></div>
     </header>
     <div class="chdaily" id="chDaily"></div>
+    <div class="chnote" id="chNote" role="status"></div>
     <div class="chgrid">
       <section class="chpanel chghost" aria-label="Ghost time trial">
         <div class="clab">Time trial · Ghost race</div>
@@ -1935,6 +2091,56 @@ body:has(#result:not(.hidden)) #hud,body:has(#result:not(.hidden)) #clinks,body:
         <div class="gmsg" id="gMsg" role="status" aria-live="polite"></div>
       </div>
     </section>
+  </div>
+</div>
+
+<div id="wallet" class="screen hidden">
+  <div class="wwrap">
+    <header class="whead"><button class="backbtn" id="walBack" type="button" aria-label="Back" title="Back"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg></button><h2>Wallet</h2></header>
+    <div class="wleft">
+      <section class="wbal" aria-label="Balance">
+        <div class="wlab yl">Balance</div>
+        <div class="wbig"><svg class="tok" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2l8.66 5v10L12 22l-8.66-5V7z"/><path d="M12 6.5l4.76 2.75v5.5L12 17.5l-4.76-2.75v-5.5z"/></svg><b id="walBal"></b></div>
+        <div class="wwho" id="walWho"></div>
+        <div class="wsplit"><div><span>Earned</span><b id="walEarned"></b></div><div><span>Bought</span><b id="walBought"></b></div></div>
+        <button class="wget" id="walGet" type="button">Get tokens</button>
+      </section>
+      <section class="wearnbox" aria-label="Earn free tokens">
+        <div class="wlab"><span>Earn free tokens</span><small id="walToday"></small></div>
+        <div class="wearns" id="walEarn"></div>
+        <div class="wmsg" id="walMsg" role="status"></div>
+      </section>
+    </div>
+    <section class="whist" aria-label="History">
+      <div class="wlab"><span>History</span><small>Receipts are also emailed</small></div>
+      <div class="hrow hhead" aria-hidden="true"><span>Date</span><span>What</span><span>Payment</span><span>Status</span><span>Tokens</span></div>
+      <div class="hrows" id="walHist"></div>
+    </section>
+  </div>
+</div>
+
+<div id="shop" class="screen hidden">
+  <div class="swrap">
+    <header class="shead2">
+      <div class="stl"><button class="backbtn" id="shopBack" type="button" aria-label="Back" title="Back"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg></button><div><h2>Get tokens</h2><div class="sneed" id="shopNeed"></div></div></div>
+      <div class="sbal"><svg class="tok" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2l8.66 5v10L12 22l-8.66-5V7z"/><path d="M12 6.5l4.76 2.75v5.5L12 17.5l-4.76-2.75v-5.5z"/></svg><b id="shopBal"></b></div>
+    </header>
+    <div class="smain">
+      <div class="sstarter" id="shopStarterBox"><span class="sone">One-time</span><div class="sstx"><b>Starter Pack</b><div id="shopStarterTxt"></div></div><button id="shopStarter" type="button"></button></div>
+      <div class="spacks" id="shopPacks"></div>
+      <div class="sinfo">
+        <div class="sbox"><div class="wlab">Or earn them free</div><div class="searn" id="shopEarn"></div></div>
+        <div class="sbox slegal">Tokens are tied to your account and never expire. They only unlock looks and cars, never speed or grip. <a href="terms.html" target="_blank" rel="noopener">Terms</a> · <a href="refunds.html" target="_blank" rel="noopener">Refund policy</a></div>
+      </div>
+    </div>
+    <aside class="sorder" aria-label="Order summary">
+      <div class="wlab yl">Order</div>
+      <div class="sotok" id="shopOrderTokens"></div>
+      <div class="sorows" id="shopOrder"></div>
+      <div class="schips" aria-label="Ways to pay"><span>Card</span><span>Bank transfer</span><span>USSD</span><span>Bank app</span></div>
+      <button class="spay" id="shopPay" type="button"></button>
+      <div class="ssecure"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>Secure checkout by Paystack</div>
+    </aside>
   </div>
 </div>
 
@@ -2130,6 +2336,7 @@ body:has(#result:not(.hidden)) #hud,body:has(#result:not(.hidden)) #clinks,body:
         <div class="rplace" id="resPlaceBox"><b id="resPlace"></b><span id="resOf"></span></div>
         <h2 id="resTitle">Race Over</h2>
       </div>
+      <div class="rreward hidden" id="resReward" role="status"><svg class="tok" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2l8.66 5v10L12 22l-8.66-5V7z"/><path d="M12 6.5l4.76 2.75v5.5L12 17.5l-4.76-2.75v-5.5z"/></svg><b id="resRewardAmt"></b><span id="resRewardTxt"></span></div>
       <div class="rrec hidden" id="resRecord"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2l3 7h7l-5.5 4.5 2 7.5L12 16.5 5.5 21l2-7.5L2 9h7z"/></svg><span id="resRecTxt"></span></div>
       <div class="rtiles" id="resStats"></div>
     </div>

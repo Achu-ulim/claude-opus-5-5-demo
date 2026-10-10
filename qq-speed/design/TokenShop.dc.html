@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Token Shop</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Bungee&amp;family=Chakra+Petch:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#07080F}
+button{font-family:inherit;cursor:pointer}
+button:focus-visible{outline:2px solid #36E2FF;outline-offset:2px}
+a{color:#A3A6BF}
+</style>
+</helmet>
+<div style="position: relative; width: 1440px; height: 900px; overflow: hidden; background: #07080F; color: #F4F1E8; font-family: 'Chakra Petch', sans-serif">
+  <div style="position: relative; height: 100%; box-sizing: border-box; padding: 32px 48px; display: grid; grid-template-columns: 1fr 420px; grid-template-rows: auto 1fr; gap: 24px">
+    <header style="grid-column: 1 / -1; display: flex; align-items: center; justify-content: space-between">
+      <div style="display: flex; align-items: center; gap: 16px">
+        <button aria-label="Back to garage" style="width: 48px; height: 48px; border-radius: 24px; border: 1px solid rgba(255,255,255,0.14); background: rgba(13,15,26,0.85); color: #F4F1E8; display: flex; align-items: center; justify-content: center"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 5l-7 7 7 7"></path></svg></button>
+        <div><h1 style="margin: 0; font-family: 'Bungee', sans-serif; font-weight: 400; font-size: 40px; line-height: 1">GET TOKENS</h1><div style="font-size: 14px; color: #A3A6BF">You need 450 more for Midnight Pearl</div></div>
+      </div>
+      <div style="display: flex; align-items: center; gap: 10px; height: 48px; padding: 0 18px; border-radius: 24px; background: rgba(255,210,58,0.1); border: 1px solid rgba(255,210,58,0.5)">
+        <svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2l8.66 5v10L12 22l-8.66-5V7z" fill="#FFD23A"></path><path d="M12 6.5l4.76 2.75v5.5L12 17.5l-4.76-2.75v-5.5z" fill="#A67C00"></path></svg>
+        <b style="font-family: 'Bungee', sans-serif; font-size: 18px">1,250</b>
+      </div>
+    </header>
+
+    <div style="display: flex; flex-direction: column; gap: 18px">
+      <div style="display: flex; align-items: center; gap: 18px; padding: 18px 22px; border-radius: 18px; background: rgba(255,61,166,0.1); border: 2px dashed #FF3DA6">
+        <div style="font-family: 'Bungee', sans-serif; font-size: 16px; color: #FF3DA6; padding: 6px 10px; border-radius: 8px; background: rgba(255,61,166,0.15)">ONE-TIME</div>
+        <div style="flex: 1"><b style="font-size: 18px">Starter Pack</b><div style="font-size: 14px; color: #C9CBDB">1,500 tokens + Gold Leaf paint. Only for your first purchase.</div></div>
+        <button style="height: 48px; padding: 0 20px; border-radius: 12px; border: 2px solid #FF3DA6; background: transparent; color: #F4F1E8; font-weight: 700">₦[PRICE]</button>
+      </div>
+
+      <div style="display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px">
+        <sc-for list="{{packs}}" as="p" hint-placeholder-count="4">
+          <button onClick="{{p.pick}}" aria-pressed="{{p.pressed}}" style="{{p.style}}">
+            <span style="{{p.badgeStyle}}">{{p.badge}}</span>
+            <svg width="{{p.icon}}" height="{{p.icon}}" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2l8.66 5v10L12 22l-8.66-5V7z" fill="#FFD23A"></path><path d="M12 6.5l4.76 2.75v5.5L12 17.5l-4.76-2.75v-5.5z" fill="#A67C00"></path></svg>
+            <span style="font-family: 'Bungee', sans-serif; font-size: 28px">{{p.tokens}}</span>
+            <span style="font-size: 13px; color: #7CFF9E; font-weight: 700; min-height: 18px">{{p.bonus}}</span>
+            <span style="margin-top: auto; width: 100%; padding: 10px 0; border-radius: 10px; background: rgba(255,255,255,0.06); font-size: 18px; font-weight: 700">{{p.price}}</span>
+          </button>
+        </sc-for>
+      </div>
+
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 14px">
+        <div style="padding: 16px 18px; border-radius: 16px; background: rgba(13,15,26,0.9); border: 1px solid rgba(255,255,255,0.12)">
+          <div style="font-size: 12px; font-weight: 700; letter-spacing: 3px; color: #A3A6BF; margin-bottom: 8px">OR EARN THEM FREE</div>
+          <div style="display: flex; flex-direction: column; gap: 6px; font-size: 14px; color: #C9CBDB">
+            <span>Daily challenges · <b style="color: #FFD23A">50–200</b> each</span>
+            <span>Cup and championship wins · <b style="color: #FFD23A">up to 500</b></span>
+            <span>7-day streak bonus · <b style="color: #FFD23A">300</b></span>
+          </div>
+        </div>
+        <div style="padding: 16px 18px; border-radius: 16px; background: rgba(13,15,26,0.9); border: 1px solid rgba(255,255,255,0.12); font-size: 13px; line-height: 1.55; color: #A3A6BF">
+          Tokens are tied to your account and never expire. They only unlock looks and cars, never speed or grip. Prices include VAT. <a href="#">Terms</a> · <a href="#">Refund policy</a>
+        </div>
+      </div>
+    </div>
+
+    <aside aria-label="Order summary" style="display: flex; flex-direction: column; gap: 14px; padding: 24px; border-radius: 22px; background: rgba(13,15,26,0.94); border: 2px solid #FFD23A">
+      <div style="font-size: 12px; font-weight: 700; letter-spacing: 3px; color: #FFD23A">ORDER</div>
+      <div style="display: flex; justify-content: space-between; align-items: baseline"><span style="font-family: 'Bungee', sans-serif; font-size: 28px">{{selTokens}} TOKENS</span></div>
+      <div style="display: flex; flex-direction: column; gap: 10px; font-size: 15px">
+        <div style="display: flex; justify-content: space-between; padding-bottom: 10px; border-bottom: 1px solid rgba(255,255,255,0.08)"><span style="color: #A3A6BF">Pack</span><b>{{selName}}</b></div>
+        <div style="display: flex; justify-content: space-between; padding-bottom: 10px; border-bottom: 1px solid rgba(255,255,255,0.08)"><span style="color: #A3A6BF">Balance after</span><b>{{after}}</b></div>
+        <div style="display: flex; justify-content: space-between; padding-bottom: 10px; border-bottom: 1px solid rgba(255,255,255,0.08)"><span style="color: #A3A6BF">Receipt to</span><b>ni•••••@gmail.com</b></div>
+        <div style="display: flex; justify-content: space-between"><span style="color: #A3A6BF">Total</span><b style="font-family: 'Bungee', sans-serif; font-size: 22px">{{selPrice}}</b></div>
+      </div>
+      <div style="display: flex; gap: 6px; flex-wrap: wrap">
+        <span style="padding: 6px 10px; border-radius: 8px; background: rgba(255,255,255,0.06); font-size: 12px; font-weight: 700">CARD</span>
+        <span style="padding: 6px 10px; border-radius: 8px; background: rgba(255,255,255,0.06); font-size: 12px; font-weight: 700">BANK TRANSFER</span>
+        <span style="padding: 6px 10px; border-radius: 8px; background: rgba(255,255,255,0.06); font-size: 12px; font-weight: 700">USSD</span>
+        <span style="padding: 6px 10px; border-radius: 8px; background: rgba(255,255,255,0.06); font-size: 12px; font-weight: 700">BANK APP</span>
+      </div>
+      <button style="margin-top: auto; height: 64px; border: 0; border-radius: 16px; background: #FFD23A; color: #07080F; font-family: 'Bungee', sans-serif; font-size: 20px; letter-spacing: 1px; box-shadow: 0 6px 0 #A67C00">PAY {{selPrice}}</button>
+      <div style="display: flex; align-items: center; justify-content: center; gap: 8px; font-size: 13px; color: #A3A6BF"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true"><rect x="5" y="11" width="14" height="10" rx="2"></rect><path d="M8 11V7a4 4 0 0 1 8 0v4"></path></svg>Secure checkout by Paystack</div>
+    </aside>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":900}}'>
+class Component extends DCLogic {
+  constructor(props) { super(props); this.state = { pack: 1 }; }
+  renderVals() {
+    const S = this.state;
+    const P = [['Pit Stop', 500, '', '₦[PRICE 1]', '', 26], ['Podium', 1200, '+20% bonus', '₦[PRICE 2]', 'POPULAR', 32], ['Champion', 3000, '+50% bonus', '₦[PRICE 3]', 'BEST VALUE', 38], ['Legend', 8000, '+60% bonus', '₦[PRICE 4]', '', 44]];
+    const sel = P[S.pack];
+    return {
+      packs: P.map(([name, tokens, bonus, price, badge, icon], i) => ({
+        tokens: tokens.toLocaleString('en-US'), bonus, price, badge, icon, pressed: String(S.pack === i),
+        badgeStyle: 'align-self: stretch; text-align: center; font-size: 11px; font-weight: 700; letter-spacing: 2px; padding: 4px 0; border-radius: 6px; ' + (badge ? 'background: #FFD23A; color: #07080F' : 'color: transparent'),
+        style: 'display: flex; flex-direction: column; align-items: center; gap: 8px; min-height: 260px; padding: 14px; border-radius: 18px; color: #F4F1E8; ' + (S.pack === i ? 'background: rgba(255,210,58,0.12); border: 2px solid #FFD23A' : 'background: rgba(13,15,26,0.9); border: 2px solid rgba(255,255,255,0.12)'),
+        pick: () => this.setState({ pack: i })
+      })),
+      selName: sel[0], selTokens: sel[1].toLocaleString('en-US'), selPrice: sel[3], after: (1250 + sel[1]).toLocaleString('en-US')
+    };
+  }
+}
+</script>
+</body>
+</html>

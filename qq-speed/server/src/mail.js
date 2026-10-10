@@ -66,6 +66,20 @@ export function codeMail(to, username, code, purpose) {
   };
 }
 
+// a receipt once a token purchase is paid: { pack, tokens, amount (₦ text), reference, at (ms) }
+export function receiptMail(to, username, r) {
+  const date = new Date(r.at).toUTCString().replace(/:\d\d GMT$/, ' UTC');
+  const rows = [['Pack', r.pack], ['Tokens', r.tokens.toLocaleString('en-US')], ['Amount', r.amount], ['Reference', r.reference], ['Date', date]];
+  return {
+    to,
+    subject: `Your Driftbolt receipt (${r.reference})`,
+    text: `Hi ${username}, thanks for your purchase. ${rows.map(([k, v]) => `${k}: ${v}`).join('. ')}. The tokens are in your Driftbolt wallet.`,
+    html: page(`<p>Hi <b>${esc(username)}</b>, thanks for your purchase. The tokens are in your wallet.</p>
+<table style="border-collapse:collapse;margin:16px 0">${rows.map(([k, v]) => `<tr><td style="padding:4px 16px 4px 0;color:#5b5e73">${k}</td><td style="padding:4px 0"><b>${esc(v)}</b></td></tr>`).join('')}</table>
+<p style="color:#5b5e73">Keep this email: quote the reference if you ever need help with this payment.</p>`),
+  };
+}
+
 // to the old address once the email has changed
 export function changedMail(to, username, masked) {
   const text = `Hi ${username}, the email on your Driftbolt account was changed to ${masked}. If you didn't do this, log in on a device you trust and change it back from Settings.`;
