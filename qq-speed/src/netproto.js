@@ -1,6 +1,7 @@
 // Online play: what the game client and the multiplayer server (server/src/index.js) agree on.
 // Imported by both sides, so it must stay free of browser, three.js and Workers dependencies.
 import { LOOK_SLOTS, FACTORY, item } from './catalog.js';
+import { offensive } from './words.js';
 
 export const MAX_PLAYERS = 6; // the grid and the points table are built for six racers
 export const SNAPSHOT_HZ = 15; // car state updates per second from each racer
@@ -14,7 +15,8 @@ export const FINISH_GRACE = 20; // seconds the rest of the field gets once the w
 export const COUNTDOWN = 3; // seconds of 3-2-1 before GO
 // Centerline length of each track (m). A lap faster than length / MAX_SPEED can't be driven, so the server rejects it.
 export const TRACK_LEN = { city: 2355, aegean: 2499, egypt: 2430, snow: 2151, neon: 2460, bay: 2077, dune: 2455 };
-export const MAX_SPEED = 90; // m/s, above the 86 m/s every boost combined is capped at
+export const SPEED_CAP = 86; // m/s: no car goes faster, whatever boosts it has (vehicle.js)
+export const MAX_SPEED = 90; // m/s, a little above SPEED_CAP
 // what a racer's game tells the others about its car: item use and hits, takedowns, and the winner's celebration
 export const CAR_EVENTS = ['banana', 'bananaHit', 'missile', 'hit', 'wreck', 'celeb'];
 export const CELEBRATIONS = ['burnout', 'donuts', 'fireworks', 'driver'];
@@ -26,10 +28,23 @@ export function cleanName(s, max = 16) {
 }
 
 // ---------- Car looks (the garage) ----------
-// What a player has fitted to a car: { paint, wheels, bodykit, glow }, each a part id from catalog.js. Looks only:
-// they never change how a car drives. A slot that is left out has the car's factory part.
+// What a player has fitted to a car: { paint, livery, wheels, … }, one part id from catalog.js per slot (a slot left
+// out has the car's factory part), plus what they made themselves for the parts that need it:
+//   paintHex   0xrrggbb, with the Custom Colour paint
+//   plateText  the number on a plate: up to PLATE_MAX letters, digits, spaces and dashes, nothing offensive (words.js)
+//   logoKey    an uploaded logo (GET /logo/<key> on the server; a guest's stays on their device), with a logo part
+// Engines are the one part that changes how a car drives, and only against the computer (carModel.js tuneFor).
 // Keeps only ids the catalog has for that slot, so a look from storage or another player can't break a car. Looks
 // from older games (colours, not ids) and ids this version doesn't know come out as factory parts.
+export const LOOK_DATA = ['paintHex', 'plateText', 'logoKey'];
+export const PLATE_MAX = 8;
+export const DEFAULT_PLATE = 'DRIFT';
+export const LOGO_KEY_RE = /^[0-9a-f]{32}$/;
+// a plate number as it's shown: capitals, single spaces; '' if there's nothing left or it's offensive
+export function cleanPlate(s) {
+  const t = String(s ?? '').toUpperCase().replace(/[^A-Z0-9 -]/g, '').replace(/\s+/g, ' ').trim().slice(0, PLATE_MAX).trim();
+  return t && !offensive(t) ? t : '';
+}
 export function cleanLook(l) {
   const out = {};
   if (!l || typeof l !== 'object') return out;
@@ -37,6 +52,10 @@ export function cleanLook(l) {
     const id = l[slot];
     if (typeof id === 'string' && id !== FACTORY[slot] && item(id)?.category === slot) out[slot] = id;
   }
+  if (out.paint && item(out.paint).custom && Number.isInteger(l.paintHex) && l.paintHex >= 0 && l.paintHex <= 0xffffff) out.paintHex = l.paintHex;
+  const plate = out.plate && cleanPlate(l.plateText);
+  if (plate) out.plateText = plate;
+  if (out.logo && typeof l.logoKey === 'string' && LOGO_KEY_RE.test(l.logoKey)) out.logoKey = l.logoKey;
   return out;
 }
 

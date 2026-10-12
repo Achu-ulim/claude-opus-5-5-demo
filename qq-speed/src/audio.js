@@ -12,6 +12,19 @@ function engineRpm(speedRatio) {
 }
 
 const TRAFFIC_VOICES = 4; // rivals heard at once (the nearest ones)
+// Music is scheduled this far ahead (seconds). The scheduler runs on the page's main thread, which a heavy frame, a
+// garbage collection or building a track can hold up; with only a few frames queued, those stalls cut the music out
+// or made late notes pile up and crackle. Song changes and stops cut what's queued (Music.cut), so it can be long.
+const LOOKAHEAD = 0.6;
+
+// engine voices: pitch and filter brightness against the stock engine, and the main oscillator's wave
+const VOICES = {
+  stock: { pitch: 1, bright: 1, wave: 'sawtooth' },
+  turbo: { pitch: 1.06, bright: 1.25, wave: 'sawtooth' },
+  v12: { pitch: 1.32, bright: 1.15, wave: 'sawtooth' },
+  electric: { pitch: 2.4, bright: 0.55, wave: 'triangle' },
+  race: { pitch: 1.16, bright: 1.45, wave: 'sawtooth' },
+};
 
 export class GameAudio {
   constructor() {
@@ -32,13 +45,27 @@ export class GameAudio {
     if (this.ctx) { this.resume(); return; }
     const AC = window.AudioContext || window.webkitAudioContext;
     if (!AC) return;
-    const ctx = (this.ctx = new AC());
+    // 'playback': bigger output buffers. The default asks phones for their smallest ones, which run dry (crackle) as soon
+    // as the game keeps the device busy; a few tens of milliseconds more latency is fine for engines and music.
+    let ctx;
+    try { ctx = new AC({ latencyHint: 'playback' }); } catch { ctx = new AC(); }
+    this.ctx = ctx;
     this.master = ctx.createGain();
     this.master.gain.value = this.muted ? 0 : 0.8;
     const comp = ctx.createDynamicsCompressor();
     comp.threshold.value = -12;
     comp.ratio.value = 4;
-    this.master.connect(comp).connect(ctx.destination);
+    // then a limiter, so loud moments together (nitro, a crash, the crowd, music) never clip, which crackles
+    const limit = ctx.createDynamicsCompressor();
+    limit.threshold.value = -2;
+    limit.knee.value = 0;
+    limit.ratio.value = 20;
+    limit.attack.value = 0.002;
+    limit.release.value = 0.1;
+    this.master.connect(comp).connect(limit).connect(ctx.destination);
+    // a context stopped by something else while the game is on screen (another app's sound, a system interruption)
+    // is started again; one the game paused itself (hold) waits for resume()
+    ctx.onstatechange = () => { if (ctx.state !== 'running' && !this.held && !document.hidden) ctx.resume().catch(() => {}); };
     this.sfx = ctx.createGain();
     this.sfx.gain.value = 0.9 * this.sfxVol;
     this.sfx.connect(this.master);
@@ -52,7 +79,6 @@ export class GameAudio {
     const d = this.noise.getChannelData(0);
     for (let i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
     this.musicEngine = new Music(ctx, this.music, this.noise);
-    this.musicEngine.setSong(SONGS[this.song]);
 
     // Engine: sawtooth + square, low-passed
     this.engGain = ctx.createGain();
@@ -153,14 +179,20 @@ export class GameAudio {
     this.schedTimer = setInterval(() => this.schedule(), 25);
   }
 
+  // the player's engine (the Garage's engines): the same voice pitched and opened up, an electric one a smooth whine
+  setVoice(kind) {
+    this.voice = VOICES[kind] || VOICES.stock;
+    if (this.eng1) this.eng1.type = this.voice.wave;
+  }
+
   setEngine(speedRatio, throttle, boosting, drifting, active) {
     if (!this.ctx) return;
-    const t = this.ctx.currentTime;
+    const t = this.ctx.currentTime, v = this.voice || VOICES.stock;
     const rpm = engineRpm(speedRatio);
-    const base = 55 + rpm * 130 + (boosting ? 35 : 0);
+    const base = (55 + rpm * 130 + (boosting ? 35 : 0)) * v.pitch;
     this.eng1.frequency.setTargetAtTime(base, t, 0.05);
     this.eng2.frequency.setTargetAtTime(base * 0.5, t, 0.05);
-    this.engFilter.frequency.setTargetAtTime(500 + rpm * 1600 + (throttle > 0 ? 500 : 0), t, 0.08);
+    this.engFilter.frequency.setTargetAtTime((500 + rpm * 1600 + (throttle > 0 ? 500 : 0)) * v.bright, t, 0.08);
     this.engGain.gain.setTargetAtTime(active ? 0.085 + (throttle > 0 ? 0.05 : 0) : 0, t, 0.1);
     this.skidGain.gain.setTargetAtTime(drifting && active ? 0.13 : 0, t, 0.05);
     this.skidFilter.frequency.setTargetAtTime(1800 + speedRatio * 1200, t, 0.1);
@@ -427,28 +459,42 @@ export class GameAudio {
   setSong(i) {
     this.song = ((i % SONGS.length) + SONGS.length) % SONGS.length;
     this.step = 0;
-    if (this.ctx) {
-      this.nextNoteTime = this.ctx.currentTime + 0.1;
-      this.musicEngine.setSong(SONGS[this.song]);
-    }
+    this.restartMusic();
     return SONGS[this.song].name;
   }
 
   startMusic() {
     if (!this.ctx) return;
     this.playing = true;
+    this.restartMusic();
+  }
+
+  stopMusic() {
+    this.playing = false;
+    this.musicEngine?.cut();
+  }
+
+  // the music from now on: whatever was queued fades out, and the song carries on from its current step
+  restartMusic() {
+    if (!this.ctx) return;
+    this.musicEngine.start(SONGS[this.song]);
     this.nextNoteTime = this.ctx.currentTime + 0.1;
   }
 
-  stopMusic() { this.playing = false; }
-
-  schedule() {
+  // ahead: how many seconds to have queued; more before the page is about to be busy for a while (loadMap)
+  schedule(ahead = LOOKAHEAD) {
     if (!this.ctx || !this.playing || !this.musicOn) return;
     const song = SONGS[this.song];
     const spb = 60 / song.bpm / 4; // 16th note
-    // Timers are throttled while the tab is in the background; don't flush the backlog of notes all at once on return
-    if (this.nextNoteTime < this.ctx.currentTime - 0.2) this.nextNoteTime = this.ctx.currentTime + 0.05;
-    while (this.nextNoteTime < this.ctx.currentTime + 0.12) {
+    // Notes whose moment passed while nothing could schedule them (a stall longer than the look-ahead, or timers
+    // throttled in the background) are skipped, not played late all at once: the song carries on where it would be
+    const now = this.ctx.currentTime;
+    if (this.nextNoteTime < now - 0.005) {
+      const missed = Math.ceil((now - 0.005 - this.nextNoteTime) / spb);
+      this.nextNoteTime += missed * spb;
+      this.step += missed;
+    }
+    while (this.nextNoteTime < now + ahead) {
       this.playStep(song, this.step, this.nextNoteTime, spb);
       this.nextNoteTime += spb;
       this.step++;
@@ -462,8 +508,14 @@ export class GameAudio {
   // the page went to the background (tab switched, app left, screen locked): a running context keeps its engine
   // drones and music going, so stop the whole context, and start it again when the player is back.
   // iOS reports 'interrupted' rather than 'suspended' after a call or a lock
-  suspend() { if (this.ctx?.state === 'running') this.ctx.suspend().catch(() => {}); }
-  resume() { if (this.ctx && this.ctx.state !== 'running' && !document.hidden) this.ctx.resume().catch(() => {}); }
+  suspend() {
+    this.held = true;
+    if (this.ctx?.state === 'running') this.ctx.suspend().catch(() => {});
+  }
+  resume() {
+    this.held = false;
+    if (this.ctx && this.ctx.state !== 'running' && !document.hidden) this.ctx.resume().catch(() => {});
+  }
 
   setMuted(on) {
     this.muted = on;
@@ -481,7 +533,8 @@ export class GameAudio {
   toggleMusic() {
     this.musicOn = !this.musicOn;
     if (this.music) this.music.gain.setTargetAtTime(this.musicOn ? 0.32 * this.musicVol : 0, this.ctx.currentTime, 0.1);
-    if (this.musicOn && this.ctx) this.nextNoteTime = this.ctx.currentTime + 0.1;
+    if (this.musicOn) this.restartMusic();
+    else this.musicEngine?.cut();
     return this.musicOn;
   }
 }

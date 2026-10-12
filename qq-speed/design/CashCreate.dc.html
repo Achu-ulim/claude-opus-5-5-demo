@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Host a Cash Race</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Bungee&amp;family=Chakra+Petch:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#07080F}
+button{font-family:inherit;cursor:pointer}
+button:focus-visible{outline:2px solid #36E2FF;outline-offset:2px}
+a{color:#A3A6BF}
+</style>
+</helmet>
+<div style="position: relative; width: 1440px; height: 900px; overflow: hidden; background: #07080F; color: #F4F1E8; font-family: 'Chakra Petch', sans-serif">
+  <div aria-hidden="true" style="position: absolute; top: 0; left: 0; right: 0; height: 6px; background: #7CFF9E"></div>
+  <div style="height: 100%; box-sizing: border-box; padding: 32px 48px; display: grid; grid-template-columns: 1fr 440px; grid-template-rows: auto 1fr; gap: 24px">
+    <header style="grid-column: 1 / -1; display: flex; align-items: center; justify-content: space-between">
+      <div style="display: flex; align-items: center; gap: 16px">
+        <button aria-label="Back" style="width: 48px; height: 48px; border-radius: 24px; border: 1px solid rgba(255,255,255,0.14); background: rgba(13,15,26,0.85); color: #F4F1E8; display: flex; align-items: center; justify-content: center"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 5l-7 7 7 7"></path></svg></button>
+        <div><div style="font-size: 12px; font-weight: 700; letter-spacing: 3px; color: #7CFF9E">ONLINE · 18+ · VERIFIED PLAYERS ONLY</div><h1 style="margin: 0; font-family: 'Bungee', sans-serif; font-weight: 400; font-size: 40px; line-height: 1">HOST A CASH RACE</h1></div>
+      </div>
+      <div style="display: flex; align-items: center; gap: 10px; height: 48px; padding: 0 18px; border-radius: 24px; background: rgba(124,255,158,0.1); border: 1px solid rgba(124,255,158,0.5)"><span style="font-size: 12px; font-weight: 700; letter-spacing: 2px; color: #A3A6BF">CASH</span><b style="font-family: 'Bungee', sans-serif; font-size: 18px">₦1,250</b></div>
+    </header>
+
+    <div style="display: flex; flex-direction: column; gap: 20px">
+      <sc-for list="{{groups}}" as="g" hint-placeholder-count="3">
+        <div style="display: flex; flex-direction: column; gap: 8px">
+          <div style="font-size: 12px; font-weight: 700; letter-spacing: 3px; color: #A3A6BF">{{g.label}}</div>
+          <div style="display: flex; gap: 8px; flex-wrap: wrap">
+            <sc-for list="{{g.opts}}" as="o" hint-placeholder-count="4"><button onClick="{{o.pick}}" aria-pressed="{{o.pressed}}" style="{{o.style}}">{{o.label}}</button></sc-for>
+          </div>
+          <div style="font-size: 13px; color: #8A8DA6">{{g.note}}</div>
+        </div>
+      </sc-for>
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 14px">
+        <div style="padding: 14px 16px; border-radius: 14px; background: rgba(13,15,26,0.9); border: 1px solid rgba(255,255,255,0.12)"><div style="font-size: 12px; font-weight: 700; letter-spacing: 2px; color: #A3A6BF">TRACK · LAPS</div><b style="font-size: 17px">Neon Tokyo · 2 laps · Speed Race</b><div style="font-size: 13px; color: #8A8DA6">Items are off in cash races. Everyone gets the same car.</div></div>
+        <div style="padding: 14px 16px; border-radius: 14px; background: rgba(13,15,26,0.9); border: 1px solid rgba(255,255,255,0.12)"><div style="font-size: 12px; font-weight: 700; letter-spacing: 2px; color: #A3A6BF">WHO CAN JOIN</div><b style="font-size: 17px">Anyone with the code</b><div style="font-size: 13px; color: #8A8DA6">Or list it publicly for verified players.</div></div>
+      </div>
+      <div style="padding: 14px 16px; border-radius: 14px; background: rgba(255,255,255,0.03); border: 1px dashed rgba(255,255,255,0.18); font-size: 13px; line-height: 1.6; color: #A3A6BF">
+        <b style="color: #F4F1E8">House rules.</b> Entries are held, not paid out, until the server confirms the result. If the room doesn't fill in 10 minutes, or the race is cancelled, everyone is refunded in full. A player who disconnects or quits forfeits their entry. Results with signs of cheating are frozen for review. <a href="#">Full rules</a> · <a href="#">Play responsibly</a>
+      </div>
+    </div>
+
+    <aside aria-label="Payout" style="display: flex; flex-direction: column; gap: 14px; padding: 24px; border-radius: 22px; background: rgba(13,15,26,0.94); border: 2px solid #7CFF9E">
+      <div style="font-size: 12px; font-weight: 700; letter-spacing: 3px; color: #7CFF9E">PAYOUT</div>
+      <div style="display: flex; flex-direction: column; gap: 10px; font-size: 15px">
+        <div style="display: flex; justify-content: space-between; padding-bottom: 10px; border-bottom: 1px solid rgba(255,255,255,0.08)"><span style="color: #A3A6BF">Entry × players</span><b>{{entryLine}}</b></div>
+        <div style="display: flex; justify-content: space-between; padding-bottom: 10px; border-bottom: 1px solid rgba(255,255,255,0.08)"><span style="color: #A3A6BF">Prize pool</span><b>{{pool}}</b></div>
+        <div style="display: flex; justify-content: space-between; padding-bottom: 10px; border-bottom: 1px solid rgba(255,255,255,0.08)"><span style="color: #A3A6BF">Platform fee ({{feePct}})</span><b>−{{fee}}</b></div>
+      </div>
+      <sc-for list="{{payouts}}" as="p" hint-placeholder-count="1">
+        <div style="display: flex; justify-content: space-between; align-items: baseline"><span style="font-size: 15px; color: #C9CBDB">{{p.place}}</span><span style="font-family: 'Bungee', sans-serif; font-size: {{p.size}}; color: #7CFF9E">{{p.amt}}</span></div>
+      </sc-for>
+      <div style="padding: 12px; border-radius: 12px; background: rgba(255,255,255,0.04); font-size: 13px; line-height: 1.5; color: #C9CBDB">Your {{stake}} entry is taken from your cash balance when you create the room, and returned if it doesn't fill.</div>
+      <button style="margin-top: auto; height: 64px; border: 0; border-radius: 16px; background: #7CFF9E; color: #07080F; font-family: 'Bungee', sans-serif; font-size: 20px; letter-spacing: 1px; box-shadow: 0 6px 0 #2F8A4E">CREATE ROOM · {{stake}}</button>
+    </aside>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"feePercent":{"editor":"int","default":10,"min":0,"max":30,"unit":"%"},"$preview":{"width":1440,"height":900}}'>
+class Component extends DCLogic {
+  constructor(props) { super(props); this.state = { stake: 0, players: 2, split: 0 }; }
+  renderVals() {
+    const S = this.state, feeP = (this.props.feePercent ?? 10) / 100;
+    const STAKES = [100, 200, 500, 1000], PLAYERS = [2, 4, 6], SPLITS = ['Winner takes all', 'Top 3 · 60 / 30 / 10'];
+    const n = (v) => '₦' + Math.round(v).toLocaleString('en-US');
+    const stake = STAKES[S.stake], players = PLAYERS[S.players];
+    const pool = stake * players, fee = pool * feeP, net = pool - fee;
+    const chip = (on) => 'min-height: 48px; padding: 0 20px; border-radius: 12px; font-size: 16px; font-weight: 700; ' + (on ? 'border: 2px solid #7CFF9E; background: rgba(124,255,158,0.14); color: #F4F1E8' : 'border: 2px solid rgba(255,255,255,0.12); background: transparent; color: #C9CBDB');
+    const group = (label, list, key, fmt, note) => ({ label, note, opts: list.map((v, i) => ({ label: fmt(v), pressed: String(S[key] === i), style: chip(S[key] === i), pick: () => this.setState({ [key]: i }) })) });
+    const payouts = S.split === 0 || players < 3
+      ? [{ place: 'Winner gets', amt: n(net), size: '40px' }]
+      : [['1st', 0.6], ['2nd', 0.3], ['3rd', 0.1]].map(([place, k]) => ({ place, amt: n(net * k), size: '26px' }));
+    return {
+      groups: [
+        group('ENTRY PER PLAYER', STAKES, 'stake', n, 'Same entry for everyone. Daily limit: ₦[LIMIT] in entries.'),
+        group('PLAYERS', PLAYERS, 'players', (v) => v + ' racers', 'The race starts when every seat is filled and paid.'),
+        group('PRIZE SPLIT', SPLITS, 'split', (v) => v, 'Top 3 split needs at least 4 racers.')
+      ],
+      stake: n(stake), entryLine: n(stake) + ' × ' + players, pool: n(pool), fee: n(fee), feePct: Math.round(feeP * 100) + '%', payouts
+    };
+  }
+}
+</script>
+</body>
+</html>

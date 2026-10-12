@@ -2,15 +2,18 @@
 // The server prices every pack (catalog.js) and adds tokens only once Paystack itself confirms a payment (its webhook,
 // or a status check); this screen opens Paystack's popup with the server's access code and then waits to hear back.
 // The popup's own "success" is never taken as payment.
+// In Lagos Life's frame (vatar.js) packs are paid on the world's own pay sheet instead, and Paystack never loads: each
+// pack is a Vatar product with the same id and price, and the server checks the purchase with Vatar before adding tokens.
 import { PACKS, STARTER_PACK, REWARDS, packById, naira, item } from './catalog.js';
 import * as wallet from './wallet.js';
 import * as card from './checkout.js';
+import * as vatar from './vatar.js';
 import { TOKEN } from './garage.js';
+import { loadPaystack } from './paystack.js';
 
 const $ = (id) => document.getElementById(id);
 const fmt = (n) => n.toLocaleString('en-US');
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-const PAYSTACK_JS = 'https://js.paystack.co/v2/inline.js';
 const CONFIRM_EVERY = 2000, CONFIRM_FOR = 60_000; // after Paystack's popup says done: ask the server this often, this long
 export const SUPPORT = 'support@driftbolt.online';
 const priced = (p) => Number.isInteger(p?.price_kobo) && p.price_kobo > 0;
@@ -22,6 +25,18 @@ const INIT_ERRORS = {
   slow_down: 'Too many tries. Wait a few minutes, then try again.',
   unreachable: 'Can\'t reach the server. Check your connection and try again.',
 };
+// what Lagos Life's pay sheet can answer instead of a purchase (cancelled just closes the card)
+const VATAR_ERRORS = {
+  payment_failed: 'The payment didn\'t go through. Try again, or pick another way to pay.',
+  not_for_sale: 'That pack isn\'t on sale in Lagos Life yet.',
+  owned: 'You already have the Starter Pack: it\'s one per player.',
+  busy: 'A pay sheet is already open. Finish or close it first.',
+  rate_limited: 'Too many tries. Wait a few seconds, then try again.',
+  off: 'Buying is switched off in Lagos Life right now.',
+  signed_out: 'Sign in to Lagos Life to buy tokens.',
+  timeout: 'Lagos Life didn\'t answer. Try again in a moment.',
+  error: 'Something went wrong on Lagos Life\'s side. Try again in a moment.',
+};
 
 export class Shop {
   constructor(game) {
@@ -29,7 +44,6 @@ export class Shop {
     this.pack = PACKS[1].id;
     this.shown = false;
     this.busy = false;
-    this.paystack = null; // the popup script, once it has loaded
     $('shopBack').addEventListener('click', () => this.close());
     $('shopPacks').addEventListener('click', (e) => { const b = e.target.closest('[data-pack]'); if (b) this.pick(b.dataset.pack); });
     $('shopStarter').addEventListener('click', () => this.pick(STARTER_PACK.id));
@@ -48,7 +62,7 @@ export class Shop {
     for (const id of ['menu', 'garage', 'wallet', 'online']) $(id).classList.add('hidden');
     $('shop').classList.remove('hidden');
     if (this.starterLeft() && this.pack !== STARTER_PACK.id && !want) this.pack = PACKS[1].id;
-    this.loadPaystack().catch(() => { /* tried again on Pay */ });
+    if (!vatar.active()) loadPaystack().catch(() => { /* tried again on Pay */ });
     wallet.refresh();
     this.render();
     if (!wallet.isAccount()) this.guestCard();
@@ -77,20 +91,6 @@ export class Shop {
 
   starterLeft() { return !wallet.info()?.starterUsed; }
 
-  // Paystack's popup script, loaded the first time the shop opens
-  loadPaystack() {
-    this.paystack ||= new Promise((resolve, reject) => {
-      if (window.PaystackPop) return resolve(window.PaystackPop);
-      const s = document.createElement('script');
-      s.src = PAYSTACK_JS;
-      s.async = true;
-      s.onload = () => (window.PaystackPop ? resolve(window.PaystackPop) : reject(new Error('no PaystackPop')));
-      s.onerror = () => { this.paystack = null; s.remove(); reject(new Error('Paystack script')); };
-      document.head.append(s);
-    });
-    return this.paystack;
-  }
-
   render() {
     const bal = wallet.getBalance(), pack = packById(this.pack), w = this.want && item(this.want.id);
     $('shopBal').textContent = fmt(bal);
@@ -110,12 +110,13 @@ export class Shop {
     // the order
     const sum = (k, v) => `<div><span>${k}</span><b>${v}</b></div>`;
     $('shopOrderTokens').textContent = `${fmt(pack.tokens)} tokens`;
-    const mail = this.game.account?.session?.email;
+    const mail = this.game.account?.session?.email, lagos = vatar.active();
     $('shopOrder').innerHTML = sum('Pack', pack.name) + sum('Balance after', fmt(bal + pack.tokens))
-      + (wallet.isAccount() ? sum('Receipt to', mail || 'your account email') : '') + sum('Total', priced(pack) ? naira(pack.price_kobo) : 'Price soon');
+      + (wallet.isAccount() ? (lagos ? sum('Paid with', 'Lagos Life') : sum('Receipt to', mail || 'your account email')) : '')
+      + sum('Total', priced(pack) ? naira(pack.price_kobo) : 'Price soon');
     const pay = $('shopPay');
     pay.disabled = this.busy || (wallet.isAccount() && !priced(pack));
-    pay.textContent = !wallet.isAccount() ? 'Create account to buy' : priced(pack) ? `Pay ${naira(pack.price_kobo)}` : 'Price soon';
+    pay.textContent = !wallet.isAccount() ? (lagos ? 'Can\'t buy right now' : 'Create account to buy') : priced(pack) ? `Pay ${naira(pack.price_kobo)}` : 'Price soon';
   }
 
   // ---------- paying ----------
@@ -123,13 +124,14 @@ export class Shop {
     const pack = packById(this.pack);
     if (!wallet.isAccount()) return this.guestCard();
     if (this.busy || !priced(pack)) return;
+    if (vatar.active()) return this.payVatar(pack);
     this.game.audio.play('click');
     this.busy = true;
     this.render();
     card.show({ icon: 'wait', tone: 'c', title: 'Complete payment', body: 'Opening Paystack…', busy: true });
     try {
       let Pop;
-      try { Pop = await this.loadPaystack(); } catch { return this.problem('Paystack couldn\'t be loaded. Check your connection and try again.'); }
+      try { Pop = await loadPaystack(); } catch { return this.problem('Paystack couldn\'t be loaded. Check your connection and try again.'); }
       const r = await wallet.payInit(pack.id);
       if (!r.ok) return r.error === 'session' ? card.hide() : this.problem(INIT_ERRORS[r.error] || INIT_ERRORS.unreachable);
       this.order = { ref: r.reference, access: r.access_code, pack, Pop };
@@ -221,12 +223,65 @@ export class Shop {
   }
 
   // before Paystack: nothing was charged
-  problem(msg) {
+  problem(msg, title = 'Can\'t buy tokens right now') {
     this.order = null;
-    card.show({ icon: 'fail', tone: 'r', title: 'Can\'t buy tokens right now', body: msg, primary: 'Try again', secondary: 'Close', onPrimary: () => this.pay() });
+    card.show({ icon: 'fail', tone: 'r', title, body: msg, primary: 'Try again', secondary: 'Close', onPrimary: () => this.pay() });
+  }
+
+  // ---------- paying in Lagos Life ----------
+  // The world's pay sheet opens over the game (and pauses it). It answers once Vatar's server has the payment; then
+  // this server checks the purchase with Vatar and adds the tokens.
+  async payVatar(pack) {
+    this.game.audio.play('click');
+    this.busy = true;
+    this.render();
+    card.show({ icon: 'wait', tone: 'c', title: 'Complete payment', body: 'Finish paying on the Lagos Life pay sheet.', busy: true });
+    let p;
+    try {
+      p = await vatar.purchase(pack.id);
+    } catch (e) {
+      if (e.code === 'cancelled') return card.hide();
+      return this.problem(VATAR_ERRORS[e.code] || VATAR_ERRORS.error, e.code === 'payment_failed' ? 'Payment didn\'t go through' : undefined);
+    } finally {
+      this.busy = false;
+      this.render();
+    }
+    return this.claimVatar(p);
+  }
+
+  async claimVatar(p) {
+    card.show({ icon: 'wait', tone: 'c', title: 'Confirming…', body: 'Adding your tokens.', busy: true });
+    const r = await wallet.vatarClaim(p.purchaseId);
+    if (r.ok) return this.success(null, r);
+    // paid, but not added yet: Lagos Life keeps it on the game's undelivered list, and the next launch claims it again
+    card.show({
+      icon: 'bank', tone: 'y', title: 'Payment received',
+      body: `Your tokens are on their way: they're added the next time the game opens. If they don't arrive, email ${SUPPORT} with reference ${p.purchaseId}.`,
+      primary: 'Try now', secondary: 'Later', onDismiss: card.hide, onPrimary: () => this.claimVatar(p), onSecondary: card.hide,
+    });
+  }
+
+  // at launch in Lagos Life: packs paid while the game was away (a reload, or paying on the provider's page) are claimed
+  // now, and any that are confirmed later on their own
+  vatarBoot() {
+    const claim = (p) => wallet.vatarClaim(p.purchaseId, { announce: true });
+    vatar.purchases().then(async (list) => { for (const p of list) await claim(p); }).catch(() => { /* asked again next launch */ });
+    vatar.onPurchase(claim);
   }
 
   guestCard() {
+    // in Lagos Life everyone has an account, unless the server couldn't be reached at launch
+    if (vatar.active()) {
+      return card.show({
+        icon: 'fail', tone: 'r', title: 'Can\'t buy tokens right now', body: 'The Driftbolt server can\'t be reached, so there\'s no wallet to add tokens to yet.',
+        primary: 'Try again', secondary: 'Close', onDismiss: card.hide,
+        onPrimary: async () => {
+          card.show({ icon: 'wait', tone: 'c', title: 'Connecting…', body: '', busy: true });
+          await this.game.account.renewVatar();
+          if (wallet.isAccount()) card.hide(); else this.guestCard();
+        },
+      });
+    }
     card.show({
       icon: 'user', tone: 'c', title: 'Save your garage first',
       body: 'Tokens live on your account, so you keep them on every device.\nTakes 20 seconds: name + email.',

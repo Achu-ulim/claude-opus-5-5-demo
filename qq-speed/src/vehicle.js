@@ -1,4 +1,5 @@
 import { clamp, wrapAngle, damp } from './util.js';
+import { SPEED_CAP } from './netproto.js';
 
 // Handling parameters (m/s). Displayed km/h = speed × 3.6
 export const TUNE = {
@@ -158,7 +159,7 @@ export class PlayerCar {
     if (this.padTime > 0) { vmax += 12; acc += 20; this.padTime -= dt; kick = true; }
     if (this.startBoost > 0) { vmax += 10; acc += 26; this.startBoost -= dt; kick = true; }
     if (this.magnet > 0) { vmax += 10; acc += 12; this.magnet -= dt; kick = true; }
-    vmax = Math.min(vmax, 86);
+    vmax = Math.min(vmax, SPEED_CAP);
     if (this.slowTime > 0) { vmax *= 0.55; this.slowTime -= dt; }
     if (this.shield > 0) this.shield -= dt;
     this.vmaxNow = vmax;
@@ -417,7 +418,8 @@ export function updateFlames(u, nitro, small) {
       f.scale.set(k * fl, k * fl, k * (1.1 + Math.random() * 0.5));
     }
   }
-  u.flameMatOuter.color.setHex(nitro ? 0x39a8ff : 0xff8a2a).multiplyScalar(2.2);
+  // nitro burns in the exhaust part's colour (blue on a stock car), smaller boosts orange
+  u.flameMatOuter.color.setHex(nitro ? u.flameColor ?? 0x39a8ff : 0xff8a2a).multiplyScalar(2.2);
 }
 
 export const NO_INPUT = { up: false, down: false, left: false, right: false, shift: false, upPressed: false, wPressed: false, nitroPressed: false };

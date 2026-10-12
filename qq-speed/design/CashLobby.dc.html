@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Cash Race Lobby</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Bungee&amp;family=Chakra+Petch:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#07080F}
+button{font-family:inherit;cursor:pointer}
+</style>
+</helmet>
+<div style="position: relative; width: 1440px; height: 900px; overflow: hidden; background: #07080F; color: #F4F1E8; font-family: 'Chakra Petch', sans-serif">
+  <div aria-hidden="true" style="position: absolute; top: 0; left: 0; right: 0; height: 6px; background: #7CFF9E"></div>
+  <div style="height: 100%; box-sizing: border-box; padding: 32px 48px; display: flex; flex-direction: column; gap: 22px">
+    <header style="display: flex; align-items: center; justify-content: space-between; gap: 20px">
+      <div style="display: flex; align-items: center; gap: 20px">
+        <button aria-label="Leave room" style="width: 48px; height: 48px; border-radius: 24px; border: 1px solid rgba(255,255,255,0.14); background: rgba(13,15,26,0.85); color: #F4F1E8; display: flex; align-items: center; justify-content: center"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 5l-7 7 7 7"></path></svg></button>
+        <div><div style="font-size: 12px; font-weight: 700; letter-spacing: 3px; color: #7CFF9E">CASH RACE · WINNER TAKES ALL</div><div style="font-family: 'Bungee', sans-serif; font-size: 52px; line-height: 1; letter-spacing: 6px; color: #7CFF9E">C-4M9X</div></div>
+      </div>
+      <div style="display: flex; gap: 12px">
+        <div style="padding: 12px 18px; border-radius: 14px; background: rgba(13,15,26,0.9); border: 1px solid rgba(255,255,255,0.12); text-align: right"><div style="font-size: 11px; font-weight: 700; letter-spacing: 2px; color: #A3A6BF">ENTRY</div><b style="font-family: 'Bungee', sans-serif; font-size: 22px">₦100</b></div>
+        <div style="padding: 12px 18px; border-radius: 14px; background: rgba(124,255,158,0.1); border: 1px solid rgba(124,255,158,0.5); text-align: right"><div style="font-size: 11px; font-weight: 700; letter-spacing: 2px; color: #A3A6BF">WINNER GETS</div><b style="font-family: 'Bungee', sans-serif; font-size: 22px; color: #7CFF9E">₦540</b></div>
+        <div style="padding: 12px 18px; border-radius: 14px; background: rgba(13,15,26,0.9); border: 1px solid rgba(255,255,255,0.12); text-align: right"><div style="font-size: 11px; font-weight: 700; letter-spacing: 2px; color: #A3A6BF">FILLS IN</div><b style="font-family: 'Bungee', sans-serif; font-size: 22px; color: #FFD23A">08:42</b></div>
+      </div>
+    </header>
+
+    <div style="flex: 1; display: grid; grid-template-columns: 1fr 400px; gap: 20px; min-height: 0">
+      <section aria-label="Racers" style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); grid-template-rows: repeat(2, minmax(0, 1fr)); gap: 14px">
+        <sc-for list="{{seats}}" as="s" hint-placeholder-count="6">
+          <div style="{{s.style}}">
+            <div style="width: 56px; height: 56px; border-radius: 28px; display: flex; align-items: center; justify-content: center; font-family: 'Bungee', sans-serif; font-size: 22px; background: {{s.color}}; color: #07080F">{{s.initial}}</div>
+            <b style="font-size: 18px">{{s.name}}</b>
+            <span style="font-size: 13px; color: #A3A6BF">{{s.sub}}</span>
+            <span style="{{s.tagStyle}}">{{s.tag}}</span>
+          </div>
+        </sc-for>
+      </section>
+
+      <aside style="display: flex; flex-direction: column; gap: 14px">
+        <div style="padding: 18px; border-radius: 18px; background: rgba(13,15,26,0.92); border: 1px solid rgba(255,255,255,0.12); display: flex; flex-direction: column; gap: 10px">
+          <div style="font-size: 12px; font-weight: 700; letter-spacing: 3px; color: #A3A6BF">PRIZE POOL</div>
+          <div style="height: 12px; border-radius: 6px; background: rgba(255,255,255,0.08); overflow: hidden"><div style="width: 66%; height: 100%; background: #7CFF9E"></div></div>
+          <div style="display: flex; justify-content: space-between; font-size: 14px"><span style="color: #C9CBDB">₦400 of ₦600 held safely</span><b>4 / 6 paid</b></div>
+          <div style="font-size: 13px; line-height: 1.5; color: #8A8DA6">Entries sit in a holding account and only move when the server confirms the finish. If 2 more racers don't join by 08:42, everyone gets ₦100 back.</div>
+        </div>
+        <div style="padding: 18px; border-radius: 18px; background: rgba(13,15,26,0.92); border: 1px solid rgba(255,255,255,0.12); display: flex; flex-direction: column; gap: 8px; font-size: 14px; color: #C9CBDB">
+          <div style="font-size: 12px; font-weight: 700; letter-spacing: 3px; color: #A3A6BF">FAIR PLAY</div>
+          <span>Same car and setup for everyone</span>
+          <span>Race checked by the server, not your device</span>
+          <span>Disconnect = entry forfeited after 30 s</span>
+        </div>
+        <div style="display: flex; gap: 8px">
+          <button style="flex: 1; height: 52px; border-radius: 14px; border: 1px solid rgba(255,255,255,0.18); background: transparent; color: #F4F1E8; font-weight: 700; letter-spacing: 1px">COPY INVITE</button>
+          <button style="flex: 1; height: 52px; border-radius: 14px; border: 1px solid rgba(255,255,255,0.18); background: transparent; color: #F4F1E8; font-weight: 700; letter-spacing: 1px">SHARE</button>
+        </div>
+        <button disabled style="margin-top: auto; height: 64px; border: 0; border-radius: 16px; background: rgba(124,255,158,0.22); color: rgba(7,8,15,0.7); font-family: 'Bungee', sans-serif; font-size: 18px; letter-spacing: 1px; cursor: not-allowed">WAITING FOR 2 MORE</button>
+      </aside>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":900}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const S = [['NightRunner', 'Host · you', '#FF3B3B', 'PAID · READY'], ['SilentKoi', 'Lagos · 41 ms', '#3A6BFF', 'PAID · READY'], ['Mira_Falcon', 'Abuja · 63 ms', '#B6FF3B', 'PAID · READY'], ['TurboLeo', 'Ibadan · 58 ms', '#FF8A00', 'PAID · NOT READY'], [null], [null]];
+    return {
+      seats: S.map(([name, sub, color, tag]) => name ? ({
+        name, sub, color, tag, initial: name[0],
+        tagStyle: 'margin-top: 4px; padding: 4px 10px; border-radius: 8px; font-size: 12px; font-weight: 700; letter-spacing: 1px; background: ' + (tag.includes('NOT') ? '#FFC24A' : '#7CFF9E') + '; color: #07080F',
+        style: 'display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; border-radius: 18px; background: rgba(13,15,26,0.92); border: 1px solid rgba(255,255,255,0.12)'
+      }) : ({
+        name: 'Open seat', sub: 'Verified 18+ players only', color: 'rgba(255,255,255,0.06)', tag: '₦100 to join', initial: '+',
+        tagStyle: 'margin-top: 4px; padding: 4px 10px; border-radius: 8px; font-size: 12px; font-weight: 700; color: #7CFF9E; border: 1px solid rgba(124,255,158,0.4)',
+        style: 'display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; border-radius: 18px; border: 2px dashed rgba(255,255,255,0.18); color: #A3A6BF'
+      }))
+    };
+  }
+}
+</script>
+</body>
+</html>

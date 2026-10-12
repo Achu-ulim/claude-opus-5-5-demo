@@ -5,6 +5,7 @@ import { CUPS } from './league.js';
 import { REWARDS, INVITE_RACES, item, packById, naira } from './catalog.js';
 import { dailySet } from './challenges.js';
 import * as wallet from './wallet.js';
+import * as vatar from './vatar.js';
 
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
@@ -125,9 +126,12 @@ export class WalletScreen {
     const n = ch.streak, day = n ? n % 7 || 7 : 0;
     rows.push({ name: '7-day streak', reward: `+${REWARDS.streak}`, p: day / 7, note: n ? `Day ${day} of 7 · a challenge a day keeps it going` : 'Finish a daily challenge to start one' });
     const fr = wallet.info()?.friends;
-    rows.push({ name: 'Invite a friend who races', reward: `+${REWARDS.invite}`, p: 0,
-      note: acct ? `Both of you get tokens when they finish ${INVITE_RACES} online races${fr?.rewarded ? ` · ${fr.rewarded} so far` : ''}` : 'Create an account to invite friends',
-      ...(acct ? { btn: 'Copy link', act: 'invite' } : { btn: 'Sign up', act: 'signup' }) });
+    // invite links lead to the game's own site and its sign-up, so a game framed in Lagos Life doesn't offer them
+    if (!vatar.active()) {
+      rows.push({ name: 'Invite a friend who races', reward: `+${REWARDS.invite}`, p: 0,
+        note: acct ? `Both of you get tokens when they finish ${INVITE_RACES} online races${fr?.rewarded ? ` · ${fr.rewarded} so far` : ''}` : 'Create an account to invite friends',
+        ...(acct ? { btn: 'Copy link', act: 'invite' } : { btn: 'Sign up', act: 'signup' }) });
+    }
     const held = wallet.held();
     if (held.length) {
       rows.unshift({ name: 'Waiting to be added', reward: `+${fmt(held.reduce((s, c) => s + c.amount, 0))}`, p: 1, hot: true, btn: 'Claim now', act: 'held',

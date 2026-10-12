@@ -9,7 +9,8 @@ import { MAPS, MODES, MAP_TINT } from './maps.js';
 import { Track } from './track.js';
 import { buildSky, buildClouds, buildGround, buildWater, buildMountains, Batch, makeNoise } from './world.js';
 import { buildProps, isFree } from './props.js';
-import { buildCar, buildF1Car, CARS, carSpecs, renderCarThumbs } from './carModel.js';
+import { buildCar, buildF1Car, CARS, carSpecs, renderCarThumbs, tuneFor } from './carModel.js';
+import * as logos from './logos.js';
 import { Cockpit } from './cockpit.js';
 import { F1_MAPS, F1_POINTS, GPS, TEAMS, teamTune } from './f1.js';
 import { PlayerCar, NO_INPUT } from './vehicle.js';
@@ -33,7 +34,11 @@ import { item, carItemId, legacyLook, CAR_ITEMS, PARTS, REWARDS, MOVE_CAP, earnA
 import * as wallet from './wallet.js';
 import * as card from './checkout.js';
 import { Shop } from './shop.js';
+import * as vatar from './vatar.js';
 import { WalletScreen } from './walletscreen.js';
+import * as cash from './cashwallet.js';
+import { Winnings } from './winnings.js';
+import { CashRace } from './cashrace.js';
 import { Challenges, dayKey } from './challenges.js';
 import { Ghosts } from './ghost.js';
 import { COUNTDOWN } from './netproto.js';
@@ -70,6 +75,15 @@ const STEER = [
 const SIDES = [{ id: 'left', name: 'Left' }, { id: 'right', name: 'Right' }]; // touch: the thumb for brake and steering
 const DT = 1 / 120;
 // free a car model's GPU copies: three re-uploads a disposed geometry if it is used again, so shared (cached) geometry is safe to release
+// drift smoke: white, or a Garage tyre's colour ('rainbow' runs through the hues), as r, g, b
+const _smoke = new THREE.Color(), WHITE_SMOKE = [0.95, 0.95, 0.97], _rgb = [0, 0, 0];
+function smokeColor(c) {
+  if (c == null) return WHITE_SMOKE;
+  if (c === 'rainbow') _smoke.setHSL((performance.now() / 2500) % 1, 0.9, 0.72);
+  else _smoke.setHex(c);
+  _rgb[0] = _smoke.r; _rgb[1] = _smoke.g; _rgb[2] = _smoke.b;
+  return _rgb;
+}
 function disposeModel(model) {
   model.traverse((o) => {
     if (o.material && !o.isSprite) for (const m of [].concat(o.material)) m.dispose(); // a two-tone body has two
@@ -200,7 +214,7 @@ const MOUNTAINS = {
 
 class Game {
   constructor() {
-    this.settings = Object.assign({ map: 'city', mode: 'speed', skin: 0, laps: 2, diff: 1, quality: IS_TOUCH ? 'mid' : 'high', song: 0, steer: 'tilt', muted: false, side: 'left', sens: 1, sfxVol: 100, musicVol: 100,
+    this.settings = Object.assign({ map: 'city', mode: 'speed', skin: 0, laps: 2, diff: 1, quality: IS_TOUCH ? 'mid' : 'high', song: 0, steer: 'tilt', muted: false, side: 'left', sens: 1, sfxVol: 100, musicVol: 100, hideLogos: false,
       f1: { team: 0, laps: 3, diff: 1, rounds: 6, tyre: 'medium' } }, this.load());
     if (!LAPS.includes(this.settings.laps)) this.settings.laps = 3;
     if (!(this.settings.skin >= 0 && this.settings.skin < CARS.length)) this.settings.skin = 0;
@@ -259,22 +273,26 @@ class Game {
     this.walletScreen = new WalletScreen(this);
     card.bind();
     // tokens that arrived on their own (a reward that had to wait, a purchase, a league win, an invite): a toast in the lobby
-    wallet.onCredit(({ amount, label }) => {
-      (this.credits ||= []).push(`+${amount.toLocaleString('en-US')} tokens · ${label}`);
-      this.flushCredits();
-    });
+    wallet.onCredit(({ amount, label }) => this.toastCredit(`+${amount.toLocaleString('en-US')} tokens · ${label}`));
     this.showCamMode(false);
     this.online = new Online(this);
     this.account = new Account(this, this.online.url);
+    logos.setServer(this.account.base);
+    logos.setHideOthers(this.settings.hideLogos);
     this.leagues = new Leagues(this, this.online);
+    // cash races (behind the server's CASH_RACES): the cash wallet, and hosting, the lobby and the result
+    this.winnings = new Winnings(this);
+    this.cashRace = new CashRace(this, this.online);
+    cash.init(this.account.base);
     window.addEventListener('resize', () => this.resize());
     this.resize();
     const unlock = () => {
       this.audio.init();
       if (!this.audio.playing) this.audio.startMusic();
     };
-    window.addEventListener('pointerdown', unlock);
-    window.addEventListener('keydown', unlock);
+    // On phones a tap only counts as a gesture that may start sound on its way up (pointerup, touchend), so all of these
+    // start the sound, and start it again after an interruption (a call, the screen locked, another app's sound)
+    for (const ev of ['pointerdown', 'pointerup', 'touchend', 'click', 'keydown']) window.addEventListener(ev, unlock, { capture: true, passive: true });
     // leaving the game (another tab or app, screen locked or off): all sound stops and a race pauses until they're back.
     // An online race can't wait for one player, so it only goes quiet
     const away = () => {
@@ -294,6 +312,14 @@ class Game {
     // Log In or Create Account over the lobby, unless this player is logged in or chose to play as a guest;
     // invite links open once that's settled
     const signedIn = this.account.start();
+    // In Lagos Life's frame (vatar.js) the world also pauses the game, when the phone goes to the background or its pay
+    // sheet opens over it, and packs paid while the game was away are claimed
+    signedIn.then(() => {
+      if (!vatar.active()) return;
+      vatar.onPause(away);
+      vatar.onResume(() => this.audio.resume());
+      this.shop.vatarBoot();
+    });
     this.loadMap(this.settings.map).then(() => {
       this.startDemo();
       this.last = performance.now();
@@ -302,6 +328,12 @@ class Game {
     }).then(() => {
       this.online.boot();
       this.leagues.boot();
+      // back from Paystack's own payment page with a cash deposit: wait for the server to confirm it
+      const cashpay = new URLSearchParams(location.search).get('cashpay');
+      if (cashpay && /^DC-[A-Z0-9]{6}-\d{4}$/.test(cashpay)) {
+        history.replaceState(null, '', location.pathname);
+        if (cash.isAccount()) this.winnings.returned(cashpay);
+      }
     });
   }
 
@@ -341,6 +373,9 @@ class Game {
 
   resize() {
     const w = window.innerWidth, h = window.innerHeight;
+    // a phone-sized window with a mouse and keyboard (Lagos Life's player on a computer, a narrow browser window) gets
+    // the phone HUD too: the desktop one is wider than the window (index.html, body.slim)
+    document.body.classList.toggle('slim', !IS_TOUCH && (w <= 600 || h <= 500));
     this.renderer.setSize(w, h, false);
     this.camera.aspect = w / h;
     this.camera.updateProjectionMatrix();
@@ -460,6 +495,18 @@ class Game {
       this.flushCredits();
     });
     $('tokbtn').addEventListener('click', () => this.walletScreen.open('menu'));
+    // the cash balance, only with cash races on and 18+ confirmed (cashwallet.js)
+    const showCash = () => {
+      const on = cash.showPill();
+      $('cashbtn').classList.toggle('hidden', !on);
+      if (!on) return;
+      const t = cash.fmt(cash.get().balance.total);
+      $('cashBal').textContent = t;
+      $('cashbtn').setAttribute('aria-label', `Winnings: ${t} cash`);
+    };
+    cash.onChange(showCash);
+    showCash();
+    $('cashbtn').addEventListener('click', () => this.winnings.open('menu'));
     this.refreshMenu = refresh;
     this.buildSettings();
     $('start').addEventListener('click', () => this.startRace());
@@ -607,9 +654,11 @@ class Game {
     const a = this.account, was = wallet.user();
     if (!a?.user || !a.base) {
       wallet.useGuest();
+      cash.useGuest();
       if (was) this.onLooksChanged(!this.garage.shown);
       return;
     }
+    cash.useAccount({ base: a.base, token: a.token, user: a.user, expired: () => a.expired() });
     const fresh = a.fresh, garage = wallet.isAccount() ? null : wallet.guestGarage();
     a.fresh = false;
     wallet.useAccount({ base: a.base, token: a.token, user: a.user, expired: () => a.expired() }).then(() => {
@@ -757,6 +806,7 @@ class Game {
     const refresh = () => {
       for (const [k, x] of sliders) { const v = Math.round(S[k] * x); $(k).value = v; $(k + 'v').textContent = v + '%'; }
       this.showMuted();
+      $('logosSw').setAttribute('aria-checked', String(!S.hideLogos));
     };
     for (const [k, x] of sliders) {
       $(k).addEventListener('input', () => { S[k] = +$(k).value / x; this.applyPrefs(); refresh(); });
@@ -767,6 +817,13 @@ class Game {
     $('mute').addEventListener('click', () => {
       this.setMuted(!S.muted);
       this.audio.play('click');
+    });
+    // other players' logos (Garage uploads), on the cars in online races
+    $('logosSw').addEventListener('click', () => {
+      S.hideLogos = !S.hideLogos;
+      logos.setHideOthers(S.hideLogos);
+      this.audio.play('click');
+      refresh();
     });
     const close = () => { $('settings').classList.add('hidden'); this.save(); };
     this.openSettings = () => { this.audio.play('click'); refresh(); this.account?.renderSettings(); $('settings').classList.remove('hidden'); $('setClose').focus(); };
@@ -799,6 +856,7 @@ class Game {
     $('menu').classList.remove('hidden');
     this.refreshMenu(); // a cup win may have unlocked a car
     wallet.refresh(); // league wins and invite rewards the server added while racing
+    cash.refresh();
     this.flushCredits();
     // a tournament may have left us on a different track than the one picked in the lobby
     if (this.map && this.map.id !== this.settings.map && !this.loading) this.loadMap(this.settings.map).then(() => this.startDemo());
@@ -808,10 +866,11 @@ class Game {
   // closes every screen and clears what a race leaves behind (the HUD, the podium, the race sim)
   leaveRace() {
     this.endPodium();
-    ['menu', 'pause', 'settings', 'garage', 'wallet', 'shop', 'chal', 'result', 'cups', 'board', 'f1s', 'f1w', 'f1st', 'lg', 'celebrate', 'online'].forEach((i) => $(i).classList.add('hidden'));
+    ['menu', 'pause', 'settings', 'garage', 'wallet', 'shop', 'chal', 'result', 'cups', 'board', 'f1s', 'f1w', 'f1st', 'lg', 'celebrate', 'online', 'winnings', 'cashHost', 'cashRes'].forEach((i) => $(i).classList.add('hidden'));
     this.garage.cancel();
     this.shop.cancel();
     this.walletScreen.cancel();
+    this.winnings.cancel();
     this.ghosts.hide();
     this.challenges.renderDot(); // a new day may have started
     this.celeb = null;
@@ -835,6 +894,8 @@ class Game {
     if (code === 'Escape' && card.escape()) return;
     if (code === 'Escape' && this.shop.isOpen) return this.shop.close();
     if (code === 'Escape' && this.walletScreen.isOpen) return this.walletScreen.close();
+    if (code === 'Escape' && this.winnings.isOpen) return this.winnings.close();
+    if (code === 'Escape' && !$('cashHost').classList.contains('hidden')) { this.cashRace.closeHost(); return this.online.open(); }
     if (code === 'Escape' && this.garage.isOpen) return this.garage.back();
     if (code === 'Escape' && !$('chal').classList.contains('hidden')) return this.challenges.close();
     const inLobby = this.state === 'menu' && !$('menu').classList.contains('hidden') && document.activeElement?.tagName !== 'INPUT';
@@ -881,6 +942,8 @@ class Game {
     $('loading').classList.remove('hidden');
     $('loadtxt').textContent = `Generating track: ${mapById(id).name}…`;
     await new Promise((r) => setTimeout(r, 30));
+    // building the track holds the page up for a moment: queue enough music to play through it
+    this.audio.schedule(3);
     if (this.level) this.disposeLevel();
     const map = mapById(id);
     this.map = map;
@@ -1035,8 +1098,11 @@ class Game {
       const lat = (k % 2 ? 1 : -1) * 5.5;
       let r;
       if (order ? order[k] === 'me' : k === playerSlot) {
-        const model = race.f1 ? buildF1Car(TEAMS[race.team], { isPlayer: true }) : buildCar(CARS[race.skin], { isPlayer: true, look: this.lookFor(race.skin) });
-        r = new PlayerCar(this.track, model, this.league.name, race.f1 ? teamTune(TEAMS[race.team]) : CARS[race.skin].tune);
+        const look = race.f1 ? null : this.lookFor(race.skin);
+        const model = race.f1 ? buildF1Car(TEAMS[race.team], { isPlayer: true }) : buildCar(CARS[race.skin], { isPlayer: true, look });
+        // against the computer the Garage engine counts (online and in cash races every car runs its stock engine)
+        r = new PlayerCar(this.track, model, this.league.name, race.f1 ? teamTune(TEAMS[race.team]) : tuneFor(CARS[race.skin], look));
+        this.audio.setVoice(model.userData.look?.engine?.sound);
         if (race.f1) r.cruise = 0.58; // cruises at ~58% of top speed without throttle
         r.id = 'me';
         r.team = race.team;
@@ -1093,6 +1159,7 @@ class Game {
       let r;
       if (g.id === race.me) {
         r = new PlayerCar(this.track, team ? buildF1Car(team, { isPlayer: true }) : buildCar(car, { isPlayer: true, look: g.look }), g.name, tune);
+        this.audio.setVoice('stock');
         r.id = 'me';
         r.reset(d, lat);
         r.lapsDone = -1;
@@ -1101,7 +1168,9 @@ class Game {
         r.lastD = r.d;
         this.player = r;
       } else {
-        r = new RemoteCar(this.track, team ? buildF1Car(team, { name: g.name }) : buildCar(car, { name: g.name, look: g.look }), g.name, g.id, tune);
+        // other players' uploaded logos can be turned off in Settings
+        const look = logos.othersHidden() ? { ...g.look, logo: undefined } : g.look;
+        r = new RemoteCar(this.track, team ? buildF1Car(team, { name: g.name }) : buildCar(car, { name: g.name, look }), g.name, g.id, tune);
         r.place(d, lat);
       }
       r.netId = g.id;
@@ -1125,10 +1194,11 @@ class Game {
   // the server has drawn the grid: build the track if needed, then line up (Online.onLoad reports back when done)
   async startOnlineRace({ seq, cfg, grid, me }) {
     if (this.loading) await new Promise((r) => { const t = setInterval(() => { if (!this.loading) { clearInterval(t); r(); } }, 50); });
-    ['menu', 'pause', 'settings', 'garage', 'wallet', 'shop', 'chal', 'result', 'cups', 'board', 'f1s', 'f1w', 'f1st', 'lg', 'celebrate', 'online'].forEach((i) => $(i).classList.add('hidden'));
+    ['menu', 'pause', 'settings', 'garage', 'wallet', 'shop', 'chal', 'result', 'cups', 'board', 'f1s', 'f1w', 'f1st', 'lg', 'celebrate', 'online', 'winnings', 'cashHost', 'cashRes'].forEach((i) => $(i).classList.add('hidden'));
     this.garage.cancel();
     this.shop.cancel();
     this.walletScreen.cancel();
+    this.winnings.cancel();
     this.endPodium();
     if (this.map.id !== cfg.map) await this.loadMap(cfg.map);
     const mine = grid.find((g) => g.id === me);
@@ -1162,10 +1232,11 @@ class Game {
       race.beatGhost = false;
     }
     this.ghosts.show(race.trial ? race.ghost : null);
-    ['menu', 'pause', 'settings', 'garage', 'wallet', 'shop', 'chal', 'result', 'cups', 'board', 'f1s', 'f1w', 'f1st', 'lg', 'online'].forEach((i) => $(i).classList.add('hidden'));
+    ['menu', 'pause', 'settings', 'garage', 'wallet', 'shop', 'chal', 'result', 'cups', 'board', 'f1s', 'f1w', 'f1st', 'lg', 'online', 'winnings', 'cashHost', 'cashRes'].forEach((i) => $(i).classList.add('hidden'));
     this.garage.cancel();
     this.shop.cancel();
     this.walletScreen.cancel();
+    this.winnings.cancel();
     // online: no restarting a shared race, and quitting leaves the race but not the room
     document.body.classList.toggle('online', !!race.online);
     $('restart').classList.toggle('hidden', !!race.online);
@@ -1634,7 +1705,21 @@ class Game {
       + `<td>${typeof r.total === 'number' ? formatTime(r.total) : `DNF <small>${r.total}</small>`}</td><td>${formatTime(r.best)}</td><td class="pts">${r.pts}</td></tr>`).join('');
   }
 
+  // money or tokens that arrived on their own: a toast in the lobby
+  toastCredit(text) {
+    (this.credits ||= []).push(text);
+    this.flushCredits();
+  }
+
+  // out of a race without opening any screen (the caller opens the next one)
+  toMenuQuiet() {
+    this.leaveRace();
+    this.startDemo();
+  }
+
   showOnlineResults(res) {
+    // a cash race: its result is about the payout (cashrace.js)
+    if (this.online.room?.cash) return this.showCashResults(res);
     this.resetMoment();
     // a league race win is added by the server: it shows once the wallet hears of it
     setTimeout(() => wallet.refresh(), 4000);
@@ -1670,6 +1755,20 @@ class Game {
       $('result').classList.remove('hidden');
       $('touch').classList.add('hidden');
       if (won) this.confetti.celebrate('podium');
+    }, 400);
+  }
+
+  showCashResults(res) {
+    this.resetMoment();
+    this.resultShown = true;
+    this.state = 'finish';
+    this.hud.finalCount('');
+    const mine = res.rows.find((r) => r.id === this.online.myId);
+    this.countChallenges(!!mine?.finished, mine?.place);
+    setTimeout(() => {
+      $('touch').classList.add('hidden');
+      this.cashRace.showResult(res);
+      if (mine?.finished && mine.place === 1) this.confetti.celebrate('podium');
     }, 400);
   }
 
@@ -2890,7 +2989,7 @@ class Game {
           if (!far) {
             const rate = (r.isPlayer ? 55 : 22) * dt;
             for (let k = 0; k < rate + (R() < rate % 1 ? 1 : 0); k++)
-              fx.smoke.emit(wx + (R() - 0.5) * 0.6, r.y + 0.25, wz + (R() - 0.5) * 0.6, (R() - 0.5) * 2 - fxv * sp * 0.08, 0.8 + R() * 1.2, (R() - 0.5) * 2 - fzv * sp * 0.08, 0.8 + R() * 0.7, 1.3, 5 + R() * 2, 0.95, 0.95, 0.97, r.isPlayer ? 0.42 : 0.3, -0.6, 1.2);
+              fx.smoke.emit(wx + (R() - 0.5) * 0.6, r.y + 0.25, wz + (R() - 0.5) * 0.6, (R() - 0.5) * 2 - fxv * sp * 0.08, 0.8 + R() * 1.2, (R() - 0.5) * 2 - fzv * sp * 0.08, 0.8 + R() * 0.7, 1.3, 5 + R() * 2, ...smokeColor(cu.smoke), r.isPlayer ? 0.42 : 0.3, -0.6, 1.2);
             if (r.isPlayer && R() < 0.5) {
               const c = r.gauge >= 1 || r.nitroCount >= 2 ? [1, 0.85, 0.3] : [0.5, 0.85, 1];
               fx.glow.emit(wx, r.y + 0.2, wz, (R() - 0.5) * 3, R() * 3, (R() - 0.5) * 3, 0.25, 0.5, 0.1, c[0], c[1], c[2], 1, 8, 1);

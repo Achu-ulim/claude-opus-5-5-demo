@@ -36,7 +36,11 @@
     { "tag": "v4", "new_sqlite_classes": ["Presence"] }
   ],
   // Accounts also need these secrets (npx wrangler secret put <NAME>): AUTH_SECRET, a long random string that signs
-  // sessions (openssl rand -base64 48), EMAIL_API_KEY if EMAIL_PROVIDER is "resend", and PAYSTACK_SECRET_KEY for payments.
+  // sessions (openssl rand -base64 48), EMAIL_API_KEY if EMAIL_PROVIDER is "resend", PAYSTACK_SECRET_KEY for payments,
+  // and ADMIN_KEY (another long random string) for /admin.
+  // Lagos Life (server/src/vatar.js) needs VATAR_SECRET and VATAR_WEBHOOK_SECRET (VATAR_RESULTS_SECRET is kept for
+  // multiplayer matches): the test keys (vtr_test_…) until the game is approved, then the live ones. Without them it's off.
+  // In the Lagos Life dashboard, set the webhook to https://driftbolt.online/vatar/webhook.
   // For "cloudflare", add the Email Service binding instead: "send_email": [{ "name": "EMAIL" }].
   // Local dev reads both from .dev.vars (see .dev.vars.example).
   "vars": {
@@ -50,6 +54,20 @@
     // Paystack, for buying tokens (server/src/pay.js). The secret key is a secret: npx wrangler secret put PAYSTACK_SECRET_KEY.
     // Without it, buying is off. In Paystack's dashboard, set the webhook URL to https://driftbolt.online/paystack/webhook.
     // The public key isn't needed by the game's checkout (the server opens each payment and hands over an access code).
-    "PAYSTACK_PUBLIC_KEY": ""
+    "PAYSTACK_PUBLIC_KEY": "",
+    // Cash races and the cash wallet (server/src/cash.js): "on", "withdraw-only" (no deposits or entries; players can still
+    // withdraw and convert what they have), or anything else for off. Off by default.
+    // Paystack also needs, in its dashboard: transfers turned on with OTP for API transfers off, and the same webhook URL
+    // (it sends transfer.success, transfer.failed and transfer.reversed there too).
+    "CASH_RACES": "",
+    // Overrides for the cash rules in src/cash.js CASH_DEFAULTS, as JSON: fee, entries, limits, minimum withdrawal,
+    // conversion rate and bonus, timings… e.g. { "feePct": 10, "limits": { "NGN": { "deposit": 5000000, "entry": 2000000 } } }
+    // Amounts are in kobo (or cents). Empty: the defaults.
+    "CASH_CONFIG": "",
+    // Identity checks for withdrawals (server/src/kyc.js): the provider's name once one is added there. "mock" only works
+    // on localhost. Empty: identity checks are off, so nobody can withdraw yet.
+    "KYC_PROVIDER": "",
+    // usernames that can use /admin (comma-separated); they also need the ADMIN_KEY secret: npx wrangler secret put ADMIN_KEY
+    "ADMIN_USERS": ""
   }
 }

@@ -124,6 +124,9 @@ body.steer-tilt #t-left,body.steer-tilt #t-right,body.steer-swipe #t-left,body.s
 body.steer-swipe #t-swipe,body.steer-tilt #t-center{display:block}
 /* Brake & Steer on the right: brake and steering under the right thumb, drift/nitro/boost (and GAS, BOX) under the left */
 body.ctl-right #t-right{left:auto;right:var(--pr)}
+/* framed in Lagos Life (vatar.js): no installing, links out, invite links or Paystack; its own words instead */
+body.vatar .novatar,body.vatar #installbtn,body.vatar #iosinstall{display:none!important}
+body:not(.vatar) .onlyvatar{display:none!important}
 body.ctl-right #t-left{left:auto;right:calc(var(--pr) + var(--tb) + var(--gap))}
 body.ctl-right #t-brake{left:auto;right:calc(var(--pr) + var(--tb)*.6)}
 body.ctl-right.steer-tilt #t-brake,body.ctl-right.steer-swipe #t-brake{right:var(--pr)}
@@ -146,7 +149,7 @@ body.ctl-right #t-box{right:auto;left:calc(var(--pl) + var(--tb)*.25)}
 /* the cockpit dashboard shows speed and gear, so the HUD speedometer steps aside */
 body.cam-cockpit #speedo{display:none}
 /* portrait phones: the dashboard sits under the touch controls, so the HUD speedometer stays */
-@media (orientation:portrait){body.touch.cam-cockpit #speedo{display:block}}
+@media (orientation:portrait){:is(body.touch,body.slim).cam-cockpit #speedo{display:block}}
 /* on desktop the charge gauge moves into its corner, off the steering wheel (touch layouts already put it up top) */
 body.cam-cockpit:not(.touch) #gaugebox{left:auto;right:18px;transform:none}
 #podiumUi{position:fixed;left:0;right:0;margin:0 auto;top:max(16px,env(safe-area-inset-top));z-index:12;width:min(460px,calc(100% - 24px));padding:12px 16px;text-align:center;pointer-events:auto;animation:celebIn .35s ease-out}
@@ -171,83 +174,87 @@ body.cam-cockpit:not(.touch) #gaugebox{left:auto;right:18px;transform:none}
 #celebSkip{margin-top:10px;cursor:pointer;background:none;border:none;color:var(--muted);font:600 12px var(--ui);text-decoration:underline}
 #pausebtn:hover{border-color:#ffd23a}
 /* touch HUD: charge bar moves to the top, out from under the thumbs */
-body.touch #gaugebox{top:calc(var(--pt) + 84px);bottom:auto;padding:6px 12px;gap:10px}
-body.touch #gauge{width:clamp(90px,26vw,220px);height:14px}
-body.touch #speedo{bottom:auto;top:236px;width:150px;height:150px;right:var(--pr)}
-body.touch #speedo .v{top:56px;font-size:34px}body.touch #speedo .u{top:96px}
-body.touch #items .hint,body.touch #keys,body.touch #bigrank,body.touch #songtip,body.touch #clinks{display:none}
+:is(body.touch,body.slim) #gaugebox{top:calc(var(--pt) + 84px);bottom:auto;padding:6px 12px;gap:10px}
+:is(body.touch,body.slim) #gauge{width:clamp(90px,26vw,220px);height:14px}
+:is(body.touch,body.slim) #speedo{bottom:auto;top:236px;width:150px;height:150px;right:var(--pr)}
+:is(body.touch,body.slim) #speedo .v{top:56px;font-size:34px}:is(body.touch,body.slim) #speedo .u{top:96px}
+:is(body.touch,body.slim) #items .hint,body.touch #keys,:is(body.touch,body.slim) #bigrank,:is(body.touch,body.slim) #songtip,:is(body.touch,body.slim) #clinks{display:none}
+/* body.slim: a phone-sized window without touch, like Lagos Life's player on a computer (main.js resize). It gets the
+   phone HUD below, without the touch controls; the key help stays, smaller, since the keyboard is how it's played */
+body.slim #keys{left:var(--pl);right:var(--pr);bottom:var(--pb);max-width:none;padding:6px 9px;font-size:10px;line-height:1.6}
+body.slim #keys b{min-width:16px;padding:0 3px;margin-right:2px}
 /* phones (portrait, or landscape with little height): compact panels and a digital speed readout */
 @media (max-width:600px),(max-height:500px){
-  body.touch #topc{top:var(--pt);gap:6px}
-  body.touch #timebox{min-width:0;padding:4px 10px}
-  body.touch #timebox .t,body.touch #lapbox .l{font-size:19px}
-  body.touch #timebox .s,body.touch #lapbox .s{font-size:10px;white-space:nowrap}
-  body.touch #lapbox{padding:4px 10px}
-  body.touch #pausebtn,body.touch #mutebtn{width:38px}
-  body.touch #cambtn{min-width:38px;padding:0 6px}
-  body.touch #camlbl{display:none}
-  body.touch #rank{left:var(--pl);top:var(--pt);width:128px;padding:4px 0;font-size:11px}
-  body.touch #rank .row{padding:2px 8px;gap:6px}
-  body.touch #rank .row .p{width:14px}
-  body.touch #rank .row .dot{width:8px;height:8px}
-  body.touch #minimap{top:var(--pt);right:var(--pr);width:96px;height:96px}
-  body.touch #speedo{top:calc(var(--pt) + 104px);width:auto;height:auto;text-align:right}
-  body.touch #speedo canvas{display:none}
-  body.touch #speedo .v,body.touch #speedo .u{position:static;text-align:right}
-  body.touch #speedo .v{font-size:28px;line-height:1}
-  body.touch #speedo .u{font-size:9px;letter-spacing:1px}
-  body.touch #brakeind{display:none}
-  body.touch #speedo.brake .v{color:#ff4b4b;text-shadow:0 0 12px #ff2d20}
-  body.touch #thr{position:static;margin:3px 0 0 auto;width:60px;height:4px}
-  body.touch #gaugebox{top:calc(var(--pt) + 54px);padding:4px 10px;gap:8px}
-  body.touch #gaugebox .lbl{font-size:10px}
-  body.touch .n2o{width:28px;height:28px;font-size:9px}
-  body.touch #items{padding:4px 6px;gap:6px}
-  body.touch #items .slot{width:38px;height:38px;font-size:20px}
-  body.touch #items .hint{display:none}
-  body.touch .msg{font-size:24px}body.touch .msg.sm{font-size:18px}
-  body.touch #countdown{font-size:96px}
-  body.touch #warn{font-size:20px;top:30%}
-  body.touch #finalcount{top:calc(var(--pt) + 96px);font-size:14px}
-  body.touch #carstat{left:var(--pl);top:calc(var(--pt) + 146px);width:128px;padding:5px 7px;font-size:9px}
-  body.touch .cs-row span{width:30px}
-  body.touch .cs-row b{width:26px}
-  body.touch .cs-parts .part{font-size:7px}
+  :is(body.touch,body.slim) #topc{top:var(--pt);gap:6px}
+  :is(body.touch,body.slim) #timebox{min-width:0;padding:4px 10px}
+  :is(body.touch,body.slim) #timebox .t,:is(body.touch,body.slim) #lapbox .l{font-size:19px}
+  :is(body.touch,body.slim) #timebox .s,:is(body.touch,body.slim) #lapbox .s{font-size:10px;white-space:nowrap}
+  :is(body.touch,body.slim) #lapbox{padding:4px 10px}
+  :is(body.touch,body.slim) #pausebtn,:is(body.touch,body.slim) #mutebtn{width:38px}
+  :is(body.touch,body.slim) #cambtn{min-width:38px;padding:0 6px}
+  :is(body.touch,body.slim) #camlbl{display:none}
+  :is(body.touch,body.slim) #rank{left:var(--pl);top:var(--pt);width:128px;padding:4px 0;font-size:11px}
+  :is(body.touch,body.slim) #rank .row{padding:2px 8px;gap:6px}
+  :is(body.touch,body.slim) #rank .row .p{width:14px}
+  :is(body.touch,body.slim) #rank .row .dot{width:8px;height:8px}
+  :is(body.touch,body.slim) #minimap{top:var(--pt);right:var(--pr);width:96px;height:96px}
+  :is(body.touch,body.slim) #speedo{top:calc(var(--pt) + 104px);width:auto;height:auto;text-align:right}
+  :is(body.touch,body.slim) #speedo canvas{display:none}
+  :is(body.touch,body.slim) #speedo .v,:is(body.touch,body.slim) #speedo .u{position:static;text-align:right}
+  :is(body.touch,body.slim) #speedo .v{font-size:28px;line-height:1}
+  :is(body.touch,body.slim) #speedo .u{font-size:9px;letter-spacing:1px}
+  :is(body.touch,body.slim) #brakeind{display:none}
+  :is(body.touch,body.slim) #speedo.brake .v{color:#ff4b4b;text-shadow:0 0 12px #ff2d20}
+  :is(body.touch,body.slim) #thr{position:static;margin:3px 0 0 auto;width:60px;height:4px}
+  :is(body.touch,body.slim) #gaugebox{top:calc(var(--pt) + 54px);padding:4px 10px;gap:8px}
+  :is(body.touch,body.slim) #gaugebox .lbl{font-size:10px}
+  :is(body.touch,body.slim) .n2o{width:28px;height:28px;font-size:9px}
+  :is(body.touch,body.slim) #items{padding:4px 6px;gap:6px}
+  :is(body.touch,body.slim) #items .slot{width:38px;height:38px;font-size:20px}
+  :is(body.touch,body.slim) #items .hint{display:none}
+  :is(body.touch,body.slim) .msg{font-size:24px}:is(body.touch,body.slim) .msg.sm{font-size:18px}
+  :is(body.touch,body.slim) #countdown{font-size:96px}
+  :is(body.touch,body.slim) #warn{font-size:20px;top:30%}
+  :is(body.touch,body.slim) #finalcount{top:calc(var(--pt) + 96px);font-size:14px}
+  :is(body.touch,body.slim) #carstat{left:var(--pl);top:calc(var(--pt) + 146px);width:128px;padding:5px 7px;font-size:9px}
+  :is(body.touch,body.slim) .cs-row span{width:30px}
+  :is(body.touch,body.slim) .cs-row b{width:26px}
+  :is(body.touch,body.slim) .cs-parts .part{font-size:7px}
 }
 /* short landscape screens: part health shrinks to colored bars so the panel clears the brake button */
 @media (max-height:420px){
-  body.touch #carstat{padding:4px 6px}
-  body.touch .cs-row{margin-bottom:2px}
-  body.touch .cs-parts .part{font-size:0;height:5px;padding:0}
-  body.touch .cs-box,body.touch .cs-pit{margin-top:3px;padding:2px;font-size:8px}
+  :is(body.touch,body.slim) #carstat{padding:4px 6px}
+  :is(body.touch,body.slim) .cs-row{margin-bottom:2px}
+  :is(body.touch,body.slim) .cs-parts .part{font-size:0;height:5px;padding:0}
+  :is(body.touch,body.slim) .cs-box,:is(body.touch,body.slim) .cs-pit{margin-top:3px;padding:2px;font-size:8px}
 }
 /* landscape phones with Brake & Steer on the right: the left thumb's stack (F1's BOX) reaches the car status panel, so it moves under the speed */
 @media (max-height:500px) and (orientation:landscape){
-  body.touch.ctl-right #carstat{left:auto;right:var(--pr);top:calc(var(--pt) + 158px)}
+  :is(body.touch,body.slim).ctl-right #carstat{left:auto;right:var(--pr);top:calc(var(--pt) + 158px)}
 }
 /* portrait tablets: standings and minimap drop below the top bar; the charge bar sits between them */
 @media (min-width:601px) and (orientation:portrait){
-  body.touch #rank,body.touch #minimap,body.touch #gaugebox{top:calc(var(--pt) + 84px)}
-  body.touch #speedo{top:calc(var(--pt) + 304px)}
+  :is(body.touch,body.slim) #rank,:is(body.touch,body.slim) #minimap,:is(body.touch,body.slim) #gaugebox{top:calc(var(--pt) + 84px)}
+  :is(body.touch,body.slim) #speedo{top:calc(var(--pt) + 304px)}
 }
 /* portrait phones: standings and minimap drop below the lap/time row, charge bar below them */
 @media (max-width:600px) and (orientation:portrait){
-  body.touch #rank,body.touch #minimap{top:calc(var(--pt) + 54px)}
-  body.touch #speedo{top:calc(var(--pt) + 158px)}
-  body.touch #gaugebox{top:calc(var(--pt) + 222px)}
-  body.touch #finalcount{top:calc(var(--pt) + 266px)}
-  body.touch #carstat{top:calc(var(--pt) + 250px)}
+  :is(body.touch,body.slim) #rank,:is(body.touch,body.slim) #minimap{top:calc(var(--pt) + 54px)}
+  :is(body.touch,body.slim) #speedo{top:calc(var(--pt) + 158px)}
+  :is(body.touch,body.slim) #gaugebox{top:calc(var(--pt) + 222px)}
+  :is(body.touch,body.slim) #finalcount{top:calc(var(--pt) + 266px)}
+  :is(body.touch,body.slim) #carstat{top:calc(var(--pt) + 250px)}
 }
 /* very narrow phones (iPhone SE and similar): squeeze the top bar so item slots still fit */
 @media (max-width:380px){
-  body.touch #topc{gap:4px}
-  body.touch #timebox,body.touch #lapbox{padding:3px 6px}
-  body.touch #timebox .t,body.touch #lapbox .l{font-size:15px}
-  body.touch #timebox .s,body.touch #lapbox .s{font-size:9px}
-  body.touch #pausebtn,body.touch #mutebtn{width:32px}
-  body.touch #cambtn{min-width:32px}
-  body.touch #items{padding:3px 4px;gap:4px}
-  body.touch #items .slot{width:32px;height:32px;font-size:17px}
+  :is(body.touch,body.slim) #topc{gap:4px}
+  :is(body.touch,body.slim) #timebox,:is(body.touch,body.slim) #lapbox{padding:3px 6px}
+  :is(body.touch,body.slim) #timebox .t,:is(body.touch,body.slim) #lapbox .l{font-size:15px}
+  :is(body.touch,body.slim) #timebox .s,:is(body.touch,body.slim) #lapbox .s{font-size:9px}
+  :is(body.touch,body.slim) #pausebtn,:is(body.touch,body.slim) #mutebtn{width:32px}
+  :is(body.touch,body.slim) #cambtn{min-width:32px}
+  :is(body.touch,body.slim) #items{padding:3px 4px;gap:4px}
+  :is(body.touch,body.slim) #items .slot{width:32px;height:32px;font-size:17px}
 }
 
 #clinks{position:fixed;top:236px;right:16px;z-index:30;display:flex;gap:8px}
@@ -656,7 +663,7 @@ body.touch .khint{display:none}
 .cs-pit .cs-bar i{background:#ffd23a}
 .cs-hint{margin-top:5px;color:var(--muted);font-size:10px}
 .cs-hint b{display:inline-block;padding:0 4px;border-radius:3px;background:rgba(255,255,255,.16);color:#fff}
-body.touch .cs-hint{display:none}
+:is(body.touch,body.slim) .cs-hint{display:none}
 #brakeind{position:absolute;left:0;right:0;margin:auto;top:178px;width:62px;text-align:center;font:900 11px var(--ui);letter-spacing:2px;padding:2px 0;border-radius:6px;color:rgba(255,255,255,.35);background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.15);transition:all .08s}
 #brakeind.on{color:#fff;background:#e10600;border-color:#ff6a5a;box-shadow:0 0 14px #ff2d20}
 #thr{display:none;position:absolute;left:0;right:0;margin:auto;top:170px;width:110px;height:5px;border-radius:3px;background:rgba(255,255,255,.14);overflow:hidden}
@@ -945,7 +952,7 @@ body:has(#result:not(.hidden)) #hud,body:has(#result:not(.hidden)) #clinks,body:
 .tok path{fill:#ffd23a;stroke:none}
 .tok path+path{fill:#a67c00}
 .gwrap{flex:none;width:min(1440px,100%);height:100%;display:grid;gap:20px;padding:10px 24px;
-  grid-template-columns:250px minmax(0,1fr) 430px;grid-template-rows:auto minmax(0,1fr);grid-template-areas:"head head head" "cars stage panel"}
+  grid-template-columns:270px minmax(0,1fr) 430px;grid-template-rows:auto minmax(0,1fr);grid-template-areas:"head head head" "cars stage panel"}
 .ghead{grid-area:head;display:flex;align-items:center;justify-content:space-between;gap:12px}
 .gtl{display:flex;align-items:center;gap:16px;min-width:0}
 .gtl h2{font-family:var(--disp);font-weight:400;font-size:40px;line-height:1;text-transform:uppercase}
@@ -1004,6 +1011,29 @@ body:has(#result:not(.hidden)) #hud,body:has(#result:not(.hidden)) #clinks,body:
 .gcta.equip:active{transform:translateY(3px);box-shadow:0 2px 0 #0b6a80}
 .gcta.buy:active,.gcta.confirm:active{transform:translateY(3px);box-shadow:0 2px 0 #a67c00}
 .gmsg{font-size:13px;line-height:1.4;color:var(--bolt)}
+/* eleven part tabs: a grid of four across */
+#gTabs{display:grid;grid-template-columns:repeat(4,minmax(0,1fr))}
+#garage #gTabs .opt{min-height:36px;font-size:13px}
+.gcar .grate{flex:none;font-style:normal;font-size:11px;font-weight:700;color:var(--dim);padding:2px 6px;border-radius:6px;background:rgba(255,255,255,.06)}
+.gsw{position:relative}
+.gsw em{position:absolute;left:6px;bottom:4px;font-style:normal;font-size:11px;font-weight:700;color:var(--cream);text-shadow:0 1px 3px rgba(0,0,0,.9)}
+.gextra{display:flex;flex-direction:column;gap:8px}
+.gextra:empty{display:none}
+.gfield{display:flex;align-items:center;justify-content:space-between;gap:12px;font-size:14px;color:#c9cbdb}
+.gfield input[type=text]{width:160px;height:44px;padding:0 12px;border-radius:10px;border:1px solid rgba(255,255,255,.2);background:rgba(255,255,255,.06);color:var(--cream);font-family:var(--disp);font-size:18px;letter-spacing:2px;text-transform:uppercase}
+.gfield input[type=color]{width:64px;height:44px;padding:2px;border-radius:10px;border:1px solid rgba(255,255,255,.2);background:transparent;cursor:pointer}
+#garage input:focus-visible{outline:2px solid var(--neon);outline-offset:2px}
+.gnote{font-size:13px;line-height:1.45;color:#8a8da6}
+.gnote.bad{color:#ff8a8a}
+.glogo{display:flex;align-items:center;gap:14px}
+.glogo img,.glogo>i{flex:none;width:72px;height:72px;border-radius:12px;object-fit:contain;background:#2a2d38}
+.glogo>i{display:flex;align-items:center;justify-content:center;font-style:normal;font-size:28px;color:var(--dim)}
+.glogo .gnote{margin-top:6px}
+.gsmall{height:40px;padding:0 14px;border:0;border-radius:10px;background:var(--neon);color:var(--ink);font-size:14px;font-weight:700;cursor:pointer}
+.gengine{display:grid;gap:6px;padding:10px 12px;border-radius:12px;background:rgba(255,255,255,.04)}
+.gengine div{display:flex;justify-content:space-between;gap:12px;font-size:14px;color:#c9cbdb}
+.gengine b{color:var(--cream);font-weight:700}
+.gengine ins{text-decoration:none;color:#7cff9e}
 /* phones and short windows: the panels stack (cars scroll sideways), the button stays at the bottom of the screen */
 @media (max-width:900px),(max-height:560px){
   #garage{background:linear-gradient(180deg,rgba(7,8,15,.55),rgba(7,8,15,0) 45%)}
@@ -1160,7 +1190,26 @@ body:has(#result:not(.hidden)) #hud,body:has(#result:not(.hidden)) #clinks,body:
 #coPrimary:active:not(:disabled){transform:translateY(3px);box-shadow:0 2px 0 var(--d)}
 #coPrimary:disabled{opacity:.55;cursor:default}
 .cosec{height:44px;border:0;background:transparent;color:var(--dim);font-size:14px;font-weight:700;cursor:pointer}
-#checkout button:focus-visible{outline:2px solid var(--neon);outline-offset:2px}
+#checkout button:focus-visible,#checkout input:focus-visible,#checkout select:focus-visible{outline:2px solid var(--neon);outline-offset:2px}
+/* a form in the card (the cash wallet's steps): label above each field */
+.coform{width:100%;display:flex;flex-direction:column;gap:12px;text-align:left}
+.coform.hidden{display:none}
+.coform label{display:flex;flex-direction:column;gap:6px;font-size:12px;font-weight:700;letter-spacing:2px;color:var(--dim);text-transform:uppercase}
+.coform .corow{display:flex;gap:10px}.coform .corow>*{flex:1;min-width:0}
+.coform input,.coform select{width:100%;height:48px;padding:0 14px;border-radius:12px;border:1px solid rgba(255,255,255,.18);background:rgba(255,255,255,.05);color:var(--cream);font:600 16px var(--body);letter-spacing:0;text-transform:none;outline:none;user-select:text;-webkit-user-select:text;pointer-events:auto}
+.coform select option{background:#11131f}
+.coform input:focus,.coform select:focus{border-color:var(--c)}
+.coform .cohint{font-size:12px;font-weight:400;letter-spacing:0;text-transform:none;color:#8a8da6;line-height:1.45}
+.coform .copick{display:flex;flex-wrap:wrap;gap:8px}
+.coform .copick label{flex:1 1 auto;flex-direction:row;align-items:center;justify-content:center;min-height:48px;padding:0 14px;border-radius:12px;border:1px solid rgba(255,255,255,.18);font-size:15px;letter-spacing:0;color:var(--cream);text-transform:none;cursor:pointer}
+.coform .copick input{position:absolute;opacity:0;width:1px;height:1px}
+.coform .copick label:has(input:checked){border-color:var(--c);background:rgba(255,255,255,.08)}
+.coform .copick label:has(input:focus-visible){outline:2px solid var(--neon);outline-offset:2px}
+.coform .cocheck{flex-direction:row;align-items:center;font-size:14px;font-weight:600;letter-spacing:0;text-transform:none;color:var(--cream);cursor:pointer}
+.coform .cocheck span{display:flex;align-items:center;gap:10px}
+.coform input[type=checkbox]{flex:none;width:22px;height:22px;padding:0;accent-color:var(--c)}
+.coerr{font-size:14px;color:#ff8a8a;overflow-wrap:anywhere}
+.coerr:empty{display:none}
 @keyframes coIn{from{transform:translateY(12px);opacity:0}}
 @keyframes cospin{to{transform:rotate(360deg)}}
 @media (prefers-reduced-motion:no-preference){.cocard.busy .coicon svg{animation:cospin 1.4s linear infinite}}
@@ -1418,6 +1467,217 @@ body:has(#result:not(.hidden)) #hud,body:has(#result:not(.hidden)) #clinks,body:
   #f1Stand,#f1Abandon{flex:1 1 0}
   .f1teams{grid-template-columns:repeat(2,minmax(0,1fr))}
   .f1gps .gp{width:150px}
+}
+/* ---------- Cash races and the cash wallet (designs: design/CashCreate, CashLobby, CashResult, Winnings). Green is cash ---------- */
+#winnings,#cashHost,#cashRes{--ink:#07080f;--ink2:rgba(13,15,26,.84);--edge:rgba(255,255,255,.12);--cream:#f4f1e8;--dim:#a3a6bf;--bolt:#ffd23a;--neon:#36e2ff;
+  --disp:"Bungee",var(--num);--body:"Chakra Petch",var(--ui);justify-content:flex-start;z-index:10;color:var(--cream);font-family:var(--body);background:rgba(7,8,15,.93)}
+#online,#winnings,#cashHost,#cashRes{--cash:#7cff9e;--cashd:#2f8a4e}
+#winnings button,#cashHost button,#cashRes button,#winnings input{font-family:var(--body)}
+#winnings button:focus-visible,#cashHost button:focus-visible,#cashRes button:focus-visible,#winnings input:focus-visible,#cashHost a:focus-visible{outline:2px solid var(--neon);outline-offset:2px}
+body:has(#winnings:not(.hidden)) #clinks,body:has(#cashHost:not(.hidden)) #clinks,body:has(#cashRes:not(.hidden)) #clinks{display:none}
+body:has(#cashRes:not(.hidden)) #hud,body:has(#winnings:not(.hidden)) #hud,body:has(#cashHost:not(.hidden)) #hud{display:none}
+#menu .pill.cashpill{width:auto;gap:6px;padding:0 16px 0 12px;border-color:rgba(124,255,158,.5);background:rgba(12,28,18,.85);color:#7cff9e}
+#menu .pill.cashpill b{font-family:var(--disp);font-weight:400;font-size:16px;letter-spacing:0;color:var(--cream)}
+#menu .pill.cashpill svg{width:20px;height:20px}
+.rkind.gr,.olab.gr{color:var(--cash)}
+.rcode.gr{color:var(--cash);text-shadow:0 0 30px rgba(124,255,158,.35)}
+.crtitle{display:flex;align-items:center;gap:16px;min-width:0}
+.crtitle h2{font-family:var(--disp);font-weight:400;font-size:40px;line-height:1;text-transform:uppercase}
+.crgo{height:64px;padding:0 28px;border:0;border-radius:16px;background:var(--cash);color:var(--ink);font-family:var(--disp)!important;font-size:20px;letter-spacing:1px;text-transform:uppercase;box-shadow:0 6px 0 var(--cashd);cursor:pointer}
+.crgo:active:not(:disabled){transform:translateY(3px);box-shadow:0 3px 0 var(--cashd)}
+.crgo:disabled{background:rgba(124,255,158,.22);color:rgba(7,8,15,.7);box-shadow:none;cursor:not-allowed}
+.crgo.sec{background:transparent;color:var(--cream);border:2px solid var(--cash);font-family:var(--body)!important;font-weight:700;font-size:16px}
+/* the lobby */
+.croom{position:relative;z-index:1;flex:none;width:min(1376px,100%);min-height:100%;display:flex;flex-direction:column;gap:22px;padding:22px 32px}
+#online:has(#onCashRoom:not(.hidden))::before{display:none}
+#online:has(#onCashRoom:not(.hidden)){border-top:6px solid var(--cash)}
+.crhead{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:16px 20px}
+.crtrack{margin-top:4px;font-size:14px;color:var(--dim)}
+.crstats{display:flex;flex-wrap:wrap;gap:12px}
+.crstats>div{padding:12px 18px;border-radius:14px;background:rgba(13,15,26,.9);border:1px solid var(--edge);text-align:right}
+.crstats>div.g{background:rgba(124,255,158,.1);border-color:rgba(124,255,158,.5)}
+.crstats span{display:block;font-size:11px;font-weight:700;letter-spacing:2px;color:var(--dim);text-transform:uppercase}
+.crstats b{font-family:var(--disp);font-weight:400;font-size:22px}
+.crstats .g b{color:var(--cash)}.crstats b.y{color:var(--bolt)}
+.crgrid{flex:1;min-height:0;display:grid;grid-template-columns:minmax(0,1fr) 400px;gap:20px}
+.crseats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));grid-auto-rows:minmax(170px,1fr);gap:14px}
+.crseats[data-n="2"]{grid-template-columns:repeat(2,minmax(0,1fr))}
+.crseat{position:relative;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;padding:14px;border-radius:18px;background:rgba(13,15,26,.92);border:1px solid var(--edge);text-align:center;min-width:0}
+.crseat.me{border-color:rgba(124,255,158,.5)}
+.crseat.open{background:transparent;border:2px dashed rgba(255,255,255,.18);color:var(--dim)}
+.crseat .av{width:56px;height:56px;border-radius:28px;display:flex;align-items:center;justify-content:center;font-family:var(--disp);font-style:normal;font-size:22px;background:rgba(255,255,255,.06);color:var(--ink)}
+.crseat.open .av{color:var(--dim)}
+.crseat b{font-size:18px;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.crseat small{font-size:13px;color:var(--dim)}
+.crseat .tag{margin-top:4px;padding:4px 10px;border-radius:8px;font-size:12px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--ink);background:#ffc24a}
+.crseat .tag.g{background:var(--cash)}
+.crseat .tag.open{background:transparent;color:var(--cash);border:1px solid rgba(124,255,158,.4)}
+.crseat .kick{position:absolute;top:10px;right:10px;width:32px;height:32px;border-radius:16px;border:1px solid var(--edge);background:transparent;color:var(--dim);display:flex;align-items:center;justify-content:center;cursor:pointer}
+.crseat .kick svg{width:14px;height:14px;fill:none;stroke:currentColor;stroke-width:2.5;stroke-linecap:round}
+.craside{display:flex;flex-direction:column;gap:14px;min-width:0}
+.crbox{display:flex;flex-direction:column;gap:10px;padding:18px;border-radius:18px;background:rgba(13,15,26,.92);border:1px solid var(--edge)}
+.crbar{height:12px;border-radius:6px;background:rgba(255,255,255,.08);overflow:hidden}
+.crbar i{display:block;height:100%;background:var(--cash);transition:width .3s}
+.crrow{display:flex;justify-content:space-between;gap:12px;font-size:14px;color:#c9cbdb}
+.crnote{font-size:13px;line-height:1.5;color:#8a8da6}
+.crfair{gap:8px;font-size:14px;color:#c9cbdb}
+.crbtns{display:flex;flex-wrap:wrap;gap:8px}
+.crbtns .rpill{flex:1;justify-content:center}
+#crCopy{--ic:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='9' y='9' width='11' height='11' rx='2'/%3E%3Cpath d='M5 15V5a1 1 0 0 1 1-1h10'/%3E%3C/svg%3E")}
+#crShare{--ic:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M4 12v7a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-7M12 3v13M7 8l5-5 5 5'/%3E%3C/svg%3E")}
+.craside .crgo{margin-top:auto}
+/* hosting */
+#cashHost{border-top:6px solid var(--cash)}
+.chwrap{flex:none;width:min(1440px,100%);min-height:100%;display:grid;gap:24px;padding:10px 32px;grid-template-columns:minmax(0,1fr) 440px;grid-template-rows:auto 1fr;grid-template-areas:"head head" "main pay"}
+.chhead{grid-area:head;display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:12px 16px}
+.chbal{display:flex;align-items:center;gap:10px;height:48px;padding:0 18px;border-radius:24px;background:rgba(124,255,158,.1);border:1px solid rgba(124,255,158,.5);color:var(--cream);cursor:pointer}
+.chbal span{font-size:12px;font-weight:700;letter-spacing:2px;color:var(--dim);text-transform:uppercase}
+.chbal b{font-family:var(--disp);font-weight:400;font-size:18px}
+.chmain{grid-area:main;display:flex;flex-direction:column;gap:20px;min-width:0}
+.chgroups{display:flex;flex-direction:column;gap:18px}
+.chgroup{display:flex;flex-direction:column;gap:8px}
+.chchips{display:flex;flex-wrap:wrap;gap:8px}
+.chchip{display:flex;align-items:center;gap:8px;min-height:48px;padding:0 18px;border-radius:12px;border:2px solid rgba(255,255,255,.12);background:transparent;color:#c9cbdb;font-size:16px;font-weight:700;cursor:pointer}
+.chchip.sel{border-color:var(--cash);background:rgba(124,255,158,.14);color:var(--cream)}
+.chchip:disabled{opacity:.35;cursor:not-allowed}
+.chchip i{width:8px;height:8px;border-radius:4px}
+.chnote{font-size:13px;color:#8a8da6}
+.chinfo{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.chinfo>div{display:flex;flex-direction:column;gap:2px;padding:14px 16px;border-radius:14px;background:rgba(13,15,26,.9);border:1px solid var(--edge)}
+.chinfo span{font-size:12px;font-weight:700;letter-spacing:2px;color:var(--dim);text-transform:uppercase}
+.chinfo b{font-size:17px}
+.chinfo small{font-size:13px;color:#8a8da6}
+.chrules{padding:14px 16px;border-radius:14px;background:rgba(255,255,255,.03);border:1px dashed rgba(255,255,255,.18);font-size:13px;line-height:1.6;color:var(--dim)}
+.chrules b{color:var(--cream)}
+.chrules a{color:var(--dim)}
+.chpay{grid-area:pay;align-self:start;display:flex;flex-direction:column;gap:14px;padding:24px;border-radius:22px;background:rgba(13,15,26,.94);border:2px solid var(--cash)}
+.chrows,.cwrows{display:flex;flex-direction:column;gap:10px;font-size:15px}
+.chrows>div,.cwrows>div{display:flex;justify-content:space-between;gap:12px;padding-bottom:10px;border-bottom:1px solid rgba(255,255,255,.08)}
+.chrows>div:last-child,.cwrows>div:last-child{padding:0;border:0}
+.chrows span,.cwrows span{color:var(--dim)}
+.chrows b,.cwrows b{text-align:right;overflow-wrap:anywhere}
+.chpos{display:flex;flex-direction:column;gap:6px}
+.chpo{display:flex;justify-content:space-between;align-items:baseline}
+.chpo span{font-size:15px;color:#c9cbdb}
+.chpo b{font-family:var(--disp);font-weight:400;font-size:26px;color:var(--cash)}
+.chpo.big b{font-size:40px}
+.chstake{padding:12px;border-radius:12px;background:rgba(255,255,255,.04);font-size:13px;line-height:1.5;color:#c9cbdb}
+.chpay .crgo{margin-top:6px}
+/* the result */
+#cashRes::before{content:"";position:fixed;pointer-events:none;left:-20%;right:-20%;top:60%;bottom:-10%;transform:perspective(420px) rotateX(62deg);transform-origin:top center;background-size:64px 64px;
+  background-image:linear-gradient(rgba(124,255,158,.18) 1px,transparent 1px),linear-gradient(90deg,rgba(124,255,158,.18) 1px,transparent 1px)}
+.cxwrap{position:relative;z-index:1;flex:none;width:min(1312px,100%);min-height:100%;display:grid;grid-template-columns:minmax(0,1fr) 480px;gap:40px;padding:22px 32px}
+.cxmain{display:flex;flex-direction:column;gap:22px;min-width:0}
+.cxmeta{font-size:13px;font-weight:700;letter-spacing:3px;color:var(--dim);text-transform:uppercase}
+.cxhead{font-family:var(--disp);font-size:34px;text-transform:uppercase}
+.cxbig{font-family:var(--disp);font-size:clamp(64px,9vw,128px);line-height:.95;overflow-wrap:anywhere}
+.cxbig.g{color:var(--cash);text-shadow:0 0 40px rgba(124,255,158,.35)}
+.cxbig.y{color:var(--bolt)}.cxbig.w{color:var(--cream)}
+.cxsub{font-size:15px;color:var(--dim)}
+.cxsteps{display:flex;flex-direction:column;gap:12px;max-width:640px;padding:18px 20px;border-radius:16px;background:rgba(13,15,26,.92);border:1px solid var(--edge)}
+.cxstep{display:flex;align-items:center;gap:14px}
+.cxstep>span{flex:none;width:28px;height:28px;border-radius:14px;display:flex;align-items:center;justify-content:center;border:2px solid var(--c);color:var(--c)}
+.cxstep>span.ok{background:var(--c);color:var(--ink)}
+.cxstep svg{width:14px;height:14px;fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}
+.cxstep div{display:flex;flex-direction:column}
+.cxstep b{font-size:15px}.cxstep small{font-size:13px;color:#8a8da6}
+.cxbtns{margin-top:auto;display:flex;flex-wrap:wrap;gap:12px}
+.cxconv,.cxsec{height:62px;padding:0 24px;border-radius:16px;background:transparent;font-size:16px;font-weight:700;letter-spacing:1px;text-transform:uppercase;cursor:pointer}
+.cxconv{border:2px solid var(--bolt);color:var(--bolt)}
+.cxsec{border:2px solid rgba(255,255,255,.25);color:var(--cream)}
+.cxstand{align-self:start;display:flex;flex-direction:column;gap:6px;padding:20px;border-radius:20px;background:rgba(13,15,26,.92);border:1px solid var(--edge);min-width:0}
+.cxrow{display:grid;grid-template-columns:48px minmax(0,1fr) 110px 90px;align-items:center;min-height:50px;padding:0 12px;border-radius:12px;font-size:15px;border:1px solid transparent}
+.cxrow span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cxrow .p{font-family:var(--disp);font-size:18px}
+.cxrow .t{color:#c9cbdb}
+.cxrow .a{text-align:right;font-weight:700;color:#7c7f99}.cxrow .a.g{color:var(--cash)}
+.cxrow.me{background:rgba(124,255,158,.12);border-color:rgba(124,255,158,.5)}
+.cxrow.cxhr{min-height:0;padding-bottom:6px;font-size:11px;font-weight:700;letter-spacing:2px;color:var(--dim);text-transform:uppercase}
+.cxreport{margin-top:8px;font-size:13px;line-height:1.5;color:#8a8da6}
+.cxreport button{padding:0;border:0;background:none;color:var(--cream);font-weight:700;text-decoration:underline;cursor:pointer}
+/* the cash wallet */
+.cwwrap{flex:none;width:min(1440px,100%);min-height:100%;display:grid;gap:24px;padding:10px 32px;grid-template-columns:400px minmax(0,1fr);grid-template-rows:auto 1fr;grid-template-areas:"head head" "left main"}
+.cwhead{grid-area:head;display:flex;align-items:center;gap:16px;flex-wrap:wrap}
+.cwhead h2{font-family:var(--disp);font-weight:400;font-size:40px;line-height:1;text-transform:uppercase}
+.cwcur{margin-left:auto;font-size:13px;font-weight:700;letter-spacing:2px;color:var(--dim);text-transform:uppercase}
+.cwleft{grid-area:left;display:flex;flex-direction:column;gap:16px;min-width:0}
+.cwbal{display:flex;flex-direction:column;gap:10px;padding:24px;border-radius:22px;background:rgba(124,255,158,.08);border:2px solid var(--cash)}
+.cwtotal{font-family:var(--disp);font-size:56px;line-height:1;overflow-wrap:anywhere}
+.cwsub{font-size:14px;color:var(--dim)}
+.cwadd,.cwsec{min-height:44px;border-radius:12px;font-weight:700;cursor:pointer}
+.cwadd{border:2px solid var(--cash);background:transparent;color:var(--cash);text-transform:uppercase;letter-spacing:1px}
+.cwbox{display:flex;flex-direction:column;gap:10px;padding:18px 20px;border-radius:18px;background:rgba(13,15,26,.9);border:1px solid var(--edge)}
+.cwplay{flex:1}
+.cwplay .cwsec{margin-top:auto;border:1px solid rgba(255,255,255,.18);background:transparent;color:#c9cbdb}
+.cwchecks{display:flex;flex-direction:column;gap:4px}
+.cwcheck{display:flex;align-items:center;gap:12px;min-height:40px;padding:4px 0;border:0;background:none;color:var(--cream);font-size:14px;text-align:left}
+button.cwcheck{cursor:pointer}
+button.cwcheck:hover span{text-decoration:underline}
+.cwcheck i{flex:none;width:12px;height:12px;border-radius:6px;background:var(--t)}
+.cwcheck span{flex:1;min-width:0}
+.cwcheck b{color:var(--t);font-size:12px;letter-spacing:1px;text-transform:uppercase}
+.cwcheck.ok{--t:#7cff9e}.cwcheck.y{--t:#ffd23a}.cwcheck.r{--t:#ff6b6b}
+.cwmain{grid-area:main;align-self:start;display:flex;flex-direction:column;gap:18px;padding:26px;border-radius:22px;background:rgba(13,15,26,.94);border:1px solid rgba(255,255,255,.14);min-width:0}
+.cwtabs{display:flex;gap:4px;padding:4px;border-radius:14px;background:rgba(255,255,255,.05);align-self:flex-start;max-width:100%}
+.cwtabs button{min-height:48px;padding:0 22px;border:0;border-radius:10px;background:transparent;color:#c9cbdb;font-size:15px;font-weight:700;cursor:pointer}
+#cwTabW[aria-selected=true]{background:var(--cash);color:var(--ink)}
+#cwTabC[aria-selected=true]{background:var(--bolt);color:var(--ink)}
+.cwamt{display:flex;flex-direction:column;gap:8px}
+.cwamt>div{display:flex;gap:10px;align-items:center;min-width:0}
+.cwsym{font-family:var(--disp);font-size:28px;color:var(--dim)}
+.cwamt input{flex:1;min-width:0;height:64px;padding:0 18px;border-radius:14px;border:2px solid rgba(255,255,255,.16);background:rgba(255,255,255,.05);color:var(--cream);font-family:var(--disp)!important;font-size:28px;outline:none;user-select:text;-webkit-user-select:text;pointer-events:auto}
+.cwamt input:focus{border-color:var(--cash)}
+.cwmain.conv .cwamt input:focus{border-color:var(--bolt)}
+.cwamt button{flex:none;height:64px;padding:0 18px;border-radius:14px;border:1px solid rgba(255,255,255,.2);background:transparent;color:var(--cream);font-weight:700;text-transform:uppercase;cursor:pointer}
+.cwamt small{font-size:13px;color:#8a8da6}
+.cwpane{display:flex;flex-direction:column;gap:10px}
+.cwpane.hidden{display:none}
+.cwbank{display:flex;align-items:center;gap:14px;padding:16px;border-radius:14px;background:rgba(255,255,255,.04);border:2px solid var(--cash)}
+.cwbank .cwbi{flex:none;width:44px;height:44px;border-radius:12px;background:rgba(124,255,158,.14);display:flex;align-items:center;justify-content:center;color:var(--cash)}
+.cwbank .cwbi.off{background:rgba(255,255,255,.06);color:var(--dim)}
+.cwbank .cwbi svg{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.cwbank>div{flex:1;min-width:0;display:flex;flex-direction:column}
+.cwbank small{font-size:13px;color:var(--dim)}
+.cwbank button{flex:none;min-height:44px;padding:0 14px;border-radius:10px;border:1px solid rgba(255,255,255,.2);background:transparent;color:#c9cbdb;font-weight:700;cursor:pointer}
+.cwconv{display:flex;flex-wrap:wrap;align-items:center;gap:18px;padding:18px;border-radius:14px;background:rgba(255,210,58,.08);border:2px solid var(--bolt)}
+.cwconv b{font-family:var(--disp);font-weight:400;font-size:26px}
+.cwconv b.y{color:var(--bolt)}
+.cwconv svg{width:28px;height:28px;fill:none;stroke:var(--bolt);stroke-width:2.5;stroke-linecap:round;stroke-linejoin:round}
+.cwnote{font-size:14px;line-height:1.5;color:#c9cbdb}
+.cwnote b{color:var(--cream)}
+.cwmsg{font-size:14px;color:#ff8a8a}.cwmsg:empty{display:none}
+.cwgo{height:64px;border:0;border-radius:16px;font-family:var(--disp)!important;font-size:20px;letter-spacing:1px;text-transform:uppercase;background:var(--cash);color:var(--ink);box-shadow:0 6px 0 var(--cashd);cursor:pointer}
+.cwmain.conv .cwgo{background:var(--bolt);box-shadow:0 6px 0 #a67c00}
+.cwgo:disabled{opacity:.4;cursor:default}
+.cwrecent{display:flex;flex-direction:column;gap:2px}
+.cwrecent .olab,.cwrecent .wlab{margin-bottom:4px}
+.cwr{display:grid;grid-template-columns:64px minmax(0,1fr) auto 90px;gap:8px;align-items:center;min-height:38px;font-size:13px;border-bottom:1px solid rgba(255,255,255,.05)}
+.cwr span:first-child{color:var(--dim)}
+.cwr span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cwr b{text-align:right;font-size:12px;letter-spacing:.5px;text-transform:uppercase}
+.cwr b:last-child{font-size:14px;text-transform:none}
+.cwr .ok{color:#7cff9e}.cwr .wait{color:var(--bolt)}.cwr .off{color:#7c7f99}
+@media (max-width:1100px){
+  .crgrid,.cxwrap{grid-template-columns:minmax(0,1fr)}
+  .chwrap,.cwwrap{grid-template-columns:minmax(0,1fr);grid-template-rows:auto;padding:4px 0 0;gap:16px}
+  .chwrap{grid-template-areas:"head" "main" "pay"}
+  .cwwrap{grid-template-areas:"head" "left" "main"}
+  .cxwrap{gap:24px;padding:12px 0}
+}
+@media (max-width:700px){
+  .croom{padding:4px 0;gap:16px}
+  .crtitle h2,.cwhead h2{font-size:28px}
+  .crstats{width:100%}
+  .crstats>div{flex:1 1 0;min-width:0;padding:10px 12px}
+  .crstats b{font-size:17px}
+  .crseats,.crseats[data-n="2"]{grid-template-columns:repeat(2,minmax(0,1fr));grid-auto-rows:minmax(150px,auto)}
+  .chinfo{grid-template-columns:1fr}
+  .chpay,.cwmain,.cwbal{padding:18px}
+  .cwtotal{font-size:44px}
+  .cwtabs{align-self:stretch}.cwtabs button{flex:1;padding:0 10px;font-size:14px}
+  .cxrow{grid-template-columns:40px minmax(0,1fr) 80px 70px;padding:0 6px;font-size:13px}
+  .cxconv,.cxsec{flex:1 1 auto;height:56px;padding:0 14px;font-size:14px}
+  .cxbtns .crgo{flex:1 1 100%}
 }
 /* ---------- Online leagues: the list, joining, creating, and a league's home. The accent follows the format ---------- */
 #lg{--acc:#36e2ff;--accd:#0b6a80;--acct:#8aefff;--accbg:rgba(54,226,255,.1);justify-content:flex-start}
@@ -1782,7 +2042,7 @@ body:has(#result:not(.hidden)) #hud,body:has(#result:not(.hidden)) #clinks,body:
   </div>
 </div>
 
-<div id="clinks"><a href="https://x.com/agbama_achu" target="_blank" rel="noopener noreferrer" title="X @agbama_achu" aria-label="X @agbama_achu"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18.901 1.153h3.68l-8.04 9.19L24 22.846h-7.406l-5.8-7.584-6.638 7.584H.474l8.6-9.83L0 1.154h7.594l5.243 6.932ZM17.61 20.644h2.039L6.486 3.24H4.298Z"/></svg></a></div>
+<div id="clinks" class="novatar"><a href="https://x.com/agbama_achu" target="_blank" rel="noopener noreferrer" title="X @agbama_achu" aria-label="X @agbama_achu"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18.901 1.153h3.68l-8.04 9.19L24 22.846h-7.406l-5.8-7.584-6.638 7.584H.474l8.6-9.83L0 1.154h7.594l5.243 6.932ZM17.61 20.644h2.039L6.486 3.24H4.298Z"/></svg></a></div>
 
 <div id="touch" class="hidden">
   <div id="t-swipe"><i></i><span>◀ drag to steer ▶</span></div>
@@ -1803,12 +2063,13 @@ body:has(#result:not(.hidden)) #hud,body:has(#result:not(.hidden)) #clinks,body:
     <div class="mtools">
       <div class="driver"><label for="pname">Driver</label><input id="pname" maxlength="16" autocomplete="off" spellcheck="false"><button id="pdice" type="button" title="Random name" aria-label="Random name"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="4"/><circle cx="8.5" cy="8.5" r="1.2" class="f"/><circle cx="12" cy="12" r="1.2" class="f"/><circle cx="15.5" cy="15.5" r="1.2" class="f"/></svg></button><button id="pacct" class="pacct" type="button" title="Your account"><i class="av" id="pacctAv"></i><b id="pacctName"></b><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg></button></div>
       <button class="pill tokpill" id="tokbtn" type="button" title="Wallet: your tokens and how to earn more"><svg class="tok" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2l8.66 5v10L12 22l-8.66-5V7z"/><path d="M12 6.5l4.76 2.75v5.5L12 17.5l-4.76-2.75v-5.5z"/></svg><b id="tokBal"></b></button>
+      <button class="pill cashpill hidden" id="cashbtn" type="button" title="Winnings: your cash balance"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="3"/><path d="M6 12h.01M18 12h.01"/></svg><b id="cashBal"></b></button>
       <button class="pill" id="chalbtn" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 22c4 0 7-3 7-7 0-4-3-6-4-10-2 2-3 4-3 6-1-1-2-2-2-4-3 2-5 5-5 8 0 4 3 7 7 7z"/></svg><span>Challenges</span></button>
       <button class="pill" id="garagebtn" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 21V9l9-6 9 6v12"/><path d="M7 21v-8h10v8M7 17h10"/></svg><span>Garage</span></button>
       <button class="pill" id="boardbtn" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 21h8M12 17v4M7 4h10v5a5 5 0 0 1-10 0z"/><path d="M17 5h3v2a3 3 0 0 1-3 3M7 5H4v2a3 3 0 0 0 3 3"/></svg><span>Leaderboard</span></button>
       <button class="pill hidden" id="installbtn" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12M7 10l5 5 5-5M5 21h14"/></svg><span>Install</span></button>
       <button class="round" id="setbtn" type="button" title="Settings" aria-label="Settings"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg></button>
-      <a class="round" href="https://x.com/agbama_achu" target="_blank" rel="noopener noreferrer" title="Follow the author on X" aria-label="Follow the author on X"><svg viewBox="0 0 24 24" aria-hidden="true" class="fill"><path d="M18.901 1.153h3.68l-8.04 9.19L24 22.846h-7.406l-5.8-7.584-6.638 7.584H.474l8.6-9.83L0 1.154h7.594l5.243 6.932ZM17.61 20.644h2.039L6.486 3.24H4.298Z"/></svg></a>
+      <a class="round novatar" href="https://x.com/agbama_achu" target="_blank" rel="noopener noreferrer" title="Follow the author on X" aria-label="Follow the author on X"><svg viewBox="0 0 24 24" aria-hidden="true" class="fill"><path d="M18.901 1.153h3.68l-8.04 9.19L24 22.846h-7.406l-5.8-7.584-6.638 7.584H.474l8.6-9.83L0 1.154h7.594l5.243 6.932ZM17.61 20.644h2.039L6.486 3.24H4.298Z"/></svg></a>
     </div>
   </header>
 
@@ -1918,6 +2179,11 @@ body:has(#result:not(.hidden)) #hud,body:has(#result:not(.hidden)) #clinks,body:
     <div class="srange" id="musicRow">
       <div class="srow"><label for="musicVol">Music</label><b id="musicVolv"></b></div>
       <input id="musicVol" type="range" min="0" max="100" step="5">
+    </div>
+    <h3>Online</h3>
+    <div class="srow">
+      <div><span>Show other players' logos</span><small>The pictures players upload for their cars in the Garage</small></div>
+      <button class="switch" id="logosSw" type="button" role="switch" aria-checked="true" aria-label="Show other players' logos"><i></i></button>
     </div>
 
     <button class="go" id="setDone" type="button">Done</button>
@@ -2036,6 +2302,8 @@ body:has(#result:not(.hidden)) #hud,body:has(#result:not(.hidden)) #clinks,body:
     <div class="coicon" id="coIcon"></div>
     <div class="cotitle" id="coTitle"></div>
     <div class="cobody" id="coBody"></div>
+    <form class="coform hidden" id="coForm" novalidate></form>
+    <div class="coerr" id="coErr" role="alert"></div>
     <div class="cobtns"><button id="coPrimary" type="button"></button><button class="cosec" id="coSecondary" type="button"></button></div>
   </div>
 </div>
@@ -2083,7 +2351,8 @@ body:has(#result:not(.hidden)) #hud,body:has(#result:not(.hidden)) #clinks,body:
     <section class="gpanel" aria-label="Customize">
       <div class="seg" id="gTabs" role="group" aria-label="Part"></div>
       <div class="gitems" id="gItems"></div>
-      <p class="gfair">Looks are cosmetic. Online races and leagues stay fair: parts never change speed or grip.</p>
+      <div class="gextra" id="gExtra"></div>
+      <p class="gfair" id="gFair">Looks are cosmetic. Engines add power in races against the computer only: online races, leagues and cash races run every car on its stock engine.</p>
       <div class="gbuy">
         <div class="ghint" id="gHint"></div>
         <div class="gsel"><span id="gSelName"></span><span id="gSelNote"></span></div>
@@ -2130,16 +2399,16 @@ body:has(#result:not(.hidden)) #hud,body:has(#result:not(.hidden)) #clinks,body:
       <div class="spacks" id="shopPacks"></div>
       <div class="sinfo">
         <div class="sbox"><div class="wlab">Or earn them free</div><div class="searn" id="shopEarn"></div></div>
-        <div class="sbox slegal">Tokens are tied to your account and never expire. They only unlock looks and cars, never speed or grip. <a href="terms.html" target="_blank" rel="noopener">Terms</a> · <a href="refunds.html" target="_blank" rel="noopener">Refund policy</a></div>
+        <div class="sbox slegal">Tokens are tied to your account and never expire. They only unlock looks and cars, never speed or grip. <span class="novatar"><a href="terms.html" target="_blank" rel="noopener">Terms</a> · <a href="refunds.html" target="_blank" rel="noopener">Refund policy</a></span><span class="onlyvatar">Paid through Lagos Life.</span></div>
       </div>
     </div>
     <aside class="sorder" aria-label="Order summary">
       <div class="wlab yl">Order</div>
       <div class="sotok" id="shopOrderTokens"></div>
       <div class="sorows" id="shopOrder"></div>
-      <div class="schips" aria-label="Ways to pay"><span>Card</span><span>Bank transfer</span><span>USSD</span><span>Bank app</span></div>
+      <div class="schips novatar" aria-label="Ways to pay"><span>Card</span><span>Bank transfer</span><span>USSD</span><span>Bank app</span></div>
       <button class="spay" id="shopPay" type="button"></button>
-      <div class="ssecure"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>Secure checkout by Paystack</div>
+      <div class="ssecure"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg><span class="novatar">Secure checkout by Paystack</span><span class="onlyvatar">Paid on Lagos Life's own pay sheet</span></div>
     </aside>
   </div>
 </div>
@@ -2281,7 +2550,7 @@ body:has(#result:not(.hidden)) #hud,body:has(#result:not(.hidden)) #clinks,body:
       <div><button class="backbtn" id="lhBack" type="button" aria-label="Back to leagues" title="Back to leagues"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg></button><div><div class="lglab" id="lhLab"></div><h2 id="lhName"></h2></div></div>
       <div class="lhtools">
         <div class="lhcode"><span>Code</span><b id="lhCode"></b></div>
-        <button class="rpill" id="lhCopy" type="button">Copy invite</button><button class="rpill" id="lhShare" type="button">Share</button>
+        <button class="rpill novatar" id="lhCopy" type="button">Copy invite</button><button class="rpill novatar" id="lhShare" type="button">Share</button>
         <button class="lhset hidden" id="lhSettings" type="button" aria-label="League settings" title="League settings"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1L7 17M17 7l2.1-2.1"/></svg></button>
       </div>
     </header>
@@ -2305,6 +2574,7 @@ body:has(#result:not(.hidden)) #hud,body:has(#result:not(.hidden)) #clinks,body:
       <button class="onlcard" id="onCreate" type="button" style="--c:#b48cff"><span class="ci"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 13a5 5 0 0 0 7.5.5l3-3a5 5 0 0 0-7-7l-1.7 1.7"/><path d="M14 11a5 5 0 0 0-7.5-.5l-3 3a5 5 0 0 0 7 7l1.7-1.7"/></svg></span><span class="cn">Private Room</span><span class="cd">Get a room code and an invite link to send to friends.</span></button>
     </div>
     <button class="onlcard onlwide" id="onLeagues" type="button" style="--c:#ff4545"><span class="ci"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 21h8M12 17v4M7 4h10v5a5 5 0 0 1-10 0z"/><path d="M17 5h3v2a3 3 0 0 1-3 3M7 5H4v2a3 3 0 0 0 3 3"/></svg></span><span class="cn">Leagues</span><span class="cd">A season with your friends: one race a week on your race night, with standings.</span></button>
+    <button class="onlcard onlwide hidden" id="onCash" type="button" style="--c:#7cff9e"><span class="ci"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="3"/><path d="M6 12h.01M18 12h.01"/></svg></span><span class="cn">Cash Races · 18+</span><span class="cd">Host a race for real money, or join one with its code. Same car for everyone, items off, and the server checks every finish before anyone is paid.</span></button>
     <form class="onljoin" id="onJoinForm"><label for="onCode">Have a room code?</label><div><input id="onCode" maxlength="5" placeholder="CODE" autocomplete="off" spellcheck="false"><button type="submit">Join</button></div></form>
     <div class="onlmsg" id="onMsg"></div>
     <div class="cnote">Up to 6 racers. Your car is the one picked in the lobby; you can change it in the room.</div>
@@ -2312,7 +2582,7 @@ body:has(#result:not(.hidden)) #hud,body:has(#result:not(.hidden)) #clinks,body:
   <div id="onRoom" class="oroom hidden">
     <header class="shead">
       <div><button class="backbtn" id="rmLeave" type="button" aria-label="Leave room" title="Leave room"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg></button><div><div class="rkind" id="rmKind"></div><div class="rcode" id="rmCode"></div></div></div>
-      <div class="rtools"><span class="rnet" id="rmNet"></span><button class="rpill" id="rmCopy" type="button">Copy invite</button><button class="rpill" id="rmShare" type="button">Share</button></div>
+      <div class="rtools"><span class="rnet" id="rmNet"></span><button class="rpill novatar" id="rmCopy" type="button">Copy invite</button><button class="rpill novatar" id="rmShare" type="button">Share</button></div>
     </header>
     <div class="roomgrid">
       <section class="opanel" aria-label="Racers"><div class="olab"><span>Racers</span><span id="rmCount"></span></div><div class="rplist" id="rmPlayers"></div></section>
@@ -2325,6 +2595,93 @@ body:has(#result:not(.hidden)) #hud,body:has(#result:not(.hidden)) #clinks,body:
       </section>
     </div>
     <div class="roomacts"><div class="onlmsg" id="rmMsg"></div><div class="racts"><button class="go" id="rmReady" type="button">Ready</button><button class="go" id="rmStart" type="button">Start Race</button></div></div>
+  </div>
+  <!-- a cash race's lobby (design/CashLobby) -->
+  <div id="onCashRoom" class="croom hidden">
+    <header class="crhead">
+      <div class="crtitle"><button class="backbtn" id="crLeave" type="button" aria-label="Leave room" title="Leave room"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg></button><div><div class="rkind gr" id="crKind"></div><div class="rcode gr" id="crCode"></div><div class="crtrack" id="crTrack"></div></div></div>
+      <div class="crstats"><div><span>Entry</span><b id="crEntry"></b></div><div class="g"><span id="crWinLab">Winner gets</span><b id="crWin"></b></div><div><span id="crClockLab">Fills in</span><b class="y" id="crClock"></b></div></div>
+    </header>
+    <div class="crgrid">
+      <section class="crseats" id="crSeats" aria-label="Racers"></section>
+      <aside class="craside">
+        <div class="crbox"><div class="olab">Prize pool</div><div class="crbar"><i id="crBar"></i></div><div class="crrow"><span id="crHeld"></span><b id="crPaid"></b></div><div class="crnote" id="crPoolNote"></div></div>
+        <div class="crbox crfair"><div class="olab">Fair play</div><span>Same car and setup for everyone</span><span>Race checked by the server, not your device</span><span>Disconnect = entry forfeited after 30 s</span></div>
+        <div class="crbtns"><span class="rnet" id="crNet"></span><button class="rpill" id="crCopy" type="button">Copy invite</button><button class="rpill" id="crShare" type="button">Share</button></div>
+        <div class="onlmsg" id="crMsg" role="status"></div>
+        <button class="crgo" id="crGo" type="button"></button>
+      </aside>
+    </div>
+  </div>
+</div>
+
+<!-- hosting a cash race (design/CashCreate) -->
+<div id="cashHost" class="screen hidden">
+  <div class="chwrap">
+    <header class="chhead">
+      <div class="crtitle"><button class="backbtn" id="chBack" type="button" aria-label="Back" title="Back"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg></button><div><div class="rkind gr">Online · 18+ · verified players only</div><h2>Host a cash race</h2></div></div>
+      <button class="chbal" id="chBal" type="button" title="Winnings"><span>Cash</span><b id="chBalAmt"></b></button>
+    </header>
+    <div class="chmain">
+      <div class="chgroups" id="chGroups"></div>
+      <div class="chinfo">
+        <div><span>The car</span><b id="chCar"></b><small>Items are off in cash races. Everyone gets the same car and setup.</small></div>
+        <div><span>Who can join</span><b>Anyone with the code</b><small>Players 18+ with a cash wallet. Share the code or the invite link.</small></div>
+      </div>
+      <div class="chrules" id="chRules"><b>House rules.</b> Entries are held, not paid out, until the server confirms the result. If the room doesn't fill in 10 minutes, or the race is called off, everyone is refunded in full. A player who disconnects for more than 30 seconds or quits forfeits their entry. Results with signs of cheating are frozen for review, and any racer can report a race in the 10 minutes after it. <a href="cash-rules.html" target="_blank" rel="noopener">Full rules</a> · <a href="#" id="chPlay">Play responsibly</a></div>
+    </div>
+    <aside class="chpay" aria-label="Payout">
+      <div class="olab gr">Payout</div>
+      <div class="chrows"><div><span>Entry × players</span><b id="chEntryLine"></b></div><div><span>Prize pool</span><b id="chPool"></b></div><div><span>Platform fee (<span id="chFeePct"></span>)</span><b id="chFee"></b></div></div>
+      <div class="chpos" id="chPayouts"></div>
+      <div class="chstake">Your <b id="chStake"></b> entry is taken from your cash balance when you create the room, and returned if it doesn't fill.</div>
+      <button class="crgo" id="chCreate" type="button"></button>
+    </aside>
+  </div>
+</div>
+
+<!-- a cash race's result and payout (design/CashResult) -->
+<div id="cashRes" class="screen hidden">
+  <div class="cxwrap">
+    <div class="cxmain">
+      <div class="crtitle"><button class="backbtn" id="cxBack" type="button" aria-label="Back to Multiplayer" title="Back"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg></button><div class="cxmeta" id="cxMeta"></div></div>
+      <div><div class="cxhead" id="cxHead"></div><div class="cxbig" id="cxBig"></div><div class="cxsub" id="cxSub"></div></div>
+      <section class="cxsteps" id="cxSteps" aria-label="Payout progress"></section>
+      <div class="cxbtns"><button class="crgo" id="cxWithdraw" type="button">Withdraw</button><button class="cxconv" id="cxConvert" type="button">Convert to tokens</button><button class="cxsec" id="cxAgain" type="button">Race again</button></div>
+    </div>
+    <section class="cxstand" id="cxStand" aria-label="Standings">
+      <div class="cxrow cxhr" aria-hidden="true"><span>Pos</span><span>Racer</span><span>Time</span><span class="a">Payout</span></div>
+      <div id="cxRows"></div>
+      <div class="cxreport" id="cxReport"></div>
+    </section>
+  </div>
+</div>
+
+<!-- the cash wallet (design/Winnings) -->
+<div id="winnings" class="screen hidden">
+  <div class="cwwrap">
+    <header class="cwhead"><button class="backbtn" id="cwBack" type="button" aria-label="Back" title="Back"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg></button><h2>Winnings</h2><span class="cwcur" id="cwCur"></span></header>
+    <div class="cwleft">
+      <section class="cwbal" aria-label="Cash balance"><div class="olab gr">Cash balance</div><div class="cwtotal" id="cwTotal"></div><div class="cwsub" id="cwSub"></div><button class="cwadd" id="cwAdd" type="button">Add cash</button></section>
+      <section class="cwbox" aria-label="Account checks"><div class="olab">Account checks</div><div class="cwchecks" id="cwChecks"></div></section>
+      <section class="cwbox cwplay" aria-label="Play responsibly"><div class="olab">Play responsibly</div><div class="cwrows" id="cwPlay"></div><button class="cwsec" id="cwLimits" type="button">Set limits or take a break</button></section>
+    </div>
+    <section class="cwmain" id="cwMain">
+      <div class="cwtabs" role="tablist"><button type="button" role="tab" id="cwTabW" aria-selected="true">Withdraw to bank</button><button type="button" role="tab" id="cwTabC" aria-selected="false">Convert to tokens</button></div>
+      <div class="cwamt"><label class="olab" for="cwAmt">Amount</label><div><span class="cwsym" id="cwSym"></span><input id="cwAmt" inputmode="decimal" autocomplete="off" placeholder="0"><button type="button" id="cwMax">Max</button></div><small id="cwAvail"></small></div>
+      <div id="cwW" class="cwpane">
+        <div class="olab">To bank account</div>
+        <div class="cwbank" id="cwBank"></div>
+        <div class="cwrows"><div><span>Transfer fee</span><b id="cwFee"></b></div><div><span>Smallest withdrawal</span><b id="cwMin"></b></div><div><span>Arrives</span><b>Usually within minutes</b></div></div>
+      </div>
+      <div id="cwC" class="cwpane hidden">
+        <div class="cwconv"><b id="cwFrom"></b><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg><b class="y" id="cwTo"></b></div>
+        <div class="cwnote">Converting is instant and gives a bonus: <span id="cwRate"></span>. <b>It's one-way: tokens can't be turned back into cash.</b></div>
+      </div>
+      <div class="cwmsg" id="cwMsg" role="status"></div>
+      <button class="cwgo" id="cwGo" type="button"></button>
+      <div class="cwrecent" id="cwRecent"></div>
+    </section>
   </div>
 </div>
 

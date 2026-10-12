@@ -5,3 +5,14 @@ AUTH_SECRET=local-dev-only-not-a-real-secret
 EMAIL_PROVIDER=console
 # Paystack test secret key (sk_test_… from the Paystack dashboard), so token purchases work locally. Never the live key here.
 # PAYSTACK_SECRET_KEY=sk_test_...
+# Cash races locally: on, the mock identity check (any 11 digits pass; 000… isn't found, 111… is someone else's), and an
+# admin. Open /admin after logging in to the game as that user, with the key below.
+# CASH_RACES=on
+# KYC_PROVIDER=mock
+# ADMIN_USERS=yourname
+# ADMIN_KEY=local-admin-key-0123456789
+# Lagos Life (Vatar Games): the test keys from https://lagoslife.app/developers (shown once), so the sandbox works against
+# a local server. Live keys only ever go on the Worker: npx wrangler secret put VATAR_SECRET (and the other two).
+# VATAR_SECRET=vtr_test_...
+# VATAR_WEBHOOK_SECRET=vtr_whsec_test_...
+# VATAR_RESULTS_SECRET=vtr_rsec_test_...

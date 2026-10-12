@@ -8,7 +8,8 @@ import { CODE_CHARS } from '../../src/netproto.js';
 const enc = (s) => new TextEncoder().encode(s);
 export const paymentsReady = (env) => typeof env.PAYSTACK_SECRET_KEY === 'string' && env.PAYSTACK_SECRET_KEY.length > 0;
 
-// a call to Paystack's API: its `data`, or a thrown error
+// a call to Paystack's API: its `data`, or a thrown error carrying Paystack's status and error type
+// ('validation_error': Paystack turned the request down; anything else: try again later)
 export async function paystack(env, path, body) {
   const res = await fetch((env.PAYSTACK_API || 'https://api.paystack.co') + path, {
     method: body ? 'POST' : 'GET',
@@ -16,7 +17,9 @@ export async function paystack(env, path, body) {
     ...(body && { body: JSON.stringify(body) }),
   });
   const out = await res.json().catch(() => null);
-  if (!res.ok || out?.status !== true || !out.data) throw new Error(`Paystack answered ${res.status}`);
+  if (!res.ok || out?.status !== true || !out.data) {
+    throw Object.assign(new Error(`Paystack answered ${res.status}`), { status: res.status, type: out?.type || null });
+  }
   return out.data;
 }
 

@@ -193,19 +193,19 @@ function impulse(ctx, secs) {
 export class Music {
   constructor(ctx, out, noise) {
     this.ctx = ctx;
-    this.out = out;
+    this.main = out;
     this.noise = noise;
     // bass and pads go through a ducking gain that dips on each kick (the "pumping" sound of dance music)
-    this.duck = ctx.createGain();
-    this.duck.connect(out);
-    this.revIn = ctx.createGain();
+    this.duckGain = ctx.createGain();
+    this.duckGain.connect(out);
+    this.revMain = ctx.createGain();
     const rev = ctx.createConvolver();
     rev.buffer = impulse(ctx, 2.2);
     const revOut = ctx.createGain();
     revOut.gain.value = 0.5;
-    this.revIn.connect(rev).connect(revOut).connect(out);
+    this.revMain.connect(rev).connect(revOut).connect(out);
     // dotted-eighth echo with a darkening feedback loop
-    this.dlyIn = ctx.createGain();
+    this.dlyMain = ctx.createGain();
     this.delay = ctx.createDelay(1.5);
     const fb = ctx.createGain();
     fb.gain.value = 0.32;
@@ -214,15 +214,44 @@ export class Music {
     lp.frequency.value = 2600;
     const dlyOut = ctx.createGain();
     dlyOut.gain.value = 0.45;
-    this.dlyIn.connect(this.delay).connect(lp).connect(fb).connect(this.delay);
+    this.dlyMain.connect(this.delay).connect(lp).connect(fb).connect(this.delay);
     lp.connect(dlyOut).connect(out);
+    this.bus = null;
   }
 
-  setSong(s) {
-    this.delay.delayTime.setValueAtTime((60 / s.bpm) * 0.75, this.ctx.currentTime);
+  // Notes are queued well ahead (audio.js LOOKAHEAD), each through the playing song's own buses: out, duck, reverb and
+  // echo sends. A new song, or the music stopping, fades those out and drops them, so nothing already queued plays on.
+  start(s) {
+    this.cut();
+    const t = this.ctx.currentTime;
+    const bus = (to) => { const g = this.ctx.createGain(); g.connect(to); return g; };
+    this.bus = { out: bus(this.main), duck: bus(this.duckGain), rev: bus(this.revMain), dly: bus(this.dlyMain) };
+    this.delay.delayTime.setValueAtTime((60 / s.bpm) * 0.75, t);
   }
+
+  cut() {
+    if (!this.bus) return;
+    const t = this.ctx.currentTime, old = this.bus;
+    this.bus = null;
+    for (const g of Object.values(old)) {
+      g.gain.cancelScheduledValues(t);
+      g.gain.setValueAtTime(1, t);
+      g.gain.setTargetAtTime(0, t, 0.03);
+    }
+    // the old song's queued kicks would keep pumping the duck
+    this.duckGain.gain.cancelScheduledValues(t);
+    this.duckGain.gain.setTargetAtTime(1, t, 0.03);
+    setTimeout(() => { for (const g of Object.values(old)) g.disconnect(); }, 400);
+  }
+
+  // where this note goes: the song's buses (after cut(), nowhere until the next start())
+  get out() { return this.bus?.out; }
+  get duck() { return this.bus?.duck; }
+  get revIn() { return this.bus?.rev; }
+  get dlyIn() { return this.bus?.dly; }
 
   playStep(s, step, t, spb) {
+    if (!this.bus) return;
     const st = STYLES[s.style];
     const total = s.bars.length;
     const b = Math.floor(step / 16);
@@ -362,9 +391,9 @@ export class Music {
     o.start(t);
     o.stop(t + 0.32);
     if (duck) {
-      this.duck.gain.cancelScheduledValues(t);
-      this.duck.gain.setValueAtTime(0.35, t);
-      this.duck.gain.linearRampToValueAtTime(1, t + 0.2);
+      this.duckGain.gain.cancelScheduledValues(t);
+      this.duckGain.gain.setValueAtTime(0.35, t);
+      this.duckGain.gain.linearRampToValueAtTime(1, t + 0.2);
     }
   }
 

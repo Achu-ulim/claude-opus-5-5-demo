@@ -839,7 +839,7 @@ function cityProps(ctx) {
   }, 13);
   commonTrackside(ctx, {
     lamps: true,
-    billboards: ['samsung', 'chowdeck', 'redbull', 'manlago', 'shell', 'dhl'].map((id) => TX.brandTexture(id)),
+    billboards: ['samsung', 'chowdeck', 'redbull', 'manlago', 'shell', 'cq'].map((id) => TX.brandTexture(id)),
   });
   addGrandstand(parent, batch, track.sample(track.length - 30, {}), -1, 60, hw, groundAt, 0x2e6fd6, track);
   addGrandstand(parent, batch, track.sample(40, {}), -1, 50, hw, groundAt, 0xe53935, track);
@@ -1303,7 +1303,7 @@ function egyptProps(ctx) {
   }
   commonTrackside(ctx, {
     chevrons: true, chevronBg: '#5b3f9e', chevronFg: '#f3e3b5',
-    billboards: ['shell', 'chowdeck', 'dhl', 'manlago'].map((id) => TX.brandTexture(id)),
+    billboards: ['shell', 'chowdeck', 'cq', 'manlago'].map((id) => TX.brandTexture(id)),
     bbStep: 240,
   });
   return buildStartGate(parent, track, { pillar: 0xe0c08a, beam: 0xe0c08a, text: 'START · PHARAOH', bannerBg: '#5b3f9e', band: 0x3a62c9, pylon: true, sunDisk: true, h: 12 });
@@ -1816,7 +1816,7 @@ function gpProps(ctx) {
     lamps: !!P.night, lampStep: 34,
     billboards: [
       TX.billboardTexture(title, 'GRAND PRIX', '#15151e', '#e10600'),
-      ...['pirelli', 'chowdeck', 'rolex', 'manlago', 'dhl', 'shell'].map((id) => TX.brandTexture(id)),
+      ...['pirelli', 'chowdeck', 'rolex', 'manlago', 'cq', 'shell'].map((id) => TX.brandTexture(id)),
     ],
     bbStep: 150,
     chevrons: true, chevronBg: '#e10600', chevronFg: '#ffffff',

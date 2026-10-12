@@ -8,6 +8,7 @@ import { TOKEN } from './garage.js';
 import { MAPS, MODES, MAP_TINT } from './maps.js';
 import { TEAMS } from './f1.js';
 import { trackName } from './leagues.js';
+import * as cash from './cashwallet.js';
 
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
@@ -23,7 +24,10 @@ const ERRORS = {
   session: 'Your login has expired. Log in again to race online.',
   unreachable: 'Can\'t reach the online server. Check your connection and try again.',
   lost: 'Connection to the room was lost.',
+  cash_kicked: 'The host removed you from the cash race. Your entry is back in your cash balance.',
   offline: 'Online play isn\'t set up for this copy of the game.',
+  not_paid: 'That\'s a cash race: join it with its code to pay your entry first.',
+  login_needed: 'Cash races need an account: log in first.',
 };
 
 // the build sets __MP_URL__ (see build.mjs): a server address, or "/" for the server on this page's own host
@@ -68,6 +72,8 @@ export class Online {
       e.preventDefault();
       const code = normCode($('onCode').value);
       if (code.length !== CODE_LEN) return this.say('onMsg', `Room codes have ${CODE_LEN} letters and digits.`);
+      // C-codes are cash races: their terms and the entry come first (cashrace.js)
+      if (code[0] === 'C') return this.game.cashRace.join(code);
       this.connect('join', code);
     });
     $('onCode').addEventListener('input', (e) => { e.target.value = normCode(e.target.value); });
@@ -75,6 +81,8 @@ export class Online {
     name.addEventListener('change', () => { this.game.league.name = name.value; name.value = this.game.league.name; $('pname').value = name.value; });
     name.addEventListener('keydown', (e) => { if (e.key === 'Enter') name.blur(); });
     $('onBack').addEventListener('click', () => { this.game.audio.play('click'); this.game.toMenu(); });
+    $('onCash').addEventListener('click', () => { this.game.audio.play('click'); this.game.cashRace.openHost(); });
+    cash.onChange(() => $('onCash').classList.toggle('hidden', !cash.enabled()));
     $('rmLeave').addEventListener('click', () => this.leave());
     $('rmReady').addEventListener('click', () => { this.game.audio.play('click'); this.net?.send({ t: 'set', ready: !this.me?.ready }); });
     $('rmStart').addEventListener('click', () => { this.game.audio.play('click'); this.net?.send({ t: 'start' }); });
@@ -110,7 +118,7 @@ export class Online {
     });
     $('rmCustom').addEventListener('click', () => { if (!this.me?.racing) this.game.garage.open(this.me?.car ?? this.game.settings.skin, 'online'); });
     // countdown to a public room's automatic start, or to a league race's start time
-    setInterval(() => { if ((this.room?.autoStartAt || (this.room?.league && !this.room.league.raced)) && !$('online').classList.contains('hidden')) this.renderStatus(); }, 250);
+    setInterval(() => { if (!this.room?.cash && (this.room?.autoStartAt || (this.room?.league && !this.room.league.raced)) && !$('online').classList.contains('hidden')) this.renderStatus(); }, 250);
   }
 
   // how many players have the game open, beside the lobby's Multiplayer button: one socket to the server's Presence
@@ -160,10 +168,13 @@ export class Online {
 
   // the Online screen: the room if we're in one, otherwise quick match / private room / join
   open(msg = '') {
-    ['menu', 'pause', 'settings', 'garage', 'chal', 'result', 'cups', 'board', 'f1s', 'f1w', 'f1st', 'lg'].forEach((i) => $(i).classList.add('hidden'));
+    ['menu', 'pause', 'settings', 'garage', 'chal', 'result', 'cups', 'board', 'f1s', 'f1w', 'f1st', 'lg', 'winnings', 'cashHost', 'cashRes'].forEach((i) => $(i).classList.add('hidden'));
     $('online').classList.remove('hidden');
+    const cashRoom = !!this.room?.cash;
     $('onHome').classList.toggle('hidden', this.inRoom);
-    $('onRoom').classList.toggle('hidden', !this.inRoom);
+    $('onRoom').classList.toggle('hidden', !this.inRoom || cashRoom);
+    $('onCashRoom').classList.toggle('hidden', !cashRoom);
+    $('onCash').classList.toggle('hidden', !cash.enabled());
     $('onName').value = this.game.league.name;
     this.say('onMsg', msg || (this.url ? '' : ERRORS.offline));
     if (this.inRoom) this.renderRoom();
@@ -179,6 +190,8 @@ export class Online {
     const code = normCode(new URLSearchParams(location.search).get('room'));
     if (code.length !== CODE_LEN) return;
     this.open();
+    // a cash race's invite: unless this tab already holds its seat, the terms and the entry come first
+    if (code[0] === 'C' && loadSeat()?.code !== code) return this.game.cashRace.join(code);
     this.connect('join', code);
   }
 
@@ -237,12 +250,19 @@ export class Online {
       .on('ev', mine((m) => { const r = this.remote(m.id); if (r) this.game.onNetEvent(r, m); }))
       .on('lap', mine((m) => this.onLap(m)))
       .on('out', mine((m) => this.onOut(m)))
-      .on('results', mine((m) => this.onResults(m)));
+      .on('results', mine((m) => this.onResults(m)))
+      .on('notice', mine((m) => this.game.cashRace.onNotice(m.code)));
   }
 
   forget() {
     saveSeat(null);
     if (new URLSearchParams(location.search).has('room')) history.replaceState(null, '', location.pathname);
+  }
+
+  // a cash race the player has paid into (cashrace.js): into its room
+  connectCash(code) {
+    this.open();
+    this.connect('join', code);
   }
 
   // a league race night: into the room the league opened, with this member's ticket
@@ -281,6 +301,7 @@ export class Online {
   // the server closed the door (kicked, other tab, gone for good): back to the Online home screen
   drop(code) {
     if (!this.room && code !== 'lost') return;
+    if (code === 'kicked' && this.room?.cash) { code = 'cash_kicked'; cash.refresh(); }
     this.net?.leave();
     this.net = null;
     this.room = null;
@@ -294,7 +315,10 @@ export class Online {
     const first = !this.room;
     this.room = m;
     if (first) this.open();
-    else if (!$('onRoom').classList.contains('hidden')) this.renderRoom();
+    else if (m.cash && $('onCashRoom').classList.contains('hidden') && !$('onRoom').classList.contains('hidden')) this.open();
+    else if (!$('onRoom').classList.contains('hidden') || !$('onCashRoom').classList.contains('hidden')) this.renderRoom();
+    // the result screen follows the money as the room hears of it
+    if (m.cash && this.game.cashRace.res?.code === m.code) this.game.cashRace.renderResult();
     // dropped out of a race the game is still showing (left during loading, timed out): the race carries on without us
     const P = this.game.race?.online && this.game.race.seq === m.seq ? this.me : null;
     if (P && !P.racing && m.phase !== 'lobby' && !this.game.resultShown) this.game.hud.finalCount('You are no longer in this race');
@@ -303,6 +327,7 @@ export class Online {
   renderRoom() {
     const R = this.room;
     if (!R) return;
+    if (R.cash) return this.game.cashRace.renderLobby();
     const L = R.league, seats = L ? L.seats : MAX_PLAYERS;
     $('rmCode').textContent = R.code;
     $('rmKind').textContent = L ? `League race · round ${L.round + 1} · ${trackName(R.cfg.map)}` : R.public ? 'Public room' : 'Private room';
@@ -398,7 +423,7 @@ export class Online {
     const n = this.net;
     const text = !n ? '' : n.status === 'online' ? `● ${Math.round(n.rtt)} ms` : n.status === 'reconnecting' ? '◌ Reconnecting…' : n.status === 'connecting' ? '◌ Connecting…' : '✕ Offline';
     const cls = !n || n.status === 'online' ? (n && n.rtt > 180 ? 'slow' : '') : 'bad';
-    for (const el of [$('rmNet'), $('netstat')]) {
+    for (const el of [$('rmNet'), $('netstat'), $('crNet')]) {
       el.textContent = text;
       el.className = el.className.replace(/\b(slow|bad)\b/g, '').trim() + (cls ? ' ' + cls : '');
     }
@@ -406,18 +431,19 @@ export class Online {
 
   inviteUrl() { return `${location.origin}${location.pathname}?room=${this.room.code}`; }
 
-  async copyInvite() {
+  async copyInvite(id = 'rmCopy') {
     const url = this.inviteUrl();
     try {
       await navigator.clipboard.writeText(url);
-      this.flash('rmCopy', 'Link copied');
+      this.flash(id, 'Link copied');
     } catch {
       prompt('Copy this invite link:', url);
     }
   }
 
   async shareInvite() {
-    try { await navigator.share({ title: 'Driftbolt', text: `Race me in Driftbolt! Room ${this.room.code}`, url: this.inviteUrl() }); } catch { /* cancelled */ }
+    const text = this.room.cash ? `Cash race on Driftbolt: ${cash.fmt(this.room.cash.entry)} entry. Room ${this.room.code}` : `Race me in Driftbolt! Room ${this.room.code}`;
+    try { await navigator.share({ title: 'Driftbolt', text, url: this.inviteUrl() }); } catch { /* cancelled */ }
   }
 
   flash(id, text) {
@@ -497,8 +523,11 @@ export class Online {
 
   // quit from the pause menu: out of the race, still in the room
   leaveRace() {
-    this.net?.send({ t: 'quit' });
-    this.backToRoom();
+    // leaving a cash race forfeits the entry: asked first
+    this.game.cashRace.confirmQuit(() => {
+      this.net?.send({ t: 'quit' });
+      this.backToRoom();
+    });
   }
 
   backToRoom() {

@@ -5,16 +5,24 @@
 // Cars are simulated by their own clients; the room relays their snapshots and referees laps and the finishing order.
 // Player accounts (/auth) live in one Accounts object (accounts.js); rooms and leagues ask it who a session belongs to.
 // One Presence object counts the open games, for the lobby's "players online".
+// Cash races (behind the CASH_RACES var) are rooms in cash mode: Accounts holds the money (cash.js), the Room runs the
+// race and checks it (fair.js) before reporting the result.
 import { DurableObject } from 'cloudflare:workers';
 import {
   MAX_PLAYERS, CODE_LEN, CODE_CHARS, RACE_MAPS, RACE_MODES, LAP_OPTIONS, CAR_COUNT, FINISH_GRACE, COUNTDOWN,
   TRACK_LEN, MAX_SPEED, CAR_EVENTS, CELEBRATIONS, validSnap, cleanName, cleanLook, normCode,
-  LEAGUE_CODE_LEN, LEAGUE_NAME_LEN, LEAGUE_FORMATS, LEAGUE_CHAT, LEAGUE_LOBBY_OPEN as LOBBY_OPEN, normLeagueCode, USERNAME_RE,
+  LEAGUE_CODE_LEN, LEAGUE_NAME_LEN, LEAGUE_FORMATS, LEAGUE_CHAT, LEAGUE_LOBBY_OPEN as LOBBY_OPEN, normLeagueCode, USERNAME_RE, LOGO_KEY_RE,
 } from '../../src/netproto.js';
+import { LOGO_MAX } from './wallet.js';
 import { GPS, TEAMS } from '../../src/f1.js';
 import { mailReady, sendMail } from './mail.js';
-import { signatureOk } from './pay.js';
-import { REWARDS } from '../../src/catalog.js';
+import { signatureOk, paymentsReady } from './pay.js';
+import { webhookSignatureOk } from './vatar.js';
+import { REWARDS, CAR_ITEMS } from '../../src/catalog.js';
+import { cashMode, cashConfig, SEAT_PAINTS } from '../../src/cash.js';
+import { kycReady, isLocal } from './kyc.js';
+import { checkRacer, replayOf } from './fair.js';
+import { ADMIN_PAGE } from './admin.js';
 
 export { Accounts } from './accounts.js';
 
@@ -34,7 +42,8 @@ const CELEB_WAIT = 16_000;
 const LATE_WAIT = 60_000; // nobody was there at the start time: the first to arrive waits this long for the others
 const NO_SHOW = 10 * 60_000; // still nobody this long after the start time: the night is called off
 const REPORT_RETRY = 30_000; // ms between tries to tell the League how its race went
-const REJECT = { not_found: 4001, full: 4002, taken: 4003, kicked: 4004, not_member: 4006, session: 4007 }; // 4005: replaced by a newer connection
+const REJECT = { not_found: 4001, full: 4002, taken: 4003, kicked: 4004, not_member: 4006, session: 4007, not_paid: 4008, login_needed: 4009 }; // 4005: replaced by a newer connection
+const REC_CHUNK = 45; // car updates per stored chunk of a cash race's recording (3 s)
 
 // F1 Grands Prix race on 'f1-<gp>' maps, whose laps are at least the GP's target length
 const F1_LEN = Object.fromEntries(GPS.map((g) => ['f1-' + g.id, g.len]));
@@ -48,7 +57,12 @@ const rid = (n) => {
   const b = crypto.getRandomValues(new Uint8Array(n));
   return Array.from(b, (x) => 'abcdefghijklmnopqrstuvwxyz0123456789'[x % 36]).join('');
 };
-const newCode = () => Array.from(crypto.getRandomValues(new Uint8Array(CODE_LEN)), (x) => CODE_CHARS[x % CODE_CHARS.length]).join('');
+// codes starting with C are cash rooms' (cash.js makes those)
+function newCode() {
+  let c;
+  do c = Array.from(crypto.getRandomValues(new Uint8Array(CODE_LEN)), (x) => CODE_CHARS[x % CODE_CHARS.length]).join(''); while (c[0] === 'C');
+  return c;
+}
 const carIdx = (v) => (Number.isInteger(v) && v >= 0 && v < CAR_COUNT ? v : 0);
 
 // "https://*--driftbolt.netlify.app,http://localhost:*" style allowlist; * stands for one host label or a port
@@ -65,6 +79,7 @@ const matchmaker = (env) => env.MATCHMAKER.get(env.MATCHMAKER.idFromName('global
 const league = (env, code) => env.LEAGUES.get(env.LEAGUES.idFromName(code));
 const accounts = (env) => env.ACCOUNTS.get(env.ACCOUNTS.idFromName('global'));
 const presence = (env) => env.PRESENCE.get(env.PRESENCE.idFromName('global'));
+const roomStub = (env, code) => env.ROOMS.get(env.ROOMS.idFromName(code));
 // a guest can't race under a registered name: they show as "Guest <name>" instead
 const guestLabel = (name) => cleanName('Guest ' + name);
 
@@ -89,7 +104,11 @@ export default {
     if (url.pathname === '/league' || url.pathname.startsWith('/league/')) return leagueApi(req, env, url);
     if (url.pathname.startsWith('/auth/')) return authApi(req, env, url, ctx);
     if (url.pathname === '/wallet' || url.pathname.startsWith('/wallet/') || url.pathname.startsWith('/pay/')) return walletApi(req, env, url);
+    if (url.pathname.startsWith('/logo/')) return logoFile(req, env, url, ctx);
     if (url.pathname === '/paystack/webhook') return paystackWebhook(req, env, ctx);
+    if (url.pathname === '/cash' || url.pathname.startsWith('/cash/')) return cashHttp(req, env, url);
+    if (url.pathname === '/admin' || url.pathname.startsWith('/admin/')) return adminHttp(req, env, url);
+    if (url.pathname.startsWith('/vatar/')) return vatarApi(req, env, url, ctx);
     if (url.pathname !== '/ws' && url.pathname !== '/presence') return new Response('Not found\n', { status: 404 });
     if (req.headers.get('Upgrade') !== 'websocket') return new Response('Expected a WebSocket upgrade\n', { status: 426 });
     const origin = req.headers.get('Origin');
@@ -126,7 +145,7 @@ const json = (body, status, headers) => new Response(JSON.stringify(body), { sta
 // The game on this Worker is same-origin; other pages must be on the allowlist and get CORS headers.
 // Requests without an Origin (not from a browser) carry their own token, so there's no cookie to protect.
 // Returns a Response to send as is (refused origin, preflight, bad body) or { reply, input } to carry on with.
-async function httpApi(req, env, url, methods) {
+async function httpApi(req, env, url, methods, max = BODY_MAX) {
   const origin = req.headers.get('Origin');
   const cross = origin && origin !== url.origin;
   if (cross && !originOk(origin, env.ALLOWED_ORIGINS)) return json({ error: 'origin' }, 403, {});
@@ -138,7 +157,7 @@ async function httpApi(req, env, url, methods) {
   let input = {};
   if (req.method === 'POST') {
     const text = await req.text();
-    if (text.length > BODY_MAX) return reply(fail(413, 'too_big'));
+    if (text.length > max) return reply(fail(413, 'too_big'));
     try { input = JSON.parse(text || '{}'); } catch { return reply(fail(400, 'bad_json')); }
     if (!input || typeof input !== 'object' || Array.isArray(input)) return reply(fail(400, 'bad_json'));
   }
@@ -212,12 +231,15 @@ async function authApi(req, env, url, ctx) {
 // POST /wallet/earn   { kind, proof }   { amount, balance }; 409 claimed, 429 cap { left }
 // POST /wallet/claim  { items }         { owned }: cars and parts a cup or challenge unlocked on the player's device
 // POST /wallet/move   { items, looks }  { moved, skipped, cars, owned }: a new account's guest garage, once
+// POST /wallet/logo   { image }         { key }: a logo picture (base64 PNG, WebP or JPEG); 403 not_owned without a Logo part
 // POST /pay/init      { packId }        { reference, access_code } for Paystack's popup
 // GET  /pay/status/<reference>          { status: pending | paid | failed | abandoned, pack, tokens, balance }
-const WALLET_ACTIONS = new Set(['unlock', 'equip', 'earn', 'claim', 'move']);
+// POST /vatar/claim   { purchaseId }    { purchaseId, pack, tokens, balance, credited }: a Lagos Life purchase (vatar.js)
+const WALLET_ACTIONS = new Set(['unlock', 'equip', 'earn', 'claim', 'move', 'logo']);
 
 async function walletApi(req, env, url) {
-  const h = await httpApi(req, env, url, 'GET, POST');
+  // a logo upload carries a picture: more room than the rest
+  const h = await httpApi(req, env, url, 'GET, POST', url.pathname === '/wallet/logo' ? Math.ceil(LOGO_MAX / 3) * 4 + 200 : BODY_MAX);
   if (h instanceof Response) return h;
   const { reply, input } = h;
   const p = url.pathname, post = req.method === 'POST';
@@ -225,6 +247,7 @@ async function walletApi(req, env, url) {
   if (p === '/wallet') action = req.method === 'GET' ? 'get' : null;
   else if (p.startsWith('/wallet/')) action = post && WALLET_ACTIONS.has(p.slice(8)) ? p.slice(8) : null;
   else if (p === '/pay/init') action = post ? 'pay/init' : null;
+  else if (p === '/vatar/claim') action = post ? 'vatar/claim' : null;
   else if (p.startsWith('/pay/status/') && req.method === 'GET') {
     action = 'pay/status';
     input.reference = p.slice('/pay/status/'.length);
@@ -234,6 +257,27 @@ async function walletApi(req, env, url) {
   if (action === 'pay/init') input.origin = req.headers.get('Origin') || url.origin;
   const session = /^Bearer (\S{1,400})$/.exec(req.headers.get('Authorization') || '')?.[1] || null;
   return reply(await accounts(env).walletApi(action, input, session));
+}
+
+// GET /logo/<key>: a player's logo, for anyone (other players' games draw it on their car). A key is its picture's
+// hash, so a logo never changes: browsers and Cloudflare's cache keep it for good. Served as an image only, with
+// nothing that could run, and open to other origins (the Netlify copy draws it in WebGL, which needs CORS).
+async function logoFile(req, env, url, ctx) {
+  if (req.method !== 'GET' && req.method !== 'HEAD') return new Response('Not found\n', { status: 404 });
+  const key = url.pathname.slice('/logo/'.length);
+  if (!LOGO_KEY_RE.test(key)) return new Response('Not found\n', { status: 404 });
+  const cache = caches.default, hit = await cache.match(req);
+  if (hit) return hit;
+  const r = await accounts(env).logo(key);
+  if (!r) return new Response('Not found\n', { status: 404, headers: { 'cache-control': 'no-store', 'access-control-allow-origin': '*' } });
+  const res = new Response(r.data, {
+    headers: {
+      'content-type': r.mime, 'cache-control': 'public, max-age=31536000, immutable', 'access-control-allow-origin': '*',
+      'x-content-type-options': 'nosniff', 'content-security-policy': "default-src 'none'; sandbox", 'cross-origin-resource-policy': 'cross-origin',
+    },
+  });
+  ctx.waitUntil(cache.put(req, res.clone()));
+  return res;
 }
 
 // POST /paystack/webhook: Paystack's events, signed with the secret key (x-paystack-signature, HMAC-SHA512 of the raw
@@ -246,8 +290,131 @@ async function paystackWebhook(req, env, ctx) {
   if (!(await signatureOk(env, raw, req.headers.get('x-paystack-signature')))) return new Response('Bad signature\n', { status: 401 });
   let ev = null;
   try { ev = JSON.parse(new TextDecoder().decode(raw)); } catch { /* signed but unreadable: nothing to do */ }
-  if (ev?.event === 'charge.success' && typeof ev.data?.reference === 'string') {
-    ctx.waitUntil(accounts(env).payConfirm(ev.data.reference).catch((e) => console.error(`pay: webhook check failed (${e?.message})`)));
+  const ref = typeof ev?.data?.reference === 'string' ? ev.data.reference : null;
+  if (ev?.event === 'charge.success' && ref) {
+    // a cash deposit (metadata.kind = 'cash_deposit') goes to the cash wallet; anything else is a token purchase
+    let meta = ev.data.metadata;
+    if (typeof meta === 'string') try { meta = JSON.parse(meta); } catch { meta = null; }
+    const A = accounts(env);
+    const check = meta?.kind === 'cash_deposit' ? A.cashDepositConfirm(ref) : A.payConfirm(ref);
+    ctx.waitUntil(check.catch((e) => console.error(`pay: webhook check failed (${e?.message})`)));
+  }
+  // a withdrawal's transfer finished, failed or was reversed (cash.js)
+  if (['transfer.success', 'transfer.failed', 'transfer.reversed'].includes(ev?.event) && ref) {
+    ctx.waitUntil(accounts(env).cashTransferEvent(ref, ev.event).catch((e) => console.error(`cash: transfer webhook failed (${e?.message})`)));
+  }
+  return new Response('ok\n');
+}
+
+// ---------- Cash HTTP API (cash.js), behind CASH_RACES ----------
+// GET  /cash/config                       { mode, cfg, kyc, payments }: anyone, so the game knows whether to show cash at all
+// With "Authorization: Bearer <session>", for that account (errors are { error: 'code' }, the code naming the step
+// that's missing: currency_needed, age_needed, kyc_needed, bank_needed, excluded, entry_limit, short, …):
+// GET  /cash                              the cash wallet: balance (available, arriving), checks, limits, withdrawals, rooms, history
+// POST /cash/currency { currency }        NGN or USD, while the wallet is empty
+// POST /cash/age { dob }                  'YYYY-MM-DD', once; 18+
+// POST /cash/kyc { type: bvn | nin, number, firstName, middleName?, lastName }
+// GET  /cash/banks                        Paystack's banks for the wallet's currency
+// POST /cash/bank { bankCode, accountNumber }   resolved with Paystack; the name must match the verified one
+// POST /cash/limits { deposit?, entry? }  in minor units; lower at once, higher after 24 h
+// POST /cash/exclude { days }             7, 30 or 90 days without entries or deposits
+// POST /cash/deposit/init { amount }      { reference, access_code } for Paystack's popup
+// GET  /cash/deposit/status/<reference>
+// POST /cash/withdraw { amount }          { reference, status, fee }
+// POST /cash/convert { amount }           { tokens }
+// POST /cash/rooms { entry, seats, split, map, laps }   a new cash room, the host's entry held: { room }
+// POST /cash/rooms/join { code }          an entry held and a seat in the room: { room }; then connect to /ws as usual
+// GET  /cash/rooms/<code>                 the room's state, result and payout for someone who paid into it
+// POST /cash/rooms/report { code, reason }  holds the payout for review (during the report window)
+const CASH_ACTIONS = new Set(['currency', 'age', 'kyc', 'bank', 'limits', 'exclude', 'deposit/init', 'withdraw', 'convert', 'rooms', 'rooms/join', 'rooms/report']);
+
+async function cashHttp(req, env, url) {
+  const h = await httpApi(req, env, url, 'GET, POST');
+  if (h instanceof Response) return h;
+  const { reply, input } = h;
+  const p = url.pathname, mode = cashMode(env.CASH_RACES);
+  if (p === '/cash/config' && req.method === 'GET') {
+    return reply(ok({ mode, ...(mode !== 'off' && { cfg: cashConfig(env.CASH_CONFIG), kyc: kycReady(env, isLocal(req.headers.get('CF-Connecting-IP'))), payments: paymentsReady(env) }) }));
+  }
+  let action = null;
+  if (p === '/cash' && req.method === 'GET') action = 'get';
+  else if (p === '/cash/banks' && req.method === 'GET') action = 'banks';
+  else if (p.startsWith('/cash/deposit/status/') && req.method === 'GET') { action = 'deposit/status'; input.reference = p.slice('/cash/deposit/status/'.length); }
+  else if (p.startsWith('/cash/rooms/') && req.method === 'GET') { action = 'rooms/get'; input.code = normCode(p.slice('/cash/rooms/'.length)); }
+  else if (req.method === 'POST' && CASH_ACTIONS.has(p.slice(6))) action = p.slice(6) === 'rooms' ? 'rooms/create' : p.slice(6);
+  if (!action) return reply(fail(404, 'not_found'));
+  if (action === 'rooms/join' || action === 'rooms/report') input.code = normCode(input.code);
+  const session = /^Bearer (\S{1,400})$/.exec(req.headers.get('Authorization') || '')?.[1] || null;
+  const ctx = { origin: req.headers.get('Origin') || url.origin, local: isLocal(req.headers.get('CF-Connecting-IP')) };
+  const A = accounts(env);
+  if (action === 'rooms/create') {
+    // the Room takes the code Accounts drew; if it's a normal room's (very rare), that room never was: refund, draw again
+    for (let i = 0; i < 3; i++) {
+      const r = await A.cashApi('rooms/create', input, session, ctx);
+      if (r.status !== 200) return reply(r);
+      const code = r.body.room.code;
+      if (await roomStub(env, code).setupCash(await A.cashRoomState(code)).catch(() => false)) return reply(r);
+      await A.cashCancel(code, 'code_clash');
+    }
+    return reply(fail(503, 'room_unavailable'));
+  }
+  const r = await A.cashApi(action, input, session, ctx);
+  // a new seat: the room hears of it now (it would also ask when the player connects)
+  if (action === 'rooms/join' && r.status === 200) {
+    try { await roomStub(env, input.code).cashSync(await A.cashRoomState(input.code)); } catch { /* the room asks on connect */ }
+  }
+  return reply(r);
+}
+
+// ---------- /admin: cash rooms frozen for review, and flagged withdrawals ----------
+// GET /admin is the page (server/src/admin.js); its API needs an admin's session and the ADMIN_KEY secret (accounts.js):
+// POST /admin/api/list | replay { code } | act { action: release | refund | approve | reject, target, note }
+async function adminHttp(req, env, url) {
+  if (url.pathname === '/admin' && req.method === 'GET') {
+    return new Response(ADMIN_PAGE, { headers: { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store', 'x-frame-options': 'DENY',
+      'content-security-policy': "default-src 'self'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data:; connect-src 'self'; frame-ancestors 'none'", 'referrer-policy': 'no-referrer' } });
+  }
+  // same origin only: the admin page is served from here
+  const origin = req.headers.get('Origin');
+  if (origin && origin !== url.origin) return json({ error: 'origin' }, 403, {});
+  const m = /^\/admin\/api\/(list|replay|act)$/.exec(url.pathname);
+  if (!m || req.method !== 'POST') return json({ error: 'not_found' }, 404, {});
+  const text = await req.text();
+  if (text.length > BODY_MAX) return json({ error: 'too_big' }, 413, {});
+  let input;
+  try { input = JSON.parse(text || '{}'); } catch { return json({ error: 'bad_json' }, 400, {}); }
+  const session = /^Bearer (\S{1,400})$/.exec(req.headers.get('Authorization') || '')?.[1] || null;
+  const r = await accounts(env).adminApi(m[1], input || {}, session, req.headers.get('X-Admin-Key'), req.headers.get('CF-Connecting-IP') || '');
+  return json(r.body, r.status, {});
+}
+
+// ---------- Lagos Life (vatar.js) ----------
+// The game framed in a Vatar world's Games app knows its player by a Vatar session and buys packs on the world's pay sheet.
+// POST /vatar/session { session }       { session, account, mode }: that player's Driftbolt account (made on a first visit)
+// POST /vatar/claim   { purchaseId }    with the account's session: see the wallet API above
+// POST /vatar/webhook                   Vatar's events, signed with VATAR_WEBHOOK_SECRET (X-Vatar-Signature: sha256=<hex
+//                                       HMAC-SHA256 of the raw body>). purchase.paid only starts a check with Vatar's API.
+async function vatarApi(req, env, url, ctx) {
+  if (url.pathname === '/vatar/webhook') return vatarWebhook(req, env, ctx);
+  if (url.pathname === '/vatar/claim') return walletApi(req, env, url);
+  const h = await httpApi(req, env, url, 'POST');
+  if (h instanceof Response) return h;
+  const { reply, input } = h;
+  if (req.method !== 'POST' || url.pathname !== '/vatar/session') return reply(fail(404, 'not_found'));
+  return reply(await accounts(env).vatarLogin(input.session, req.headers.get('CF-Connecting-IP') || ''));
+}
+
+// Answered at once (Vatar waits 5 s, then retries); the purchase is checked after. A repeat delivery is harmless:
+// a purchase adds its tokens once.
+async function vatarWebhook(req, env, ctx) {
+  if (req.method !== 'POST') return new Response('Not found\n', { status: 404 });
+  const raw = await req.arrayBuffer();
+  if (raw.byteLength > 64 * 1024) return new Response('Too big\n', { status: 413 });
+  if (!(await webhookSignatureOk(env, raw, req.headers.get('X-Vatar-Signature')))) return new Response('Bad signature\n', { status: 401 });
+  let ev = null;
+  try { ev = JSON.parse(new TextDecoder().decode(raw)); } catch { /* signed but unreadable: nothing to do */ }
+  if (ev?.type === 'purchase.paid' && typeof ev.data?.purchaseId === 'string') {
+    ctx.waitUntil(accounts(env).vatarPaid(ev.data.purchaseId).catch((e) => console.error(`vatar: webhook check failed (${e?.message})`)));
   }
   return new Response('ok\n');
 }
@@ -346,6 +513,7 @@ export class Room extends DurableObject {
     this.buckets = new WeakMap(); // per-socket rate limit (memory only; resets if the room hibernates, which is fine)
     this.ids = new WeakMap(); // socket → player id cache over the attachment
     this.reported = '';
+    this.recs = new Map(); // a cash race's car updates not yet stored: id → { buf }
     ctx.blockConcurrencyWhile(async () => { this.room = (await ctx.storage.get('room')) || null; });
   }
 
@@ -407,6 +575,20 @@ export class Room extends DurableObject {
       t: 'room', code: R.code, public: R.public, host: R.hostId, phase: R.phase, cfg: R.cfg, seq: R.seq, autoStartAt: R.autoStartAt,
       players: this.players.sort((a, b) => a.joined - b.joined).map((p) => ({ id: p.id, name: p.name, car: p.car, ...(p.team && { team: p.team }), look: p.look || {}, ready: p.ready, connected: p.connected, racing: !!this.entry(p.id), ...(p.account && { acct: true }) })),
       ...(R.league && { league: { code: R.league.code, round: R.league.round, startAt: R.league.startAt, seats: R.league.maxPlayers, raced: R.league.raced } }),
+      ...(R.cash && { cash: this.cashView() }),
+    };
+  }
+
+  // what players see of a cash room's money: names, never account ids
+  cashView() {
+    const R = this.room, C = R.cash;
+    const name = (acct) => C.seated.find((s) => s.account === acct)?.name || '?';
+    return {
+      currency: C.currency, entry: C.entry, seats: C.seats, split: C.split, feePct: C.feePct, pool: C.pool, fee: C.fee, prize: C.prize,
+      status: C.status, expiresAt: C.expiresAt, fullAt: C.fullAt, releaseAt: C.releaseAt, host: name(C.host), flagged: !!C.flagged, reports: C.reports || 0,
+      seated: C.seated.map((s) => ({ name: s.name, here: this.players.some((p) => p.account === s.account && p.connected) })),
+      plan: C.plan && { pool: C.plan.pool, fee: C.plan.fee, prize: C.plan.prize, awards: C.plan.awards.map((a) => ({ name: name(a.account), place: a.place, amount: a.amount })) },
+      checking: !!C.done, results: C.results || null, note: C.note || null,
     };
   }
 
@@ -433,7 +615,10 @@ export class Room extends DurableObject {
   async schedule() {
     const R = this.room;
     const t = [];
-    for (const p of this.players) if (!p.connected) t.push(p.goneAt + (this.entry(p.id) ? RACE_GRACE : LOBBY_GRACE));
+    // a cash room's lobby keeps paid seats for players who dropped: their entry is held until the room starts or closes
+    for (const p of this.players) if (!p.connected && !(R.cash && R.phase === 'lobby')) t.push(p.goneAt + (this.entry(p.id) ? RACE_GRACE : LOBBY_GRACE));
+    if (R.cash?.status === 'open' && R.phase === 'lobby') t.push(R.cash.expiresAt + 500);
+    if (R.cash?.done) t.push(R.cash.retryAt || Date.now());
     if (R.phase === 'loading') t.push(R.race.loadDeadline);
     if (R.phase === 'race') { t.push(R.race.hardEndAt); if (R.race.endAt) t.push(R.race.endAt); if (R.race.celebBy) t.push(R.race.celebBy); }
     if (R.phase === 'lobby' && R.autoStartAt) t.push(R.autoStartAt);
@@ -455,7 +640,13 @@ export class Room extends DurableObject {
       this.room = null;
       return;
     }
-    for (const p of this.players) if (!p.connected && now - p.goneAt >= (this.entry(p.id) ? RACE_GRACE : LOBBY_GRACE)) this.removePlayer(p.id);
+    for (const p of this.players) if (!p.connected && !(R.cash && R.phase === 'lobby') && now - p.goneAt >= (this.entry(p.id) ? RACE_GRACE : LOBBY_GRACE)) this.removePlayer(p.id);
+    // a cash room that didn't fill (or start) in time: Accounts refunds it and the room hears how it stands
+    if (R.cash?.status === 'open' && R.phase === 'lobby' && now >= R.cash.expiresAt) {
+      try { const info = await accounts(this.env).cashExpire(R.code); if (info && this.room === R) this.applyCash(info); } catch { R.cash.expiresAt = now + REPORT_RETRY; }
+    }
+    if (R.cash?.done && now >= (R.cash.retryAt || 0)) await this.reportCash();
+    if (this.room !== R) return;
     if (R.phase === 'loading' && now >= R.race.loadDeadline) this.beginRace();
     // the winner never started a celebration: stop waiting for one
     if (R.phase === 'race' && R.race.celebBy && now >= R.race.celebBy) { R.race.celebBy = 0; this.checkRaceOver(); }
@@ -470,7 +661,9 @@ export class Room extends DurableObject {
 
   // an empty room is wiped a minute after the last player left; a league room not before its race is run and reported
   wipeAt() {
-    const R = this.room, L = R.league;
+    const R = this.room, L = R.league, C = R.cash;
+    // a cash room stays until its result has reached Accounts, and a day while its money is still open (players come back to see it)
+    if (C) return C.done ? Infinity : ['settled', 'refunded'].includes(C.status) ? R.emptySince + EMPTY_TTL : R.emptySince + 86_400_000;
     return L && (L.report || (!L.raced && !L.noShow)) ? Infinity : R.emptySince + EMPTY_TTL;
   }
 
@@ -494,6 +687,7 @@ export class Room extends DurableObject {
         if (!e || R.phase !== 'race' || !validSnap(m.p)) return;
         // laps done + share of the current lap, for ranking racers who don't finish
         e.prog = m.p[12] + m.p[8] / (trackLen(R.race.cfg.map) || 1);
+        if (R.cash) this.record(id, m.p);
         const s = JSON.stringify({ t: 's', id, p: m.p });
         for (const o of this.sockets((id) => id !== p.id && this.entry(id))) this.sendTo(o, s);
         return;
@@ -516,6 +710,11 @@ export class Room extends DurableObject {
         return this.commit(false);
       }
       case 'set':
+        // a cash room: everyone's name is their account's and everyone drives the same car; only ready changes
+        if (R.cash) {
+          if (typeof m.ready === 'boolean' && R.phase === 'lobby') p.ready = m.ready;
+          return this.commit();
+        }
         // in a league room, names and cars are the league's; an account holder's name is their account's
         if (typeof m.name === 'string' && !R.league && !p.account) {
           const name = cleanName(m.name) || p.name;
@@ -532,16 +731,18 @@ export class Room extends DurableObject {
         this.checkAutoStart();
         return this.commit();
       case 'cfg':
-        if (!host || R.phase !== 'lobby' || R.league) return;
+        if (!host || R.phase !== 'lobby' || R.league || R.cash) return;
         if (RACE_MAPS.includes(m.map)) R.cfg.map = m.map;
         if (RACE_MODES.includes(m.mode)) R.cfg.mode = m.mode;
         if (LAP_OPTIONS.includes(m.laps)) R.cfg.laps = m.laps;
         return this.commit();
       case 'start':
+        if (R.cash) return host && R.phase === 'lobby' && this.canStartCash() ? this.startCash() : undefined;
         if (!host || R.phase !== 'lobby' || !this.canStart()) return;
         this.startRace();
         return this.commit();
       case 'kick': {
+        if (R.cash) return host && m.id !== p.id && R.players[m.id] ? this.cashLeave(R.players[m.id], 'kicked') : undefined;
         if (!host || R.league || m.id === p.id || !R.players[m.id]) return;
         for (const o of this.sockets((id) => id === m.id)) this.reject(o, 'kicked');
         this.removePlayer(m.id);
@@ -568,6 +769,8 @@ export class Room extends DurableObject {
         return this.commit();
       }
       case 'leave':
+        // leaving a cash room before it starts gives the entry back (the host leaving calls the room off)
+        if (R.cash && R.phase === 'lobby' && R.cash.status === 'open') { try { ws.close(1000, 'left'); } catch { /* ignore */ } return this.cashLeave(p, 'left'); }
         this.removePlayer(p.id);
         try { ws.close(1000, 'left'); } catch { /* ignore */ }
         return this.commit();
@@ -575,6 +778,7 @@ export class Room extends DurableObject {
   }
 
   async hello(ws, m) {
+    if (this.room?.cash) return this.helloCash(ws, m);
     const att = ws.deserializeAttachment() || {};
     // who a new player is, asked before anything here changes (other messages can arrive while Accounts answers).
     // A league room seats by ticket and names its seats itself.
@@ -678,7 +882,7 @@ export class Room extends DurableObject {
     this.dirty = true;
     if (this.entry(id)) this.dropRacer(id);
     delete R.players[id];
-    if (R.hostId === id) R.hostId = this.connected()[0]?.id || this.players[0]?.id || null;
+    if (R.hostId === id) R.hostId = R.cash ? null : this.connected()[0]?.id || this.players[0]?.id || null;
     if (!this.players.length) { R.emptySince = Date.now(); R.autoStartAt = 0; }
     this.checkAutoStart();
   }
@@ -728,6 +932,174 @@ export class Room extends DurableObject {
     }
   }
 
+  // ---------- cash rooms ----------
+  // A cash room is opened by POST /cash/rooms once Accounts has held the host's entry (setupCash), and seats only accounts
+  // that paid into it (POST /cash/rooms/join). Accounts keeps the money and the room's state; the Room keeps a copy
+  // (applyCash) and hears of changes (cashSync). Everyone races the same car with items off; each seat gets its own
+  // paint so the racers can tell each other apart. One race per room.
+  async setupCash(info) {
+    if (!info || (this.room && !this.room.cash)) return false;
+    if (!this.room) {
+      const now = Date.now();
+      this.room = { code: info.code, public: false, created: now, hostId: null, phase: 'lobby', cfg: { map: info.map, mode: 'speed', laps: info.laps },
+        players: {}, seq: 0, race: null, autoStartAt: 0, emptySince: now, cash: null };
+    }
+    this.applyCash(info);
+    await this.commit(false);
+    return true;
+  }
+
+  async cashSync(info) {
+    if (!this.room?.cash || !info || info.code !== this.room.code) return;
+    this.applyCash(info);
+    await this.commit();
+  }
+
+  applyCash(info) {
+    const R = this.room;
+    R.cash = { ...R.cash, currency: info.currency, entry: info.entry, seats: info.seats, split: info.split, feePct: info.feePct, pool: info.pool, fee: info.fee,
+      prize: info.prize, car: Math.max(0, CAR_ITEMS.findIndex((c) => c.car === info.car)), host: info.host, status: info.status, expiresAt: info.expiresAt,
+      fullAt: info.fullAt, releaseAt: info.releaseAt, seated: info.seated, plan: info.plan, flagged: info.flagged, reports: info.reports, note: info.note };
+    // a seat given back before the start (left, or removed by the host): that player goes
+    if (R.phase === 'lobby' && info.status === 'open') {
+      const paid = new Set(info.seated.map((s) => s.account));
+      for (const p of this.players) {
+        if (!p.account || paid.has(p.account)) continue;
+        for (const o of this.sockets((id) => id === p.id)) this.reject(o, 'kicked');
+        delete R.players[p.id];
+      }
+    }
+    R.hostId = this.players.find((p) => p.account === info.host)?.id || null;
+    this.dirty = true;
+  }
+
+  // only an account that paid into the room gets in, under its own name
+  async helloCash(ws, m) {
+    let who = null;
+    try { who = await identify(this.env, m.session, 'Driver'); } catch { /* Accounts can't be reached */ }
+    if (!who?.account) return this.reject(ws, who?.error ? 'session' : 'login_needed');
+    const seated = () => !!this.room?.cash?.seated.some((s) => s.account === who.account);
+    if (!seated()) {
+      // they may only just have paid: ask Accounts how the room stands
+      try { const info = await accounts(this.env).cashRoomState(this.room.code); if (info && this.room?.cash) this.applyCash(info); } catch { /* not seated, then */ }
+      if (!seated()) return this.reject(ws, 'not_paid');
+    }
+    const R = this.room, now = Date.now();
+    let p = this.players.find((x) => x.account === who.account);
+    if (p) {
+      for (const old of this.sockets((id) => id === p.id)) if (old !== ws) { this.setId(old, null); try { old.close(4005, 'replaced'); } catch { /* ignore */ } }
+      p.connected = true;
+      p.goneAt = 0;
+    } else {
+      const seat = R.cash.seated.findIndex((s) => s.account === who.account);
+      p = { id: rid(8), token: rid(24), name: who.name, car: R.cash.car, look: cleanLook({ paint: SEAT_PAINTS[seat % SEAT_PAINTS.length] }), ready: false, joined: now, connected: true, goneAt: 0, account: who.account };
+      R.players[p.id] = p;
+    }
+    if (p.account === R.cash.host) R.hostId = p.id;
+    this.setId(ws, p.id);
+    this.sendTo(ws, { t: 'welcome', id: p.id, token: p.token, code: R.code, s: Date.now() });
+    const e = this.entry(p.id);
+    if (e && R.race && R.phase !== 'lobby') this.sendTo(ws, { t: 'resume', seq: R.seq, phase: R.phase, startAt: R.race.startAt, lap: e.lap });
+    await this.commit();
+  }
+
+  // the host can start once every seat is paid, everyone is here and every other racer is ready
+  canStartCash() {
+    const C = this.room.cash;
+    if (C.status !== 'open' || C.starting || C.seated.length !== C.seats) return false;
+    return C.seated.every((s) => { const p = this.players.find((x) => x.account === s.account); return p?.connected && (p.ready || p.account === C.host); });
+  }
+
+  // Accounts moves the room from open to racing (refused if it has just expired); only then does the race load
+  async startCash() {
+    const R = this.room;
+    R.cash.starting = true;
+    let res;
+    try { res = await accounts(this.env).cashStart(R.code); } catch { res = { error: 'unreachable' }; }
+    if (this.room !== R) return;
+    if (res.room) this.applyCash(res.room);
+    R.cash.starting = false;
+    if (res.error || R.cash.status !== 'racing' || R.phase !== 'lobby') this.send({ t: 'notice', code: res.error || 'not_started' });
+    else this.startRace();
+    return this.commit();
+  }
+
+  // a player leaves, or the host removes them, before the start: Accounts gives their entry back (the whole room's, if
+  // it's the host) and the room drops their seat
+  async cashLeave(p, why) {
+    const R = this.room;
+    if (R.phase !== 'lobby' || R.cash.status !== 'open' || !p.account) return;
+    let info = null;
+    try { info = await accounts(this.env).cashLeave(R.code, p.account, why); } catch { /* nothing changed */ }
+    if (this.room !== R) return;
+    if (!info) return this.send({ t: 'notice', code: 'unreachable' }, (id) => id === p.id);
+    this.applyCash(info);
+    return this.commit();
+  }
+
+  // a cash race's car updates as they arrived, [recv, t, x, y, z, s, d, laps] (fair.js), stored in chunks as the race goes
+  record(id, p) {
+    let r = this.recs.get(id);
+    if (!r) this.recs.set(id, (r = { buf: [] }));
+    r.buf.push([Date.now(), p[0], p[1], p[2], p[3], p[6], p[8], p[12]]);
+    if (r.buf.length >= REC_CHUNK) {
+      this.ctx.storage.put(`rec:${this.room.seq}:${id}:${String(r.buf[0][0]).padStart(15, '0')}`, r.buf);
+      r.buf = [];
+    }
+  }
+
+  async loadRec(seq, id) {
+    const stored = await this.ctx.storage.list({ prefix: `rec:${seq}:${id}:` });
+    return [...[...stored.values()].flat(), ...(this.recs.get(id)?.buf || [])];
+  }
+
+  // the race is over: what checking it needs is kept until Accounts has the result (reportCash, from the alarm)
+  endCash(rows) {
+    const R = this.room, race = R.race;
+    const entries = {};
+    for (const [id, e] of Object.entries(race.entries)) entries[id] = { name: e.name, account: e.account, finished: e.finished, time: e.time, lapTimes: e.lapTimes, laps: e.lapMsgs || [] };
+    const strip = (r) => ({ name: r.name, finished: r.finished, out: r.out, dns: r.dns, time: r.time, place: r.place, best: r.best });
+    R.cash.done = { seq: R.seq, startAt: race.startAt, L: trackLen(race.cfg.map), laps: race.cfg.laps, map: race.cfg.map, entries,
+      rows: rows.map((r) => ({ account: race.entries[r.id]?.account || null, ...strip(r) })) };
+    R.cash.results = rows.map(strip);
+    R.cash.retryAt = 0;
+    R.phase = 'over';
+    R.race = null;
+    this.dirty = true;
+    for (const p of this.players) p.ready = false;
+  }
+
+  // every finisher's recording is checked (fair.js); the result, any flags and the replay go to Accounts, which holds
+  // the payout for the report window, or freezes it for review. Retried until Accounts has it.
+  async reportCash() {
+    const R = this.room, D = R?.cash?.done;
+    if (!D || this.reporting) return;
+    this.reporting = true;
+    try {
+      const cfg = cashConfig(this.env.CASH_CONFIG);
+      const race = { L: D.L, laps: D.laps, startAt: D.startAt };
+      const flags = [], racers = [];
+      for (const [id, e] of Object.entries(D.entries)) {
+        const rec = await this.loadRec(D.seq, id);
+        const f = checkRacer({ ...e, rec }, race, cfg);
+        for (const x of f) flags.push({ account: e.account, name: e.name, ...x });
+        racers.push({ name: e.name, finished: e.finished, time: e.time, lapTimes: e.lapTimes, laps: e.laps, flags: f, rec: replayOf({ rec }, race) });
+      }
+      const info = await accounts(this.env).cashResult(R.code, { rows: D.rows, flags, replay: { map: D.map, L: D.L, laps: D.laps, startAt: D.startAt, racers } });
+      if (this.room !== R || R.cash.done !== D) return;
+      R.cash.done = null;
+      if (info) this.applyCash(info);
+      const keys = [...(await this.ctx.storage.list({ prefix: `rec:${D.seq}:` })).keys()];
+      for (let i = 0; i < keys.length; i += 128) await this.ctx.storage.delete(keys.slice(i, i + 128));
+      this.recs = new Map();
+    } catch (e) {
+      console.error(`cash: the result of ${R.code} wasn't reported (${e?.message})`);
+      if (R.cash?.done) R.cash.retryAt = Date.now() + REPORT_RETRY;
+    } finally {
+      this.reporting = false;
+    }
+  }
+
   // ---------- race ----------
   startRace() {
     const R = this.room, L = R.league;
@@ -737,6 +1109,7 @@ export class Room extends DurableObject {
     // shuffled grid: no one gets pole position for joining first
     const grid = shuffle([...racers, ...ai]);
     if (L) L.raced = true;
+    if (R.cash) this.recs = new Map();
     R.seq++;
     R.phase = 'loading';
     this.dirty = true;
@@ -792,8 +1165,10 @@ export class Room extends DurableObject {
     const prev = e.lapTimes.reduce((a, b) => a + b, 0);
     const lapT = time - prev;
     const elapsed = (Date.now() - R.race.startAt) / 1000;
-    // a lap quicker than flat out all the way round, or a race clock running ahead of the server's: not believable
-    if (lapT < trackLen(R.race.cfg.map) / MAX_SPEED || time > elapsed + 2) return;
+    // a lap quicker than flat out all the way round, or a race clock running ahead of the server's: not believable.
+    // In a cash race it's kept, so the result stands as claimed and the checks (fair.js) freeze it for review
+    if (!R.cash && (lapT < trackLen(R.race.cfg.map) / MAX_SPEED || time > elapsed + 2)) return;
+    if (R.cash) { if (!(time > 0)) return; (e.lapMsgs ||= []).push({ lap, time, recv: Date.now() }); }
     e.lap = lap;
     e.lapTimes.push(Math.round(lapT * 1000) / 1000);
     const done = lap >= R.race.cfg.laps;
@@ -832,6 +1207,7 @@ export class Room extends DurableObject {
     rows.sort((a, b) => (a.dns - b.dns) || (b.finished - a.finished) || (a.finished ? a.time - b.time : (a.out - b.out) || b.prog - a.prog));
     rows.forEach((r, i) => { r.place = i + 1; });
     this.send({ t: 'results', seq: R.seq, laps: R.race.cfg.laps, rows });
+    if (R.cash) return this.endCash(rows);
     if (R.league) R.league.report = { round: R.league.round, rows };
     // account holders who finished: an invited player's races count toward the invite reward (wallet.js)
     const finished = Object.values(R.race.entries).filter((e) => e.finished && e.account).map((e) => e.account);

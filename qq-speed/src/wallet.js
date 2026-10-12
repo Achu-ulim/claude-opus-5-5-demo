@@ -55,7 +55,7 @@ const listeners = new Set(), creditListeners = new Set();
 let onExpired = null;
 let timer = 0;
 
-const EMPTY = { balance: 0, earned: 0, bought: 0, owned: [], looks: {}, history: [], payments: [], today: 0, cap: DAILY_EARN_CAP, starterUsed: false, invited: null, friends: { joined: 0, rewarded: 0 } };
+const EMPTY = { balance: 0, earned: 0, bought: 0, owned: [], looks: {}, logos: [], history: [], payments: [], today: 0, cap: DAILY_EARN_CAP, starterUsed: false, invited: null, friends: { joined: 0, rewarded: 0 } };
 const rowKey = (r) => `${r.reason}|${r.ref}`;
 // what a reward the server added on its own was for
 function labelFor(r) {
@@ -99,8 +99,10 @@ export function owns(id) {
   const it = item(id);
   return !!it && (it.price === 0 || (acct ? acct.owned : guest.owned).has(id));
 }
-// the look fitted to a car: { paint, wheels, bodykit, glow } part ids, factory parts left out
+// the look fitted to a car: part ids per slot (factory parts left out) and the player's colour, plate and logo
 export const equipped = (carId) => ({ ...(acct ? acct.snap.looks[carId] : guest.looks[carId]) });
+// the logos on the account (keys, newest first); a guest's stay on the device (logos.js)
+export const logos = () => (acct ? [...(acct.snap.logos || [])] : []);
 // rewards waiting to be added (offline, or over today's cap)
 export const held = () => [...(acct ? acct.held : guest.held)];
 export function totals() {
@@ -232,6 +234,21 @@ export async function equip(carId, look) {
   return { ok: false, error: r.error, item: r.item };
 }
 
+// a logo the player made (logos.js), up to the account so other players can load it: { ok } or { ok: false, error }.
+// url: this device's copy (a data URL). A guest's logo stays on the device, so for a guest there's nothing to do.
+export async function uploadLogo(key, url) {
+  if (!acct || acct.snap.logos?.includes(key)) return { ok: true };
+  if (!url) return { ok: false, error: 'missing' };
+  const a = acct;
+  const r = await call('/wallet/logo', { image: url.slice(url.indexOf(',') + 1) });
+  if (acct !== a) return { ok: false, error: 'session' };
+  if (r.ok) {
+    a.snap.logos = [r.key, ...(a.snap.logos || []).filter((k) => k !== r.key)];
+    changed();
+  }
+  return r;
+}
+
 // ---------- earning ----------
 // A reward the game just won (kind and proof as POST /wallet/earn takes them; label names it in the history):
 // { ok, amount } once added; { ok: false, held: true } when it has to wait (offline, or over today's cap) and is tried
@@ -336,6 +353,21 @@ export async function payStatus(reference) {
   }
   return r;
 }
+// A pack bought on Lagos Life's pay sheet (vatar.js): the server checks it with Vatar and adds its tokens once.
+// { ok, pack, tokens, balance, credited } or { ok: false, error }. announce: tell the lobby when this call added them
+// (the purchase finished while the game was away); the shop shows its own card instead.
+export async function vatarClaim(purchaseId, { announce = false } = {}) {
+  const a = acct;
+  const r = await call('/vatar/claim', { purchaseId });
+  if (r.ok && acct === a) {
+    a.seen.add(`purchase|vtr:${purchaseId}`);
+    acct.snap.balance = r.balance;
+    if (announce && r.credited) credit(r.tokens, `${packById(r.pack)?.name || 'Token'} pack`);
+    await refresh();
+  }
+  return r;
+}
+
 // a payment still on its way (a bank transfer): checked every 30 s while the game is open, and announced when it lands
 export function watch(reference) { if (acct && !acct.watch.includes(reference)) { acct.watch.push(reference); changed(); } }
 export function unwatch(reference) { if (acct) acct.watch = acct.watch.filter((r) => r !== reference); }

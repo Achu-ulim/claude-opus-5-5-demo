@@ -1,7 +1,11 @@
 // Player accounts on this device: the Log In, Create Account, Verify and Change email screens, the session, and the
 // accounts used here (the one-tap tiles on Log In). Talks to the server's /auth API (server/src/accounts.js).
 // Guests skip all of it and play exactly as before; once someone picks "Play as guest", the game opens to the lobby.
+// In Lagos Life's frame (vatar.js) none of these screens open: the world says who's playing, and the server gives that
+// player their own account (POST /vatar/session). That session lives only in memory, so a framed visit never replaces
+// a login saved in this browser.
 import { USERNAME_RE, EMAIL_RE, EMAIL_MAX, LOGIN_CODE_LEN, RESEND_GAP } from './netproto.js';
+import * as vatar from './vatar.js';
 
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
@@ -30,6 +34,7 @@ const ERRORS = {
   session: 'Your login has expired. Log in again.',
   unreachable: 'Can\'t reach the server. Check your connection, or play as guest.',
   offline: 'Accounts aren\'t available in this copy of the game.',
+  lagoslife: 'Can\'t reach the Driftbolt server, so you\'re playing as a guest for now. Your tokens show once it\'s back.',
 };
 
 function read(key) { try { return JSON.parse(localStorage.getItem(key)); } catch { return null; } }
@@ -49,7 +54,7 @@ export class Account {
     this.game = game;
     this.base = serverUrl ? serverUrl.replace(/^ws/, 'http') : '';
     const s = read(SESSION);
-    this.session = s && typeof s.token === 'string' && typeof s.username === 'string' ? s : null;
+    this.session = !vatar.framed && s && typeof s.token === 'string' && typeof s.username === 'string' ? s : null;
     const saved = read(SAVED);
     this.saved = Array.isArray(saved) ? saved.filter((a) => a && typeof a.username === 'string' && USERNAME_RE.test(a.username)) : [];
     // an invite link (?invite=<username>): the friend gets tokens once this player signs up and races (wallet.js)
@@ -72,6 +77,11 @@ export class Account {
   // Resolves once the player is in: logged in (a saved session), a guest, or through the Log In / Create Account screens
   start() {
     if (!this.base) { this.session = null; this.apply(); return Promise.resolve(); }
+    if (vatar.framed) return this.startVatar();
+    return this.startHere();
+  }
+
+  startHere() {
     if (this.session && expiry(this.session.token) > Date.now()) {
       this.apply();
       this.check();
@@ -109,9 +119,43 @@ export class Account {
     }
   }
 
+  // ---------- Lagos Life ----------
+  // The world's player, as a Driftbolt account. Not in a Vatar world after all (it didn't answer): the usual launch.
+  async startVatar() {
+    const v = await vatar.start();
+    if (!v) return this.startHere();
+    this.vatar = true;
+    this.session = null;
+    await this.vatarLogin(v.session);
+    this.apply();
+  }
+
+  // a Vatar session token for this player's account; without the server, a guest for now (the shop says why)
+  async vatarLogin(token) {
+    try {
+      const r = await this.call('/vatar/session', { session: token });
+      this.session = { token: r.session, username: r.account.username, email: '', exp: expiry(r.session), vatar: r.mode };
+    } catch (e) {
+      console.warn('Lagos Life: no account', e.code);
+      this.session = null;
+    }
+  }
+
+  // the server stopped taking the session: a fresh one from the world, without a word to the player
+  async renewVatar() {
+    if (this.renewing) return;
+    this.renewing = true;
+    const was = this.user;
+    try { await this.vatarLogin(await vatar.session()); } catch { this.session = null; }
+    this.renewing = false;
+    if (this.user !== was) this.game.online.leaveRoom();
+    this.apply();
+  }
+
   // the server no longer takes this session: back to Log In, the account's tile ready to tap
   expired(msg = ERRORS.session) {
     if (!this.user) return;
+    if (this.vatar) return this.renewVatar();
     this.endSession();
     this.game.online.leaveRoom();
     this.apply();
@@ -191,6 +235,7 @@ export class Account {
 
   // ---------- screens ----------
   open(mode, msg = '', bad = true) {
+    if (this.vatar) return; // a framed game never asks for a login or an email
     const a = $('auth');
     a.classList.remove('hidden');
     a.classList.toggle('su', mode === 'signup');
@@ -577,15 +622,20 @@ export class Account {
   renderSettings(msg = '', bad = false) {
     $('setAcct').classList.toggle('hidden', !this.base);
     if (!this.base) return;
-    const u = this.user;
+    const u = this.user, lagos = !!this.vatar;
     $('acIn').classList.toggle('hidden', !u);
-    $('acInBtns').classList.toggle('hidden', !u);
-    $('acAll').classList.toggle('hidden', !u);
-    $('acGuest').classList.toggle('hidden', !!u);
+    $('acInBtns').classList.toggle('hidden', !u || lagos);
+    $('acAll').classList.toggle('hidden', !u || lagos);
+    $('acGuest').classList.toggle('hidden', !!u || lagos);
     if (u) {
       $('acName').textContent = u;
-      $('acMail').textContent = this.session.email || '';
+      $('acMail').textContent = lagos ? 'Signed in with Lagos Life' : this.session.email || '';
       avatar($('acAv'), u);
+    }
+    if (lagos) {
+      $('acMsg').textContent = u ? '' : ERRORS.lagoslife;
+      $('acMsg').classList.toggle('bad', !u);
+      return;
     }
     // not mid-race: logging in or out changes the driver
     const lobby = this.game.state === 'menu';

@@ -1,3 +1,11 @@
 start working on adding multiplayer and player can invite other players to pkay a match. they 
 
 when you collide with a car, shoul hear the sound
+
+
+lock the top cars. and players can use varying amount of tokens to purchase the cars. based ont eh car strenght the tokens amount increases.
+
+optimize the game, rendering and all, withiut losing the quality. if quality will be afffected, leave it. optimized to avoid eating ram.
+
+
+players can buy custom skin, can upload hios own logo and plat humber in cars, custom exhaust, custom body. custom tyres. custom car skin. custom steering and al. each of them should be purchased woth varying amount of tokens, they can purchasde engines as qwell woth tokens

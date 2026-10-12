@@ -80,6 +80,18 @@ export function receiptMail(to, username, r) {
   };
 }
 
+// a cash wallet receipt (a deposit, a withdrawal sent or returned): rows are [label, text] pairs
+export function cashMail(to, username, title, intro, rows) {
+  return {
+    to,
+    subject: `${title}: Driftbolt cash (${rows.find(([k]) => k === 'Reference')?.[1] || ''})`,
+    text: `Hi ${username}, ${intro} ${rows.map(([k, v]) => `${k}: ${v}`).join('. ')}.`,
+    html: page(`<p>Hi <b>${esc(username)}</b>, ${esc(intro)}</p>
+<table style="border-collapse:collapse;margin:16px 0">${rows.map(([k, v]) => `<tr><td style="padding:4px 16px 4px 0;color:#5b5e73">${esc(k)}</td><td style="padding:4px 0"><b>${esc(v)}</b></td></tr>`).join('')}</table>
+<p style="color:#5b5e73">Keep this email: quote the reference if you ever need help with it.</p>`),
+  };
+}
+
 // to the old address once the email has changed
 export function changedMail(to, username, masked) {
   const text = `Hi ${username}, the email on your Driftbolt account was changed to ${masked}. If you didn't do this, log in on a device you trust and change it back from Settings.`;

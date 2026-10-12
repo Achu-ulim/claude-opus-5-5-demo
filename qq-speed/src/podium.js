@@ -11,7 +11,7 @@ const STEPS = [{ x: 0, h: 0.9 }, { x: -2.4, h: 0.62 }, { x: 2.4, h: 0.4 }];
 const BASE = 0.25; // plinth height
 const HIP = 0.84; // driver origin above the soles
 const AT = 70; // meters past the line
-const BACKDROP_BRANDS = ['pirelli', 'rolex', 'dhl', 'chowdeck', 'manlago', 'shell', 'petronas', 'motul'];
+const BACKDROP_BRANDS = ['pirelli', 'rolex', 'cq', 'chowdeck', 'manlago', 'shell', 'petronas', 'oruvo'];
 const T = { anthem: 0.4, trophy: [8.8, 7.4, 6.0], lift: 0.7, bottles: 11, spray: 11.4, sprayEnd: 16.6, end: 17.6 };
 
 // camera path, podium-local: [time, position, look-at]

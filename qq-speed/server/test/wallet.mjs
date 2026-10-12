@@ -1,5 +1,6 @@
-// End-to-end check of the token wallet (server/src/wallet.js): the ledger and welcome bonus, unlocks, looks, rewards and
-// their daily cap, a guest garage moving in, Paystack purchases, invite rewards and league wins.
+// End-to-end check of the token wallet (server/src/wallet.js): the ledger and welcome bonus, unlocks, looks (with plate
+// numbers and uploaded logos), rewards and their daily cap, a guest garage moving in, Paystack purchases, invite rewards
+// and league wins.
 // Starts its own local server (wrangler dev, empty storage, emails logged) and a stand-in for Paystack's API, so nothing
 // else needs to be running: npm run test:wallet
 // Payments need packs with prices in src/catalog.js; without any, those checks are skipped. Four races are driven for
@@ -11,7 +12,8 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { TRACK_LEN, MAX_SPEED } from '../../src/netproto.js';
-import { REWARDS, DAILY_EARN_CAP, MOVE_CAP, PACKS, STARTER_PACK, item } from '../../src/catalog.js';
+import { REWARDS, DAILY_EARN_CAP, MOVE_CAP, PACKS, STARTER_PACK, CAR_ITEMS, item } from '../../src/catalog.js';
+import { createHash } from 'node:crypto';
 
 const PORT = 8790 + Math.floor(Math.random() * 100);
 const BASE = `http://127.0.0.1:${PORT}`;
@@ -217,16 +219,59 @@ async function main() {
   check(w.history.filter((h) => h.reason === 'unlock').length === 1 && w.history[0].ref === 'unlock:paint.matte-black', 'history: one unlock row', w.history.slice(0, 2));
 
   // ---------- looks ----------
-  r = await api('/wallet/equip', { carId: 'ferrari', look: { paint: 'paint.matte-black', glow: 'glow.cyan', wheels: 'wheels.factory' } }, alice);
+  const free = CAR_ITEMS.filter((c) => c.price === 0).map((c) => c.car);
+  check(JSON.stringify(free) === '["sedan","gt"]', 'cars: only the two starter cars are free', free);
+  r = await api('/wallet/equip', { carId: 'gt', look: { paint: 'paint.matte-black', glow: 'glow.cyan', wheels: 'wheels.factory' } }, alice);
   check(r.status === 200 && JSON.stringify(r.body.look) === '{"paint":"paint.matte-black","glow":"glow.cyan"}', 'equip: owned and free parts', r.body);
-  r = await api('/wallet/equip', { carId: 'ferrari', look: { paint: 'paint.chrome' } }, alice);
+  r = await api('/wallet/equip', { carId: 'gt', look: { paint: 'paint.chrome' } }, alice);
   check(r.status === 403 && r.body.error === 'not_owned' && r.body.item === 'paint.chrome', 'equip: a part not owned is refused', r.body);
-  r = await api('/wallet/equip', { carId: 'bugatti', look: {} }, alice);
-  check(r.status === 403 && r.body.item === 'car.bugatti', 'equip: a car not owned is refused', r.body);
-  r = await api('/wallet/equip', { carId: 'ferrari', look: { paint: 'paint.unicorn' } }, alice);
+  r = await api('/wallet/equip', { carId: 'ferrari', look: {} }, alice);
+  check(r.status === 403 && r.body.item === 'car.ferrari', 'equip: a car not owned is refused (the Ferrari costs tokens now)', r.body);
+  r = await api('/wallet/equip', { carId: 'gt', look: { paint: 'paint.unicorn' } }, alice);
   check(r.status === 400 && r.body.error === 'bad_look', 'equip: a part the catalog doesn\'t have is refused', r.body);
   w = await wallet(alice);
-  check(JSON.stringify(w.looks) === '{"ferrari":{"paint":"paint.matte-black","glow":"glow.cyan"}}', 'GET /wallet: the look', w.looks);
+  check(JSON.stringify(w.looks) === '{"gt":{"paint":"paint.matte-black","glow":"glow.cyan"}}', 'GET /wallet: the look', w.looks);
+
+  // ---------- plates and logos (Cara: tokens enough for a plate and a logo spot) ----------
+  r = await api('/wallet/earn', { kind: 'cup', proof: { cup: 'legend', run: 'run0000009' } }, cara);
+  r = await api('/wallet/earn', { kind: 'challenge', proof: { day: today(), tier: 'hard' } }, cara);
+  r = await api('/wallet/unlock', { itemId: 'plate.euro' }, cara);
+  check(r.status === 200 && r.body.owned.includes('plate.euro'), 'unlock: a Euro plate', r.body);
+  r = await api('/wallet/equip', { carId: 'sedan', look: { plate: 'plate.euro', plateText: 'lagos 77' } }, cara);
+  check(r.status === 200 && r.body.look.plate === 'plate.euro' && r.body.look.plateText === 'LAGOS 77', 'equip: a plate number, in capitals', r.body);
+  r = await api('/wallet/equip', { carId: 'sedan', look: { plate: 'plate.euro', plateText: 'FUK 1' } }, cara);
+  check(r.status === 400 && r.body.error === 'bad_plate', 'equip: an offensive plate number is refused', r.body);
+  r = await api('/wallet/equip', { carId: 'sedan', look: { plateText: 'NOPLATE' } }, cara);
+  check(r.status === 200 && !r.body.look.plateText, 'equip: a plate number without a plate is dropped', r.body);
+  r = await api('/wallet/equip', { carId: 'sedan', look: { paint: 'paint.custom', paintHex: 0x123456 } }, cara);
+  check(r.status === 403 && r.body.item === 'paint.custom', 'equip: Custom Colour has to be unlocked', r.body);
+  // a tiny real PNG (1x1), and its key as logos.js works it out
+  const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGP4z8DwHwAFAAH/iZk9HQAAAABJRU5ErkJggg==', 'base64');
+  const key = createHash('sha256').update(png).digest('hex').slice(0, 32);
+  r = await api('/wallet/logo', { image: png.toString('base64') }, cara);
+  check(r.status === 403 && r.body.error === 'not_owned', 'logo: uploading needs a Logo part', r.body);
+  r = await api('/wallet/unlock', { itemId: 'logo.hood' }, cara);
+  check(r.status === 200, 'unlock: Hood Logo', r.body);
+  r = await api('/wallet/equip', { carId: 'sedan', look: { logo: 'logo.hood', logoKey: key } }, cara);
+  check(r.status === 400 && r.body.error === 'logo_missing', 'equip: a logo that isn\'t uploaded yet is refused', r.body);
+  r = await api('/wallet/logo', { image: Buffer.from('<svg onload=alert(1)>').toString('base64') }, cara);
+  check(r.status === 400 && r.body.error === 'bad_image', 'logo: something that isn\'t a PNG, WebP or JPEG is refused', r.body);
+  r = await api('/wallet/logo', { image: Buffer.alloc(60 * 1024, 1).toString('base64') }, cara);
+  check(r.status === 413, 'logo: a picture over the size limit is refused', r.status);
+  r = await api('/wallet/logo', { image: png.toString('base64') }, cara);
+  check(r.status === 200 && r.body.key === key, 'logo: uploaded, keyed by its hash', r.body);
+  r = await api('/wallet/equip', { carId: 'sedan', look: { logo: 'logo.hood', logoKey: key, plate: 'plate.euro', plateText: 'CARA' } }, cara);
+  check(r.status === 200 && r.body.look.logoKey === key && r.body.look.plateText === 'CARA', 'equip: the logo and plate on the Sedan', r.body);
+  w = await wallet(cara);
+  check(w.logos?.[0] === key, 'GET /wallet: the account\'s logos', w.logos);
+  let lf = await fetch(`${BASE}/logo/${key}`);
+  const lbytes = Buffer.from(await lf.arrayBuffer());
+  check(lf.status === 200 && lf.headers.get('content-type') === 'image/png' && lbytes.equals(png) && lf.headers.get('access-control-allow-origin') === '*'
+    && /immutable/.test(lf.headers.get('cache-control')) && lf.headers.get('x-content-type-options') === 'nosniff', 'GET /logo/<key>: the picture, for anyone, cached for good', [lf.status, lf.headers.get('content-type')]);
+  lf = await fetch(`${BASE}/logo/${'0'.repeat(32)}`);
+  check(lf.status === 404, 'GET /logo: an unknown key is 404', lf.status);
+  lf = await fetch(`${BASE}/logo/not-a-logo-key`);
+  check(lf.status === 404, 'GET /logo: a bad key is 404', lf.status);
 
   // ---------- earned on the device ----------
   r = await api('/wallet/claim', { items: ['paint.chrome', 'paint.midnight-pearl', 'car.pagani'] }, alice);
@@ -234,15 +279,15 @@ async function main() {
     'claim: only things that can be earned (Chrome, Pagani), not Midnight Pearl', r.body);
 
   // ---------- a guest garage moving in ----------
-  const guest = ['car.bugatti', 'paint.midnight-pearl', 'kit.gt-wing', 'glow.rainbow', 'paint.nope'];
-  r = await api('/wallet/move', { items: guest, looks: { ferrari: { paint: 'paint.midnight-pearl', bodykit: 'kit.gt-wing', glow: 'glow.rainbow' }, gt: { paint: 'paint.chrome' }, nope: {} }, balance: 99999 }, bob);
+  const guest = ['paint.midnight-pearl', 'kit.gt-wing', 'car.bugatti', 'glow.rainbow', 'paint.nope'];
+  r = await api('/wallet/move', { items: guest, looks: { gt: { paint: 'paint.midnight-pearl', bodykit: 'kit.gt-wing', glow: 'glow.rainbow' }, sedan: { paint: 'paint.chrome' }, nope: {} }, balance: 99999 }, bob);
   const moved = r.body?.moved || [];
   const worth = moved.reduce((s, id) => s + item(id).price, 0);
   check(r.status === 200 && worth <= MOVE_CAP && moved.includes('paint.midnight-pearl') && moved.includes('kit.gt-wing') && !moved.includes('car.bugatti'),
     `move: items up to ${MOVE_CAP} tokens' worth`, r.body);
   w = await wallet(bob);
   check(w.balance === REWARDS.welcome, 'move: a guest balance never comes along (only the welcome bonus)', w.balance);
-  check(JSON.stringify(w.looks.ferrari) === '{"paint":"paint.midnight-pearl","bodykit":"kit.gt-wing"}' && !w.looks.gt, 'move: looks keep only parts that came along', w.looks);
+  check(JSON.stringify(w.looks.gt) === '{"paint":"paint.midnight-pearl","bodykit":"kit.gt-wing"}' && !w.looks.sedan, 'move: looks keep only parts that came along', w.looks);
   r = await api('/wallet/move', { items: ['glow.pink'] }, bob);
   check(r.status === 409 && r.body.error === 'moved', 'move: once per account', r.body);
 

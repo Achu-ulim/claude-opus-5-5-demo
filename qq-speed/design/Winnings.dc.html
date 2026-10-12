@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Winnings</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Bungee&amp;family=Chakra+Petch:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#07080F}
+button,input{font-family:inherit}
+button{cursor:pointer}
+button:focus-visible,input:focus-visible{outline:2px solid #36E2FF;outline-offset:2px}
+</style>
+</helmet>
+<div style="position: relative; width: 1440px; height: 900px; overflow: hidden; background: #07080F; color: #F4F1E8; font-family: 'Chakra Petch', sans-serif">
+  <div style="height: 100%; box-sizing: border-box; padding: 32px 48px; display: grid; grid-template-columns: 400px 1fr; grid-template-rows: auto 1fr; gap: 24px">
+    <header style="grid-column: 1 / -1; display: flex; align-items: center; gap: 16px">
+      <button aria-label="Back" style="width: 48px; height: 48px; border-radius: 24px; border: 1px solid rgba(255,255,255,0.14); background: rgba(13,15,26,0.85); color: #F4F1E8; display: flex; align-items: center; justify-content: center"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 5l-7 7 7 7"></path></svg></button>
+      <h1 style="margin: 0; font-family: 'Bungee', sans-serif; font-weight: 400; font-size: 40px">WINNINGS</h1>
+    </header>
+
+    <div style="display: flex; flex-direction: column; gap: 16px">
+      <section style="display: flex; flex-direction: column; gap: 10px; padding: 24px; border-radius: 22px; background: rgba(124,255,158,0.08); border: 2px solid #7CFF9E">
+        <div style="font-size: 12px; font-weight: 700; letter-spacing: 3px; color: #7CFF9E">CASH BALANCE</div>
+        <div style="font-family: 'Bungee', sans-serif; font-size: 56px; line-height: 1">₦1,790</div>
+        <div style="font-size: 14px; color: #A3A6BF">₦540 arriving in 9:12 · ₦1,250 available</div>
+      </section>
+      <section style="display: flex; flex-direction: column; gap: 10px; padding: 18px 20px; border-radius: 18px; background: rgba(13,15,26,0.9); border: 1px solid rgba(255,255,255,0.12)">
+        <div style="font-size: 12px; font-weight: 700; letter-spacing: 3px; color: #A3A6BF">ACCOUNT CHECKS</div>
+        <sc-for list="{{checks}}" as="c" hint-placeholder-count="3">
+          <div style="display: flex; align-items: center; gap: 12px; font-size: 14px"><span style="{{c.dot}}"></span><span style="flex: 1">{{c.name}}</span><b style="color: {{c.color}}; font-size: 12px; letter-spacing: 1px">{{c.state}}</b></div>
+        </sc-for>
+      </section>
+      <section style="flex: 1; display: flex; flex-direction: column; gap: 8px; padding: 18px 20px; border-radius: 18px; background: rgba(13,15,26,0.9); border: 1px solid rgba(255,255,255,0.12); font-size: 14px; color: #C9CBDB">
+        <div style="font-size: 12px; font-weight: 700; letter-spacing: 3px; color: #A3A6BF">PLAY RESPONSIBLY</div>
+        <div style="display: flex; justify-content: space-between"><span>Daily entry limit</span><b style="color: #F4F1E8">₦[LIMIT]</b></div>
+        <div style="display: flex; justify-content: space-between"><span>Spent today</span><b style="color: #F4F1E8">₦300</b></div>
+        <button style="margin-top: auto; min-height: 44px; border-radius: 12px; border: 1px solid rgba(255,255,255,0.18); background: transparent; color: #C9CBDB; font-weight: 700">Set limits or take a break</button>
+      </section>
+    </div>
+
+    <section style="display: flex; flex-direction: column; gap: 18px; padding: 26px; border-radius: 22px; background: rgba(13,15,26,0.94); border: 1px solid rgba(255,255,255,0.14)">
+      <div style="display: flex; gap: 4px; padding: 4px; border-radius: 14px; background: rgba(255,255,255,0.05); align-self: flex-start">
+        <sc-for list="{{tabs}}" as="t" hint-placeholder-count="2"><button onClick="{{t.pick}}" aria-pressed="{{t.pressed}}" style="{{t.style}}">{{t.label}}</button></sc-for>
+      </div>
+
+      <div style="display: flex; flex-direction: column; gap: 8px">
+        <label for="amt" style="font-size: 12px; font-weight: 700; letter-spacing: 3px; color: #A3A6BF">AMOUNT</label>
+        <div style="display: flex; gap: 10px; align-items: center">
+          <input id="amt" value="₦1,250" style="flex: 1; height: 64px; padding: 0 18px; border-radius: 14px; border: 2px solid rgba(255,255,255,0.16); background: rgba(255,255,255,0.05); color: #F4F1E8; font-family: 'Bungee', sans-serif; font-size: 28px">
+          <button style="height: 64px; padding: 0 18px; border-radius: 14px; border: 1px solid rgba(255,255,255,0.2); background: transparent; color: #F4F1E8; font-weight: 700">MAX</button>
+        </div>
+      </div>
+
+      <sc-if value="{{withdraw}}" hint-placeholder-val="{{ true }}">
+        <div style="display: flex; flex-direction: column; gap: 8px">
+          <div style="font-size: 12px; font-weight: 700; letter-spacing: 3px; color: #A3A6BF">TO BANK ACCOUNT</div>
+          <div style="display: flex; align-items: center; gap: 14px; padding: 16px; border-radius: 14px; background: rgba(255,255,255,0.04); border: 2px solid #7CFF9E">
+            <div style="width: 44px; height: 44px; border-radius: 12px; background: rgba(124,255,158,0.14); display: flex; align-items: center; justify-content: center; color: #7CFF9E"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 10l9-6 9 6M5 10v8M19 10v8M9 10v8M15 10v8M3 20h18"></path></svg></div>
+            <div style="flex: 1"><b>[BANK NAME] ·••• 4821</b><div style="font-size: 13px; color: #A3A6BF">Name matches your verified ID</div></div>
+            <button style="min-height: 44px; padding: 0 14px; border-radius: 10px; border: 1px solid rgba(255,255,255,0.2); background: transparent; color: #C9CBDB; font-weight: 700">Change</button>
+          </div>
+          <div style="display: flex; flex-direction: column; gap: 8px; font-size: 15px; margin-top: 6px">
+            <div style="display: flex; justify-content: space-between"><span style="color: #A3A6BF">Transfer fee</span><b>₦[FEE]</b></div>
+            <div style="display: flex; justify-content: space-between"><span style="color: #A3A6BF">Arrives</span><b>Usually within minutes</b></div>
+          </div>
+        </div>
+      </sc-if>
+      <sc-if value="{{convert}}" hint-placeholder-val="{{ false }}">
+        <div style="display: flex; flex-direction: column; gap: 12px">
+          <div style="display: flex; align-items: center; gap: 18px; padding: 18px; border-radius: 14px; background: rgba(255,210,58,0.08); border: 2px solid #FFD23A">
+            <div style="font-family: 'Bungee', sans-serif; font-size: 26px">₦1,250</div>
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#FFD23A" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"></path></svg>
+            <div style="font-family: 'Bungee', sans-serif; font-size: 26px; color: #FFD23A">[TOKENS] TOKENS</div>
+          </div>
+          <div style="font-size: 14px; line-height: 1.5; color: #C9CBDB">Converting is instant and gives a bonus over buying tokens. It's one-way: tokens can't be turned back into cash.</div>
+        </div>
+      </sc-if>
+
+      <button style="{{ctaStyle}}">{{cta}}</button>
+    </section>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":900}}'>
+class Component extends DCLogic {
+  constructor(props) { super(props); this.state = { tab: 0 }; }
+  renderVals() {
+    const S = this.state, w = S.tab === 0;
+    const dot = (c) => 'width: 12px; height: 12px; border-radius: 6px; flex: none; background: ' + c;
+    return {
+      withdraw: w, convert: !w,
+      tabs: ['Withdraw to bank', 'Convert to tokens'].map((label, i) => ({
+        label, pressed: String(S.tab === i),
+        style: 'min-height: 48px; padding: 0 22px; border: 0; border-radius: 10px; font-size: 15px; font-weight: 700; ' + (S.tab === i ? 'background: ' + (i ? '#FFD23A' : '#7CFF9E') + '; color: #07080F' : 'background: transparent; color: #C9CBDB'),
+        pick: () => this.setState({ tab: i })
+      })),
+      checks: [['Age 18+ confirmed', 'DONE', '#7CFF9E'], ['ID verified (BVN or NIN)', 'DONE', '#7CFF9E'], ['Bank account name matches ID', 'DONE', '#7CFF9E']].map(([name, state, color]) => ({ name, state, color, dot: dot(color) })),
+      cta: w ? 'WITHDRAW ₦1,250' : 'CONVERT TO TOKENS',
+      ctaStyle: 'margin-top: auto; height: 64px; border: 0; border-radius: 16px; font-family: Bungee, sans-serif; font-size: 20px; letter-spacing: 1px; ' + (w ? 'background: #7CFF9E; color: #07080F; box-shadow: 0 6px 0 #2F8A4E' : 'background: #FFD23A; color: #07080F; box-shadow: 0 6px 0 #A67C00')
+    };
+  }
+}
+</script>
+</body>
+</html>

@@ -5,3 +5,7 @@
 
 /manifest.webmanifest
   Content-Type: application/manifest+json
+
+# Lagos Life (Vatar Games) shows the game in a frame inside its own pages (src/vatar.js); nobody else may frame it
+/*
+  Content-Security-Policy: frame-ancestors 'self' https://lagoslife.app https://www.lagoslife.app https://naijalife.app https://www.naijalife.app https://lagoslife.eliysites.com

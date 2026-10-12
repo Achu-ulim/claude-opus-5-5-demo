@@ -2,9 +2,11 @@ import * as THREE from 'three';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { softDotTexture, textTexture } from './textures.js';
-import { engineAccel, gearCut } from './vehicle.js';
-import { cleanLook } from './netproto.js';
+import { TUNE, engineAccel, gearCut } from './vehicle.js';
+import { cleanLook, DEFAULT_PLATE, SPEED_CAP } from './netproto.js';
 import { item } from './catalog.js';
+import { liveryTexture, plateTexture, tyreLettersTexture, LIVERY_GLOW, PLATE_GLOW } from './decals.js';
+import { logoTexture } from './logos.js';
 import { DROP, bodySpec, bodyGeometry, cabinSpec, cabinGeometry, roofGeometry, pillarCurves, wellGeometry, sideX, topAt, noseZ, tailZ, endZ, endNormal, deckY, tyreGeometry, rimGeometry, RIM_FOR_SPOKES } from './carGeometry.js';
 
 // ---------- Car catalog ----------
@@ -210,8 +212,8 @@ export const CARS = [
 
 // ---------- Spec sheet (derived from the tune values, so the menu never lies) ----------
 const BASE = { vmax: 55, vmaxNitro: 76, accel: 24, turnRate: 1.9, grip: 12, driftYaw: 1.5, driftYawAlign: 0.85, driftGrip: 2.0, maxDriftAngle: 1.15, gaugeRate: 0.36, nitroTime: 2.8 };
-function rawSpecs(car) {
-  const t = { ...BASE, ...car.tune };
+function rawSpecs(car, tune = car.tune) {
+  const t = { ...BASE, ...tune };
   // 0-100 km/h using the same acceleration curve and gear changes as PlayerCar
   const sim = { s: 0, T: t };
   let time = 0;
@@ -226,7 +228,7 @@ function rawSpecs(car) {
   };
 }
 export function carSpecs() {
-  const rows = CARS.map(rawSpecs);
+  const rows = CARS.map((c) => rawSpecs(c));
   const keys = ['speed', 'accel', 'handling', 'drift', 'nitro'];
   const lo = {}, hi = {};
   for (const k of keys) { lo[k] = Math.min(...rows.map((r) => r[k])); hi[k] = Math.max(...rows.map((r) => r[k])); }
@@ -246,20 +248,74 @@ export function carSpecs() {
   });
 }
 
+// ---------- Engines and rating ----------
+// A car's tune with the engine from its look fitted (catalog.js engine parts): what the player drives against the
+// computer. Online rooms, leagues and cash races pass engines = false, so there every car runs its stock engine.
+// Top speeds stay under SPEED_CAP, which the server's lap checks rely on.
+export function tuneFor(car, look, engines = true) {
+  const e = engines ? item(cleanLook(look).engine)?.engine : null;
+  if (!e) return car.tune;
+  const t = { ...TUNE, ...car.tune };
+  return {
+    ...car.tune,
+    accel: t.accel * (1 + e.power),
+    nitroAccel: t.nitroAccel * (1 + e.power / 2),
+    vmax: Math.min(SPEED_CAP - 2, t.vmax + e.top),
+    vmaxNitro: Math.min(SPEED_CAP - 1, t.vmaxNitro + e.top + e.nitro),
+    gaugeRate: t.gaugeRate * (1 + e.charge),
+  };
+}
+
+// How strong a car is, 0-100, from its tune (and engine): top speed counts most, then launch, then handling and
+// nitro. The Garage shows it, and catalog.js prices the cars by it.
+const RATING = { speed: 0.45, accel: 0.25, handling: 0.15, nitro: 0.15 };
+function ratingRaw(tune) {
+  const t = { ...TUNE, ...tune }, r = rawSpecs(null, t);
+  return { speed: (t.vmax + t.vmaxNitro) / 2, accel: r.accel, handling: r.handling, nitro: t.nitroAccel * t.nitroTime * t.gaugeRate };
+}
+let ratingRange = null;
+export function carRating(car, look = null) {
+  if (!ratingRange) {
+    const rows = CARS.map((c) => ratingRaw(c.tune));
+    ratingRange = Object.fromEntries(Object.keys(RATING).map((k) => [k, [Math.min(...rows.map((r) => r[k])), Math.max(...rows.map((r) => r[k]))]]));
+  }
+  const r = ratingRaw(tuneFor(car, look));
+  return Math.round(100 * Object.entries(RATING).reduce((n, [k, w]) => n + (w * (r[k] - ratingRange[k][0])) / (ratingRange[k][1] - ratingRange[k][0] || 1), 0));
+}
+// what an engine does to a car, for the Garage: km/h and 0-100 times with and without it
+export function engineGains(car, look) {
+  const a = rawSpecs(car), b = rawSpecs(car, tuneFor(car, look));
+  return {
+    top: [Math.round(a.t.vmax * 3.6), Math.round(b.t.vmax * 3.6)],
+    nitro: [Math.round(a.t.vmaxNitro * 3.6), Math.round(b.t.vmaxNitro * 3.6)],
+    launch: [a.time, b.time],
+    rating: [carRating(car), carRating(car, look)],
+  };
+}
+
 // ---------- Looks ----------
-// A garage look ({ paint, wheels, bodykit, glow } part ids, see catalog.js) as what buildCar draws: colours,
-// finishes and the body kit's pieces. A slot left out has the car's factory part, so an empty look is the car as
-// it always was. Accent, rim style, calipers and stripes aren't in the garage: they are always the car's own.
+// A garage look (part ids per slot, see catalog.js) as what buildCar draws: colours, finishes, the body kit's
+// pieces, skin, logo, plate, exhaust and tyres. A slot left out has the car's factory part, so an empty look is the
+// car as it always was. Accent, rim style and calipers aren't in the garage: they are always the car's own (and the
+// factory stripes, unless a skin goes on).
 const GLOW_OFF = 0x000000; // the "Off" underglow
 export function resolveLook(car, look) {
   const l = cleanLook(look);
   const paint = item(l.paint), wheels = item(l.wheels), kit = item(l.bodykit), glow = item(l.glow);
+  const livery = item(l.livery)?.livery || null, decal = item(l.logo)?.decal;
   return {
-    paint: paint?.color ?? car.body, finish: paint?.finish || 'gloss',
+    paint: paint?.custom ? l.paintHex ?? car.body : paint?.color ?? car.body, finish: paint?.finish || 'gloss',
     rimColor: wheels?.color ?? car.rim, rimFinish: wheels?.finish || 'alloy',
     glow: glow?.color ?? car.glow, rainbow: !!glow?.rainbow,
     kit: kit?.kit || {},
-    accent: car.accent, rim: RIM_FOR_SPOKES[car.spokes] || 'star', caliper: car.caliper, stripes: !!car.stripes,
+    livery,
+    logo: decal && l.logoKey ? { at: decal, key: l.logoKey } : null,
+    plate: item(l.plate)?.plate ? { style: item(l.plate).plate, text: l.plateText || DEFAULT_PLATE } : null,
+    exhaust: item(l.exhaust)?.exhaust || null,
+    tyre: item(l.tyres)?.tyre || null,
+    steering: item(l.steering)?.wheel || 'factory',
+    engine: item(l.engine)?.engine || null,
+    accent: car.accent, rim: RIM_FOR_SPOKES[car.spokes] || 'star', caliper: car.caliper, stripes: !!car.stripes && !livery,
   };
 }
 
@@ -376,6 +432,42 @@ function flipWinding(geo) {
   }
 }
 
+// ---------- Garage parts on the tail and tyres ----------
+// exhaust layouts (catalog.js exhaust parts): [x, y] of each pipe on the tail, and how big the pipes are
+const EXHAUSTS = {
+  twin: { at: [[-0.62, 0.42], [0.62, 0.42]], r: 1 },
+  quad: { at: [[-0.64, 0.42], [-0.45, 0.42], [0.45, 0.42], [0.64, 0.42]], r: 0.82 },
+  center: { at: [[-0.11, 0.46], [0.11, 0.46]], r: 1 },
+  big: { at: [[-0.6, 0.42], [0.6, 0.42]], r: 1.35 },
+};
+const TIPS = {
+  black: { color: 0x1a1b20, metalness: 0.7, roughness: 0.32 },
+  titanium: { color: 0x9a8cff, metalness: 1, roughness: 0.22, iridescence: 1, iridescenceIOR: 1.8, iridescenceThicknessRange: [250, 650] },
+  burnt: { color: 0xb07a3a, metalness: 1, roughness: 0.28, iridescence: 0.9, iridescenceIOR: 1.6, iridescenceThicknessRange: [300, 700] },
+  gold: { color: 0xe0b23a, metalness: 1, roughness: 0.18 },
+};
+// where the number plate goes on each tail (height), clear of its lamps; it moves up when pipes are in the way
+const PLATE_Y = { sedan: 0.58, gt: 0.58, mclaren: 0.55, audi: 0.58, bugatti: 0.62, ferrari: 0.62, lambo: 0.52, porsche: 0.62, koenigsegg: 0.56, pagani: 0.84 };
+// a flat ring on a tyre's sidewall, in the plane x = 0 facing +x: u runs round it, v outward
+function wallRing(r0, r1, seg = 48) {
+  const pos = [], uv = [], nrm = [], idx = [];
+  for (let i = 0; i <= seg; i++) {
+    const a = (i / seg) * Math.PI * 2, c = Math.cos(a), s = Math.sin(a);
+    pos.push(0, c * r0, s * r0, 0, c * r1, s * r1);
+    uv.push(i / seg, 0, i / seg, 1);
+    nrm.push(1, 0, 0, 1, 0, 0);
+  }
+  for (let i = 0; i < seg; i++) { const a = i * 2; idx.push(a, a + 1, a + 2, a + 1, a + 3, a + 2); }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  g.setAttribute('normal', new THREE.Float32BufferAttribute(nrm, 3));
+  g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+  g.setIndex(idx);
+  return g;
+}
+// is a paint light (so a skin's white ink turns dark on it)?
+const isLight = (hex) => 0.299 * ((hex >> 16) & 255) + 0.587 * ((hex >> 8) & 255) + 0.114 * (hex & 255) > 153;
+
 // ---------- Build ----------
 export function buildCar(car, { name = null, isPlayer = false, look = null } = {}) {
   const G = geos(car);
@@ -400,7 +492,7 @@ export function buildCar(car, { name = null, isPlayer = false, look = null } = {
   const dark = new THREE.MeshStandardMaterial({ color: 0x15171c, roughness: 0.7 });
   const panel = new THREE.MeshStandardMaterial({ color: 0x15171c, roughness: 0.7, side: THREE.DoubleSide });
   const wellM = new THREE.MeshStandardMaterial({ color: 0x0b0b0d, roughness: 0.95, side: THREE.DoubleSide });
-  const tireM = new THREE.MeshStandardMaterial({ color: 0x1b1b1d, roughness: 0.88, side: THREE.DoubleSide });
+  const tireM = new THREE.MeshStandardMaterial({ color: 0x1b1b1d, roughness: L.tyre?.slick ? 0.55 : 0.88, side: THREE.DoubleSide });
   const rimM = new THREE.MeshStandardMaterial({ color: L.rimColor, ...RIM_FINISH[L.rimFinish], ...(L.rimFinish === 'neon' ? { emissive: L.rimColor } : {}) });
   const rotorM = new THREE.MeshStandardMaterial({ color: 0x80858d, metalness: 0.8, roughness: 0.4, side: THREE.DoubleSide });
   const headM = new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: 0xe8f4ff, emissiveIntensity: 3.5 });
@@ -761,18 +853,122 @@ export function buildCar(car, { name = null, isPlayer = false, look = null } = {
     if (K.valance) box(B.W * 1.5, 0.03, 0.2, carbon, 0, S.sill - 0.04, rear(S.sill + 0.02) - 0.02);
   }
 
+  // ---- Skin, logo and number plate (garage). Decals are thin skins lifted just off the paint that follow the body.
+  const decalMat = (map, glow = 0) => new THREE.MeshStandardMaterial({
+    map, transparent: true, depthWrite: false, metalness: 0.25, roughness: 0.32, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -4,
+    ...(glow ? { emissive: 0xffffff, emissiveMap: map, emissiveIntensity: glow } : {}),
+  });
+  // the door panel between the arches; its top follows the shoulder, where the side starts turning into the top
+  const zd0 = zs0 + 0.04, zd1 = zs1 - 0.04, yd0 = S.sill + 0.1;
+  // (the first height where the side leans in more than 45°)
+  const shoulder = (z) => {
+    let y = yd0 + 0.2;
+    for (let x = sideX(B, z, y); y < yd0 + 1; y += 0.02) {
+      const nx = sideX(B, z, y + 0.02);
+      if (x - nx > 0.02) break;
+      x = nx;
+    }
+    return y - 0.03;
+  };
+  // a decal on the side s (1 = +x) from z1 (front) back to z0, between heights y0(z) and y1(z). u runs from the front
+  // back on both sides, so a design mirrors as it would on a real car; `readable` turns it round on the -x side so
+  // writing reads the right way
+  const sideDecal = (s, z0, z1, y0, y1, mat, readable = false, lift = 0.004) => {
+    const nz = Math.max(4, Math.ceil((z1 - z0) / 0.06)), ny = 8, pos = [], uv = [], idx = [];
+    for (let i = 0; i <= nz; i++) {
+      const z = z1 - ((z1 - z0) * i) / nz, ya = y0(z), yb = y1(z);
+      for (let j = 0; j <= ny; j++) {
+        const y = ya + ((yb - ya) * j) / ny;
+        pos.push(s * (sideX(B, z, y) + lift), y, z);
+        uv.push(readable && s < 0 ? 1 - i / nz : i / nz, j / ny);
+      }
+    }
+    for (let i = 0; i < nz; i++) for (let j = 0; j < ny; j++) {
+      const a = i * (ny + 1) + j, b = a + 1, c = a + ny + 1, d = c + 1;
+      if (s > 0) idx.push(a, c, b, b, c, d); else idx.push(a, b, c, b, d, c);
+    }
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+    g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+    g.setIndex(idx);
+    g.computeVertexNormals();
+    return add(g, mat);
+  };
+  // a decal on the hood over x0..x1 and z0..z1 (toward the nose), the right way up from behind the car
+  const hz0 = C.c0[0] + 0.1, hz1 = S.len[1] - 0.32, hw = Math.min(0.6, B.W * 0.6);
+  const hoodDecal = (x0, x1, z0, z1, mat, lift = 0.005) => {
+    const nx = 12, nz = Math.max(6, Math.ceil((z1 - z0) / 0.08)), pos = [], uv = [], idx = [];
+    for (let j = 0; j <= nz; j++) {
+      const z = z0 + ((z1 - z0) * j) / nz;
+      for (let i = 0; i <= nx; i++) {
+        const x = x0 + ((x1 - x0) * i) / nx;
+        pos.push(x, topAt(B, z, Math.abs(x)) + lift, z);
+        uv.push(1 - i / nx, j / nz);
+      }
+    }
+    for (let j = 0; j < nz; j++) for (let i = 0; i < nx; i++) {
+      const a = j * (nx + 1) + i, b = a + 1, c = a + nx + 1, d = c + 1;
+      idx.push(a, c, b, b, c, d);
+    }
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+    g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+    g.setIndex(idx);
+    g.computeVertexNormals();
+    return add(g, mat);
+  };
+  if (L.livery) {
+    const light = isLight(L.paint), glow = LIVERY_GLOW[L.livery] || 0;
+    const side = liveryTexture(L.livery, 'side', light), hood = liveryTexture(L.livery, 'hood', light);
+    if (side) { const m = decalMat(side, glow); mirrored((s) => sideDecal(s, zd0, zd1, () => yd0, shoulder, m)); }
+    if (hood) hoodDecal(-hw, hw, hz0, hz1, decalMat(hood, glow));
+  }
+  if (L.logo) {
+    // cut out rather than blended, so it's drawn with the car's solid parts and a skin under it can't cover it
+    const m = decalMat(logoTexture(L.logo.key));
+    m.transparent = false;
+    m.depthWrite = true;
+    m.alphaTest = 0.5;
+    // pulled nearer than a skin's decal, so the skin is hidden where the logo is
+    m.polygonOffsetFactor = -4;
+    m.polygonOffsetUnits = -8;
+    if (L.logo.at.includes('hood')) {
+      const sz = Math.min(0.6, hw * 1.5, (hz1 - hz0) * 0.8), zc = (hz0 + hz1) / 2;
+      hoodDecal(-sz / 2, sz / 2, zc - sz / 2, zc + sz / 2, m, 0.008);
+    }
+    if (L.logo.at.includes('doors')) {
+      const zc = (zd0 + zd1) / 2, top = shoulder(zc), sz = Math.min(0.44, (top - yd0) * 0.9, (zd1 - zd0) * 0.5), yc = (yd0 + top) / 2;
+      mirrored((s) => sideDecal(s, zc - sz / 2, zc + sz / 2, () => yc - sz / 2, () => yc + sz / 2, m, true, 0.007));
+    }
+  }
+  // exhaust pipes: the car's own, or the garage exhaust's layout ({ x, y, r: size })
+  const EX = L.exhaust;
+  const pipes = EX ? EXHAUSTS[EX.layout].at.map(([x, y]) => ({ x, y, r: EXHAUSTS[EX.layout].r })) : car.exhaust.map(([x, y]) => ({ x, y, r: 1 }));
+  if (L.plate) {
+    // as close to the car's spot as the pipes allow
+    const want = PLATE_Y[car.id] ?? 0.58;
+    const clear = (y) => pipes.every((p) => Math.abs(p.x) - 0.09 * p.r > 0.31 || Math.abs(p.y - y) > 0.09 * p.r + 0.09);
+    const y = [0, 0.06, 0.12, 0.18, 0.24, 0.3].map((d) => want + d).find(clear) ?? want;
+    const g = lamp(-1, 0, y);
+    // standing proud of the tail, so the dark panels moulded onto some tails don't cover it
+    box(0.58, 0.15, 0.04, dark, 0, 0, -0.008, g);
+    const tex = plateTexture(L.plate.style, L.plate.text), glow = PLATE_GLOW[L.plate.style] || 0;
+    add(new THREE.PlaneGeometry(0.54, 0.118), new THREE.MeshStandardMaterial({ map: tex, roughness: 0.4, metalness: 0.1, ...(glow ? { emissive: 0xffffff, emissiveMap: tex, emissiveIntensity: glow } : {}) }), 0, 0, 0.0135, g);
+  }
+
   // Side neon strips, tucked under the sills (none with the underglow off)
   const glowOn = L.glow !== GLOW_OFF;
   const neonLen = zs1 - zs0 - 0.1;
   if (glowOn) mirrored((s) => box(0.03, 0.04, neonLen, neonM, s * (sideX(B, (zs0 + zs1) / 2, S.sill + 0.03) - 0.06), S.sill - 0.01, (zs0 + zs1) / 2));
 
-  // Exhaust pipes
+  // Exhaust pipes, in the garage exhaust's metal
+  const tipM = EX && TIPS[EX.tip] ? new THREE.MeshPhysicalMaterial(TIPS[EX.tip]) : chrome;
   const exhausts = [];
-  for (const [x, y] of car.exhaust) {
+  for (const { x, y, r } of pipes) {
     const zr = rear(y, Math.abs(x));
-    const ex = add(new THREE.CylinderGeometry(0.075, 0.09, 0.3, 14), chrome, x, y, zr + 0.1);
+    const ex = add(new THREE.CylinderGeometry(0.075 * r, 0.09 * r, 0.3, 14), tipM, x, y, zr + 0.1);
     ex.rotation.x = Math.PI / 2;
-    add(new THREE.CircleGeometry(0.06, 14).rotateY(Math.PI), dark, x, y, zr - 0.051);
+    add(new THREE.CircleGeometry(0.06 * r, 14).rotateY(Math.PI), dark, x, y, zr - 0.051);
     exhausts.push(new THREE.Vector3(x, y, zr - 0.08));
   }
 
@@ -797,6 +993,12 @@ export function buildCar(car, { name = null, isPlayer = false, look = null } = {
   const wheels = [];
   const half = S.wheelW / 2;
   const rim = rimGeometry(L.rim, G.R);
+  // garage tyres: a stripe, lettering or a glowing band on the outer sidewall
+  const T = L.tyre;
+  const wallM = T && new THREE.MeshStandardMaterial({
+    color: T.wall, roughness: 0.6, ...(T.letters ? { map: tyreLettersTexture(), alphaTest: 0.5 } : {}), ...(T.neon ? { emissive: T.wall, emissiveIntensity: 1.6 } : {}),
+  });
+  if (T) G.wall ||= wallRing(G.R * 0.78, G.R * 0.84);
   for (const z of [S.axles[1], S.axles[0]]) for (const s of [-1, 1]) {
     const x = s * (S.track + (K.flares ? 0.07 : 0));
     const steer = new THREE.Group();
@@ -804,6 +1006,7 @@ export function buildCar(car, { name = null, isPlayer = false, look = null } = {
     const spin = new THREE.Group();
     steer.add(spin);
     add(G.tyre, tireM, 0, 0, 0, spin).castShadow = true;
+    if (T) { const w = add(G.wall, wallM, s * (half + 0.002), 0, 0, spin); if (s < 0) w.rotation.y = Math.PI; }
     add(G.barrel, panel, 0, 0, 0, spin);
     add(G.rotor, rotorM, -s * 0.03, 0, 0, spin);
     const face = add(rim.face, rimM, s * (half - 0.02), 0, 0, spin);
@@ -819,7 +1022,7 @@ export function buildCar(car, { name = null, isPlayer = false, look = null } = {
   const flameMatOuter = new THREE.MeshBasicMaterial({ color: new THREE.Color(0x3aa0ff).multiplyScalar(2.2), transparent: true, opacity: 0.8, blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false });
   const flameMatInner = new THREE.MeshBasicMaterial({ color: new THREE.Color(2.5, 2.5, 2.5), transparent: true, opacity: 0.95, blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false });
   const flames = [];
-  const fs = exhausts.length > 2 ? 0.7 : 1;
+  const fs = (exhausts.length > 2 ? 0.7 : 1) * (EX?.layout === 'big' ? 1.2 : 1);
   for (const e of exhausts) {
     const fg = new THREE.Group();
     const outer = new THREE.Mesh(new THREE.ConeGeometry(0.2 * fs, 1.6, 12, 1, true), flameMatOuter);
@@ -863,7 +1066,8 @@ export function buildCar(car, { name = null, isPlayer = false, look = null } = {
   // (the cabin outline is in catalog heights; the body sits DROP lower in the car)
   const [, wsTop] = S.cabin.pts;
   const cockpit = { eye: new THREE.Vector3(0.3, wsTop[1] - DROP - 0.22, wsTop[0] - 0.45) };
-  group.userData = { root, wheels, flames, exhausts, flameMatOuter, under, glowMat, tag, shield, skin: car, look: L, isPlayer, tailM, rotorM, track: S.track, rearZ: -S.axles[0], size: { front: S.len[1], rear: -S.len[0], halfW: W }, cockpit };
+  // smoke: the drift smoke's colour (a tyre part's; 'rainbow' cycles); flameColor: the nitro flame's (an exhaust part's)
+  group.userData = { root, wheels, flames, exhausts, flameMatOuter, under, glowMat, tag, shield, skin: car, look: L, isPlayer, tailM, rotorM, track: S.track, rearZ: -S.axles[0], size: { front: S.len[1], rear: -S.len[0], halfW: W }, cockpit, smoke: T?.smoke ?? null, flameColor: EX?.flame ?? null };
   return group;
 }
 

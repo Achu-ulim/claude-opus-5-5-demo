@@ -1,7 +1,8 @@
 import * as THREE from 'three';
 import { mulberry32 } from './util.js';
-import cqLogo from './brands/cq.jpg';
-import gadlockLogo from './brands/gadlock.png';
+import cqBanner from './brands/cq.jpg';
+import oruvoBanner from './brands/oruvo.jpg';
+import gadlockPoster from './brands/gadlock.jpg';
 import sellamquickLogo from './brands/sellamquick.png';
 
 export let MAX_ANISO = 8;
@@ -311,11 +312,22 @@ export function wallTexture(style) {
       }
     } else if (style === 'snow') {
       // Sponsor boards below the snow cap
-      ['michelin', 'redbull', 'goodyear', 'motul'].forEach((id, i) => paintBrand(g, id, i * 256, 14, 256, H - 14));
-      g.fillStyle = 'rgba(0,0,0,0.5)';
-      for (let i = 0; i < 4; i++) g.fillRect(i * 256, 0, 4, H);
-      g.fillStyle = '#f5fbff';
-      g.fillRect(0, 0, W, 14);
+      const boards = () => {
+        ['michelin', 'redbull', 'goodyear', 'oruvo'].forEach((id, i) => paintBrand(g, id, i * 256, 14, 256, H - 14));
+        g.fillStyle = 'rgba(0,0,0,0.5)';
+        for (let i = 0; i < 4; i++) g.fillRect(i * 256, 0, 4, H);
+        g.fillStyle = '#f5fbff';
+        g.fillRect(0, 0, W, 14);
+      };
+      boards();
+      // Oruvo's board is an image: if it hadn't decoded yet, paint the boards again once it has
+      const img = BRANDS.oruvo.img, t = toTex(c);
+      if (!img.naturalWidth)
+        img.decode().then(() => {
+          boards();
+          t.needsUpdate = true;
+        }, () => {});
+      return t;
     }
     return toTex(c);
   });
@@ -597,9 +609,46 @@ function logoBoard(src, accent, fill) {
   return paint;
 }
 
+// Sponsors that supplied a whole banner: its centred artwork (artW × artH of the image) is scaled to fill 90% of the
+// board's width or height, whichever it reaches first; anything the image then leaves bare is its background colour.
+function bannerBoard(src, bg, artW, artH) {
+  const img = new Image();
+  img.src = src;
+  const paint = (g, w, h) => {
+    g.fillStyle = bg;
+    g.fillRect(0, 0, w, h);
+    if (!img.naturalWidth) return;
+    const nw = img.naturalWidth, nh = img.naturalHeight;
+    const k = 0.9 * Math.min(w / (nw * artW), h / (nh * artH));
+    g.imageSmoothingQuality = 'high';
+    g.drawImage(img, (w - nw * k) / 2, (h - nh * k) / 2, nw * k, nh * k);
+  };
+  paint.img = img;
+  return paint;
+}
+
+// Sponsors that supplied an edge-to-edge poster: shown whole, as large as fits, standing on the board's bottom edge
+// (its artwork runs off the bottom), with its background colour above or beside it.
+function posterBoard(src, bg) {
+  const img = new Image();
+  img.src = src;
+  const paint = (g, w, h) => {
+    g.fillStyle = bg;
+    g.fillRect(0, 0, w, h);
+    if (!img.naturalWidth) return;
+    const nw = img.naturalWidth, nh = img.naturalHeight;
+    const k = Math.min(w / nw, h / nh);
+    g.imageSmoothingQuality = 'high';
+    g.drawImage(img, (w - nw * k) / 2, h - nh * k, nw * k, nh * k);
+  };
+  paint.img = img;
+  return paint;
+}
+
 const BRANDS = {
-  cq: logoBoard(cqLogo, '#5a3de6', 0.5),
-  gadlock: logoBoard(gadlockLogo, '#55b462', 0.84),
+  cq: bannerBoard(cqBanner, '#5336e7', 0.44, 0.42),
+  oruvo: bannerBoard(oruvoBanner, '#2b44d6', 0.47, 0.37),
+  gadlock: posterBoard(gadlockPoster, '#000000'),
   sellamquick: logoBoard(sellamquickLogo, '#5ac463', 0.6),
   // The long P: its top stroke runs over the rest of the word
   pirelli(g, w, h) {
@@ -632,23 +681,6 @@ const BRANDS = {
     g.arc(w / 2, h / 2, h * 0.36, 0, Math.PI * 2);
     g.fill();
     outlined(g, w, h, 'Red Bull', 'bold #px Futura, "Century Gothic", "Trebuchet MS", Arial, sans-serif', '#db0a40', '#ffffff', Math.round(h * 0.4), w * 0.84);
-  },
-  // Red speed lines either side of the italic letters
-  dhl(g, w, h) {
-    g.fillStyle = '#ffcc00';
-    g.fillRect(0, 0, w, h);
-    g.textAlign = 'center';
-    g.textBaseline = 'alphabetic';
-    const s = fitFont(g, 'DHL', `italic 900 #px ${HEAVY}`, Math.round(h * 0.6), w * 0.56);
-    const tw = g.measureText('DHL').width, y = h / 2 + s * 0.35;
-    g.fillStyle = '#d40511';
-    g.fillText('DHL', w / 2, y);
-    const lh = s * 0.11;
-    for (let i = 0; i < 3; i++) {
-      const ly = y - s * 0.66 + i * s * 0.24;
-      g.fillRect(w * 0.04, ly, w / 2 - tw / 2 - s * 0.12 - w * 0.04, lh);
-      g.fillRect(w / 2 + tw / 2 + s * 0.04, ly, w * 0.96 - (w / 2 + tw / 2 + s * 0.04), lh);
-    }
   },
   rolex: wordmark('#006039', '#d4af5a', 'ROLEX', 'bold #px Georgia, "Times New Roman", serif', rules('#d4af5a')),
   michelin: wordmark('#27509b', '#fce500', 'MICHELIN', `italic 900 #px ${HEAVY}`),
@@ -700,7 +732,6 @@ const BRANDS = {
   emirates: wordmark('#d71921', '#ffffff', 'Fly Emirates', 'italic bold #px Georgia, "Times New Roman", serif'),
   petronas: wordmark('#00a19c', '#ffffff', 'PETRONAS', `900 #px ${HEAVY}`),
   goodyear: wordmark('#0f2b6b', '#fdd100', 'GOODYEAR', `900 #px ${HEAVY}`, rules('#fdd100')),
-  motul: wordmark('#e30613', '#ffffff', 'MOTUL', `italic 900 #px ${HEAVY}`),
   // Chow green with a yellow locator bubble beside the lowercase wordmark
   chowdeck(g, w, h) {
     g.fillStyle = '#0c513f';
